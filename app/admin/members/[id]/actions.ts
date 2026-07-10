@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
+import { headers } from "next/headers";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -48,6 +49,23 @@ export async function updateMember(memberId: string, formData: FormData) {
       seating_location: getString(formData, "seating_location") || null,
       notes: getString(formData, "notes") || null,
       updated_at: new Date().toISOString(),
+      sola_customer_id:
+  getString(formData, "sola_customer_id") || null,
+
+sola_recurring_id:
+  getString(formData, "sola_recurring_id") || null,
+
+autopay_active:
+  formData.get("autopay_active") === "on",
+
+recurring_amount:
+  getNumber(formData, "recurring_amount"),
+
+recurring_status:
+  getString(formData, "recurring_status") || null,
+
+next_billing_date:
+  getString(formData, "next_billing_date") || null,
     })
     .eq("id", memberId);
 
@@ -293,4 +311,86 @@ export async function deleteCharge(
   refreshMemberPages(memberId);
 
   redirect(`/admin/members/${memberId}?tab=payments&chargeDeleted=1`);
+}
+export async function inviteMemberToPortal(memberId: string) {
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from("members")
+    .select("id, first_name, last_name, email, auth_user_id, portal_status")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (memberError) {
+    throw new Error(memberError.message);
+  }
+
+  if (!member) {
+    throw new Error("Member not found.");
+  }
+
+  const email = String(member.email || "")
+    .trim()
+    .toLowerCase();
+
+  if (!email) {
+    redirect(
+      `/admin/members/${memberId}?tab=overview&portalError=${encodeURIComponent(
+        "Add an email address before inviting this member."
+      )}`
+    );
+  }
+
+  const headerStore = await headers();
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    headerStore.get("origin") ||
+    "http://localhost:3000";
+
+  const redirectTo =
+  `${origin}/auth/confirm?next=${encodeURIComponent(
+    "/member/set-password"
+  )}`;
+
+  const { data: invitedUser, error: inviteError } =
+    await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      redirectTo,
+      data: {
+        member_id: memberId,
+        first_name: member.first_name,
+        last_name: member.last_name,
+      },
+    });
+
+  if (inviteError) {
+    redirect(
+      `/admin/members/${memberId}?tab=overview&portalError=${encodeURIComponent(
+        inviteError.message
+      )}`
+    );
+  }
+
+  const authUserId = invitedUser.user?.id;
+
+  if (!authUserId) {
+    throw new Error("Supabase did not return an invited user ID.");
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("members")
+    .update({
+      auth_user_id: authUserId,
+      portal_status: "invited",
+      portal_invited_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", memberId);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  refreshMemberPages(memberId);
+
+  redirect(
+    `/admin/members/${memberId}?tab=overview&portalInvited=1`
+  );
 }

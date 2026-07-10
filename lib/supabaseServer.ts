@@ -19,10 +19,8 @@ export async function createClient() {
               cookieStore.set(name, value, options);
             });
           } catch {
-            /*
-             * Server Components cannot always write cookies.
-             * proxy.ts handles session refreshes.
-             */
+            // Server Components cannot always write cookies.
+            // proxy.ts refreshes the session cookies.
           }
         },
       },

@@ -26,6 +26,19 @@ export default function AdminPage() {
           </p>
         </div>
 
+        <Link
+  href="/admin/accounting"
+  className="rounded-2xl border border-[#e3d9c7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5"
+>
+  <p className="text-lg font-bold text-slate-900">
+    Accountant Dashboard
+  </p>
+
+  <p className="mt-2 text-sm text-slate-500">
+    Review monthly billing, paid members, unpaid balances, and auto-pay status.
+  </p>
+</Link>
+
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {adminLinks.map((item) => (
             <Link

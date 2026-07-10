@@ -8,6 +8,7 @@ import {
   addFamilyMember,
   deleteCharge,
   deleteFamilyMember,
+  inviteMemberToPortal,
   markChargePaid,
   toggleFamilyMemberOnCard,
   updateMember,
@@ -29,6 +30,17 @@ type Member = {
   status: string | null;
   seating_location: string | null;
   notes: string | null;
+  sola_customer_id: string | null;
+sola_recurring_id: string | null;
+autopay_active: boolean | null;
+recurring_amount: number | null;
+recurring_status: string | null;
+next_billing_date: string | null;
+auth_user_id: string | null;
+portal_status: string | null;
+portal_invited_at: string | null;
+portal_activated_at: string | null;
+portal_last_login_at: string | null;
 };
 
 type FamilyMember = {
@@ -68,6 +80,8 @@ type PageProps = {
     chargeAdded?: string;
     chargePaid?: string;
     chargeDeleted?: string;
+    portalInvited?: string;
+portalError?: string;
   }>;
 };
 
@@ -75,8 +89,8 @@ async function getMember(id: string) {
   const { data, error } = await supabaseAdmin
     .from("members")
     .select(
-      "id, first_name, last_name, hebrew_name, tribe_status, email, phone, address, membership_type, custom_dues_amount, status, seating_location, notes"
-    )
+  "id, first_name, last_name, hebrew_name, tribe_status, email, phone, address, membership_type, custom_dues_amount, status, seating_location, notes, sola_customer_id, sola_recurring_id, autopay_active, recurring_amount, recurring_status, next_billing_date, auth_user_id, portal_status, portal_invited_at, portal_activated_at, portal_last_login_at"
+)
     .eq("id", id)
     .maybeSingle();
 
@@ -428,6 +442,76 @@ export default async function MemberDetailPage({
           </div>
         </div>
 
+        <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+  <div className="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#8b6b2e]">
+        Member Portal
+      </p>
+
+      <h2 className="mt-2 text-2xl font-bold">
+        Portal Access
+      </h2>
+
+      <p className="mt-2 text-sm text-slate-600">
+        {member.portal_status === "active"
+          ? "This member has activated their online account."
+          : member.portal_status === "invited"
+          ? "An invitation has been sent but the account is not active yet."
+          : "This member has not been invited to the portal."}
+      </p>
+    </div>
+
+    <span className="rounded-full bg-[#f7f3ea] px-4 py-2 text-sm font-bold capitalize text-[#8b6b2e]">
+      {(member.portal_status || "not_invited").replaceAll("_", " ")}
+    </span>
+  </div>
+
+  <div className="mt-5 space-y-2 text-sm text-slate-600">
+    <p>
+      <span className="font-semibold text-slate-900">Email:</span>{" "}
+      {member.email || "No email address"}
+    </p>
+
+    {member.portal_invited_at ? (
+      <p>
+        <span className="font-semibold text-slate-900">Invited:</span>{" "}
+        {formatDate(member.portal_invited_at)}
+      </p>
+    ) : null}
+
+    {member.portal_activated_at ? (
+      <p>
+        <span className="font-semibold text-slate-900">Activated:</span>{" "}
+        {formatDate(member.portal_activated_at)}
+      </p>
+    ) : null}
+  </div>
+
+  {member.portal_status !== "active" ? (
+    <form
+      action={inviteMemberToPortal.bind(null, member.id)}
+      className="mt-6"
+    >
+      <button
+        type="submit"
+        disabled={!member.email}
+        className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {member.portal_status === "invited"
+          ? "Resend Portal Invitation"
+          : "Invite to Member Portal"}
+      </button>
+    </form>
+  ) : null}
+
+  {!member.email ? (
+    <p className="mt-3 text-sm font-medium text-red-700">
+      Add an email address before inviting this member.
+    </p>
+  ) : null}
+</div>
+
         {(query?.memberUpdated === "1" ||
           query?.familyAdded === "1" ||
           query?.familyUpdated === "1" ||
@@ -682,6 +766,85 @@ export default async function MemberDetailPage({
                   className="min-h-24 w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
                 />
               </label>
+
+              <div className="border-t border-[#e3d9c7] pt-6">
+  <h3 className="text-xl font-bold">Automatic Payments</h3>
+
+  <p className="mt-1 text-sm text-slate-500">
+    Enter the existing Sola recurring schedule information for this member.
+  </p>
+
+  <div
+    className="mt-5 grid gap-4"
+    style={{ gridTemplateColumns: "1fr 1fr" }}
+  >
+    <label className="space-y-2">
+      <span className="font-semibold">Sola Customer ID</span>
+      <input
+        name="sola_customer_id"
+        defaultValue={member.sola_customer_id || ""}
+        className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+      />
+    </label>
+
+    <label className="space-y-2">
+      <span className="font-semibold">Sola Recurring ID</span>
+      <input
+        name="sola_recurring_id"
+        defaultValue={member.sola_recurring_id || ""}
+        className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+        placeholder="c112936387_s11879158"
+      />
+    </label>
+  </div>
+
+  <div
+    className="mt-4 grid gap-4"
+    style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
+  >
+    <label className="space-y-2">
+      <span className="font-semibold">Recurring Amount</span>
+      <input
+        name="recurring_amount"
+        type="number"
+        step="0.01"
+        min="0"
+        defaultValue={member.recurring_amount || 0}
+        className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+      />
+    </label>
+
+    <label className="space-y-2">
+      <span className="font-semibold">Recurring Status</span>
+      <input
+        name="recurring_status"
+        defaultValue={member.recurring_status || ""}
+        className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+        placeholder="Approved"
+      />
+    </label>
+
+    <label className="space-y-2">
+      <span className="font-semibold">Next Billing Date</span>
+      <input
+        name="next_billing_date"
+        type="date"
+        defaultValue={member.next_billing_date || ""}
+        className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+      />
+    </label>
+  </div>
+
+  <label className="mt-4 flex items-center gap-3 rounded-xl bg-[#f8f4eb] p-4 font-semibold">
+    <input
+      name="autopay_active"
+      type="checkbox"
+      defaultChecked={Boolean(member.autopay_active)}
+      className="h-5 w-5"
+    />
+    Automatic payment is active
+  </label>
+</div>
 
               <button
                 type="submit"

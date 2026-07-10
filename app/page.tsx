@@ -227,6 +227,10 @@ export default async function Home() {
               href="/login"
               className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
             >
+              <Link href="/admin/accounting">
+  Accountant Dashboard
+</Link>
+
               Login
             </Link>
           </nav>

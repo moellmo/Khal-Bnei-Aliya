@@ -1,0 +1,481 @@
+import Link from "next/link";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+
+export const dynamic = "force-dynamic";
+
+type Member = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  autopay_active: boolean | null;
+  recurring_amount: number | null;
+  sola_recurring_id: string | null;
+};
+
+type Charge = {
+  id: string;
+  member_id: string;
+  amount: number;
+  status: string | null;
+  paid_amount: number | null;
+  due_date: string | null;
+  paid_at: string | null;
+  payment_method: string | null;
+  description: string | null;
+};
+
+type AccountingRow = {
+  member: Member;
+  charge: Charge | null;
+};
+
+type PageProps = {
+  searchParams?: Promise<{
+    month?: string;
+    year?: string;
+    status?: string;
+  }>;
+};
+
+function formatMoney(amount: number | null | undefined) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number(amount || 0));
+}
+
+function formatDate(value: string | null | undefined) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function getMonthName(month: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+  }).format(new Date(2026, month - 1, 1));
+}
+
+async function getAccountingRows(
+  month: number,
+  year: number
+): Promise<AccountingRow[]> {
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from("members")
+    .select(
+      "id, first_name, last_name, email, autopay_active, recurring_amount, sola_recurring_id"
+    )
+    .eq("status", "active")
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+
+  if (membersError) {
+    console.error("Unable to load members:", membersError.message);
+    return [];
+  }
+
+  const typedMembers = (members || []) as Member[];
+
+  const { data: charges, error: chargesError } = await supabaseAdmin
+    .from("member_charges")
+    .select(
+      "id, member_id, amount, status, paid_amount, due_date, paid_at, payment_method, description"
+    )
+    .eq("charge_type", "Membership Dues")
+    .eq("billing_month", month)
+    .eq("billing_year", year);
+
+  if (chargesError) {
+    console.error("Unable to load dues charges:", chargesError.message);
+
+    return typedMembers.map((member) => ({
+      member,
+      charge: null,
+    }));
+  }
+
+  const chargeMap = new Map(
+    ((charges || []) as Charge[]).map((charge) => [
+      charge.member_id,
+      charge,
+    ])
+  );
+
+  return typedMembers.map((member) => ({
+    member,
+    charge: chargeMap.get(member.id) || null,
+  }));
+}
+
+export default async function AccountingPage({
+  searchParams,
+}: PageProps) {
+  const query = await searchParams;
+  const now = new Date();
+
+  const requestedMonth = Number(query?.month || now.getMonth() + 1);
+  const requestedYear = Number(query?.year || now.getFullYear());
+
+  const selectedMonth =
+    Number.isFinite(requestedMonth) &&
+    requestedMonth >= 1 &&
+    requestedMonth <= 12
+      ? requestedMonth
+      : now.getMonth() + 1;
+
+  const selectedYear =
+    Number.isFinite(requestedYear) && requestedYear >= 2026
+      ? requestedYear
+      : now.getFullYear();
+
+  const selectedStatus = query?.status || "all";
+
+  const rows = await getAccountingRows(selectedMonth, selectedYear);
+
+  const billedRows = rows.filter((row) => Boolean(row.charge));
+
+  const paidRows = billedRows.filter(
+    (row) => row.charge?.status === "paid"
+  );
+
+  const unpaidRows = billedRows.filter(
+    (row) => row.charge?.status !== "paid"
+  );
+
+  const notBilledRows = rows.filter((row) => !row.charge);
+
+  const filteredRows = rows.filter((row) => {
+    if (selectedStatus === "paid") {
+      return row.charge?.status === "paid";
+    }
+
+    if (selectedStatus === "unpaid") {
+      return Boolean(row.charge && row.charge.status !== "paid");
+    }
+
+    if (selectedStatus === "autopay") {
+      return Boolean(row.member.autopay_active);
+    }
+
+    if (selectedStatus === "not-billed") {
+      return !row.charge;
+    }
+
+    return true;
+  });
+
+  const billedTotal = billedRows.reduce(
+    (sum, row) => sum + Number(row.charge?.amount || 0),
+    0
+  );
+
+  const paidTotal = paidRows.reduce(
+    (sum, row) =>
+      sum +
+      Number(
+        row.charge?.paid_amount ||
+          row.charge?.amount ||
+          0
+      ),
+    0
+  );
+
+  const outstandingTotal = unpaidRows.reduce(
+    (sum, row) => sum + Number(row.charge?.amount || 0),
+    0
+  );
+
+  return (
+    <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
+      <section className="mx-auto max-w-7xl px-6 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <Link
+            href="/admin"
+            className="text-sm font-semibold text-[#8b6b2e]"
+          >
+            ← Admin Home
+          </Link>
+
+          <div className="flex flex-wrap gap-4">
+            <Link
+              href="/admin/billing"
+              className="text-sm font-semibold text-[#8b6b2e]"
+            >
+              Generate Dues
+            </Link>
+
+            <Link
+              href="/admin/members"
+              className="text-sm font-semibold text-[#8b6b2e]"
+            >
+              Members
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-8 text-white shadow-sm">
+          <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#d9bf7a]">
+            Accountant Dashboard
+          </p>
+
+          <h1 className="mt-3 text-4xl font-bold">
+            {getMonthName(selectedMonth)} {selectedYear}
+          </h1>
+
+          <div
+            className="mt-6 grid gap-5"
+            style={{
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            }}
+          >
+            <div>
+              <p className="text-sm text-slate-400">Members Billed</p>
+              <p className="mt-1 text-2xl font-bold">
+                {billedRows.length}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">Total Billed</p>
+              <p className="mt-1 text-2xl font-bold">
+                {formatMoney(billedTotal)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">Total Paid</p>
+              <p className="mt-1 text-2xl font-bold text-green-300">
+                {formatMoney(paidTotal)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">Outstanding</p>
+              <p className="mt-1 text-2xl font-bold text-[#f0d99a]">
+                {formatMoney(outstandingTotal)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">Not Billed</p>
+              <p className="mt-1 text-2xl font-bold">
+                {notBilledRows.length}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <form
+          method="GET"
+          className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+        >
+          <div
+            className="grid gap-4"
+            style={{
+              gridTemplateColumns: "1fr 1fr 1fr auto",
+            }}
+          >
+            <label className="space-y-2">
+              <span className="font-semibold">Month</span>
+
+              <select
+                name="month"
+                defaultValue={String(selectedMonth)}
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+              >
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+            </label>
+
+            <label className="space-y-2">
+              <span className="font-semibold">Year</span>
+
+              <input
+                name="year"
+                type="number"
+                min="2026"
+                defaultValue={selectedYear}
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <label className="space-y-2">
+              <span className="font-semibold">Show</span>
+
+              <select
+                name="status"
+                defaultValue={selectedStatus}
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+              >
+                <option value="all">All Members</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="autopay">Auto-Pay Members</option>
+                <option value="not-billed">Not Billed</option>
+              </select>
+            </label>
+
+            <button
+              type="submit"
+              className="self-end rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+            >
+              Apply
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">
+                Member Billing Status
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Showing {filteredRows.length} active members.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+  <a
+    href={`/api/accounting/export?month=${selectedMonth}&year=${selectedYear}`}
+    className="rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+  >
+    Download CSV
+  </a>
+
+  <Link
+    href="/admin/billing"
+    className="rounded-full bg-[#8b6b2e] px-5 py-3 text-sm font-bold text-white"
+  >
+    Generate Missing Charges
+  </Link>
+</div>
+          </div>
+
+          <div className="mt-6 overflow-x-auto">
+            <table className="w-full min-w-[1100px] border-separate border-spacing-y-3 text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-[0.14em] text-slate-500">
+                  <th className="px-4">Member</th>
+                  <th className="px-4">Email</th>
+                  <th className="px-4">Auto-Pay</th>
+                  <th className="px-4">Amount</th>
+                  <th className="px-4">Due</th>
+                  <th className="px-4">Status</th>
+                  <th className="px-4">Paid Date</th>
+                  <th className="px-4">Method</th>
+                  <th className="px-4">Action</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredRows.map(({ member, charge }) => (
+                  <tr key={member.id} className="bg-[#fbf8f2]">
+                    <td className="rounded-l-2xl px-4 py-4 font-bold">
+                      {member.last_name}, {member.first_name}
+                    </td>
+
+                    <td className="px-4 py-4 text-slate-600">
+                      {member.email || "—"}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {member.autopay_active ? (
+                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                          No
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4 font-bold">
+                      {charge ? formatMoney(charge.amount) : "—"}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {formatDate(charge?.due_date)}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {!charge ? (
+                        <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-orange-800">
+                          Not billed
+                        </span>
+                      ) : charge.status === "paid" ? (
+                        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800">
+                          Paid
+                        </span>
+                      ) : member.autopay_active ? (
+                        <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800">
+                          Awaiting Auto-Pay
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800">
+                          Unpaid
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {formatDate(charge?.paid_at)}
+                    </td>
+
+                    <td className="px-4 py-4">
+                      {charge?.payment_method || "—"}
+                    </td>
+
+                    <td className="rounded-r-2xl px-4 py-4">
+                      <Link
+                        href={`/admin/members/${member.id}?tab=payments`}
+                        className="font-bold text-[#8b6b2e] underline"
+                      >
+                        View Member
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+
+                {filteredRows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="rounded-2xl bg-[#fbf8f2] px-4 py-10 text-center text-slate-500"
+                    >
+                      No members match this filter.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
