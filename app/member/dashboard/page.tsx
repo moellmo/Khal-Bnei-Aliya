@@ -19,6 +19,7 @@ type Member = {
   recurring_amount: number | null;
   recurring_status: string | null;
   next_billing_date: string | null;
+  sola_recurring_id: string | null;
   portal_status: string | null;
   portal_role: string | null;
 };
@@ -110,8 +111,9 @@ export default async function MemberDashboardPage() {
       recurring_amount,
       recurring_status,
       next_billing_date,
-      portal_status,
-      portal_role
+sola_recurring_id,
+portal_status,
+portal_role
     `
   )
   .eq("auth_user_id", user.id)
@@ -330,31 +332,64 @@ export default async function MemberDashboardPage() {
           </div>
 
           <div className="rounded-[1.5rem] bg-white p-6 shadow-sm">
-            <p className="text-sm font-semibold text-slate-500">
-              Automatic Payments
-            </p>
+  <p className="text-sm font-semibold text-slate-500">
+    Automatic Payments
+  </p>
 
-            <p className="mt-3 text-xl font-bold">
-              {typedMember.autopay_active ? "Active" : "Not enrolled"}
-            </p>
+  <p className="mt-3 text-xl font-bold">
+    {typedMember.sola_recurring_id
+      ? typedMember.autopay_active
+        ? "Active"
+        : typedMember.recurring_status === "cancelled"
+          ? "Cancelled"
+          : "Paused"
+      : "Not enrolled"}
+  </p>
 
-            {typedMember.autopay_active ? (
-              <div className="mt-2 space-y-1 text-sm text-slate-500">
-                <p>
-                  Amount: {formatMoney(typedMember.recurring_amount)}
-                </p>
+  {typedMember.sola_recurring_id ? (
+    <div className="mt-2 space-y-2 text-sm text-slate-500">
+      <p>
+        Amount: {formatMoney(typedMember.recurring_amount)}
+      </p>
 
-                <p>
-                  Next payment:{" "}
-                  {formatDate(typedMember.next_billing_date)}
-                </p>
-              </div>
-            ) : (
-              <p className="mt-2 text-sm text-slate-500">
-                Recurring payment enrollment will be added next.
-              </p>
-            )}
-          </div>
+      <p>
+        Next payment:{" "}
+        {typedMember.autopay_active
+          ? formatDate(typedMember.next_billing_date)
+          : "Not currently scheduled"}
+      </p>
+
+      {typedMember.recurring_status ? (
+        <p>
+          Status:{" "}
+          <span className="font-semibold capitalize text-slate-700">
+            {typedMember.recurring_status}
+          </span>
+        </p>
+      ) : null}
+
+      <Link
+        href="/member/autopay"
+        className="mt-3 inline-flex rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#10192b]"
+      >
+        Manage Automatic Payments
+      </Link>
+    </div>
+  ) : (
+    <div className="mt-4">
+      <p className="text-sm text-slate-500">
+        Set up secure monthly payments through Sola.
+      </p>
+
+      <Link
+        href="/member/autopay"
+        className="mt-3 inline-flex rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#10192b]"
+      >
+        Set Up Automatic Payments
+      </Link>
+    </div>
+  )}
+</div>
         </section>
 
         <section className="mt-6 rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
