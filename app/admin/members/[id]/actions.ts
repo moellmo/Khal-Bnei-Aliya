@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createAndSendReceipt } from "@/lib/payments/createReceipt";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -13,19 +14,29 @@ function getNumber(formData: FormData, key: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
-export async function updateMember(memberId: string, formData: FormData) {
-  const first_name = getString(formData, "first_name");
-  const last_name = getString(formData, "last_name");
+function getPaymentProvider(paymentMethod: string) {
+  return paymentMethod.toLowerCase() === "sola" ? "sola" : "manual";
+}
 
-  if (!first_name || !last_name) {
+function refreshMemberPages(memberId: string) {
+  revalidatePath(`/admin/members/${memberId}`);
+  revalidatePath(`/admin/members/${memberId}/payments`);
+  revalidatePath("/admin/members");
+}
+
+export async function updateMember(memberId: string, formData: FormData) {
+  const firstName = getString(formData, "first_name");
+  const lastName = getString(formData, "last_name");
+
+  if (!firstName || !lastName) {
     throw new Error("First name and last name are required.");
   }
 
   const { error } = await supabaseAdmin
     .from("members")
     .update({
-      first_name,
-      last_name,
+      first_name: firstName,
+      last_name: lastName,
       hebrew_name: getString(formData, "hebrew_name") || null,
       tribe_status: getString(formData, "tribe_status") || "Yisroel",
       email: getString(formData, "email") || null,
@@ -44,34 +55,41 @@ export async function updateMember(memberId: string, formData: FormData) {
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?memberUpdated=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=overview&memberUpdated=1`);
 }
 
-export async function addFamilyMember(memberId: string, formData: FormData) {
-  const first_name = getString(formData, "first_name");
+export async function addFamilyMember(
+  memberId: string,
+  formData: FormData
+) {
+  const firstName = getString(formData, "first_name");
 
-  if (!first_name) {
+  if (!firstName) {
     throw new Error("First name is required.");
   }
 
-  const { error } = await supabaseAdmin.from("member_family_members").insert({
-    member_id: memberId,
-    first_name,
-    last_name: getString(formData, "last_name") || null,
-    hebrew_name: getString(formData, "hebrew_name") || null,
-    relationship: getString(formData, "relationship") || "Other",
-    tribe_status: getString(formData, "tribe_status") || "Yisroel",
-    include_on_mishaberach_card:
-      formData.get("include_on_mishaberach_card") === "on",
-  });
+  const { error } = await supabaseAdmin
+    .from("member_family_members")
+    .insert({
+      member_id: memberId,
+      first_name: firstName,
+      last_name: getString(formData, "last_name") || null,
+      hebrew_name: getString(formData, "hebrew_name") || null,
+      relationship: getString(formData, "relationship") || "Other",
+      tribe_status: getString(formData, "tribe_status") || "Yisroel",
+      include_on_mishaberach_card:
+        formData.get("include_on_mishaberach_card") === "on",
+    });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?familyAdded=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=mishaberach&familyAdded=1`);
 }
 
 export async function deleteFamilyMember(
@@ -88,8 +106,9 @@ export async function deleteFamilyMember(
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?familyDeleted=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=mishaberach&familyDeleted=1`);
 }
 
 export async function toggleFamilyMemberOnCard(
@@ -109,8 +128,9 @@ export async function toggleFamilyMemberOnCard(
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?familyUpdated=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=mishaberach&familyUpdated=1`);
 }
 
 export async function addCharge(memberId: string, formData: FormData) {
@@ -121,11 +141,13 @@ export async function addCharge(memberId: string, formData: FormData) {
   }
 
   const dueDate = getString(formData, "due_date");
+  const chargeType = getString(formData, "charge_type") || "Other";
+  const description = getString(formData, "description") || null;
 
   const { error } = await supabaseAdmin.from("member_charges").insert({
     member_id: memberId,
-    charge_type: getString(formData, "charge_type") || "Other",
-    description: getString(formData, "description") || null,
+    charge_type: chargeType,
+    description,
     amount,
     status: "unpaid",
     due_date: dueDate || null,
@@ -135,8 +157,9 @@ export async function addCharge(memberId: string, formData: FormData) {
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?chargeAdded=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=payments&chargeAdded=1`);
 }
 
 export async function markChargePaid(
@@ -145,8 +168,10 @@ export async function markChargePaid(
   formData: FormData
 ) {
   const paidAmount = getNumber(formData, "paid_amount");
-  const paymentMethod = getString(formData, "payment_method") || "Other";
-  const paymentNote = getString(formData, "payment_note") || null;
+  const paymentMethod =
+    getString(formData, "payment_method") || "Other";
+  const paymentNote =
+    getString(formData, "payment_note") || null;
 
   if (paidAmount <= 0) {
     throw new Error("Paid amount must be greater than 0.");
@@ -154,7 +179,9 @@ export async function markChargePaid(
 
   const { data: charge, error: chargeError } = await supabaseAdmin
     .from("member_charges")
-    .select("id, amount")
+    .select(
+      "id, member_id, amount, status, charge_type, description"
+    )
     .eq("id", chargeId)
     .eq("member_id", memberId)
     .maybeSingle();
@@ -167,21 +194,32 @@ export async function markChargePaid(
     throw new Error("Charge not found.");
   }
 
+  if (charge.status === "paid") {
+    throw new Error("This charge has already been paid.");
+  }
+
   const paidAt = new Date().toISOString();
+  const paymentProvider = getPaymentProvider(paymentMethod);
 
-  const { error: paymentError } = await supabaseAdmin.from("payments").insert({
-    member_id: memberId,
-    charge_id: chargeId,
-    amount: paidAmount,
-    payment_method: paymentMethod,
-    payment_provider: paymentMethod === "Sola" ? "sola" : "manual",
-    status: "paid",
-    note: paymentNote,
-    paid_at: paidAt,
-  });
+  const { data: payment, error: paymentError } = await supabaseAdmin
+    .from("payments")
+    .insert({
+      member_id: memberId,
+      charge_id: chargeId,
+      amount: paidAmount,
+      payment_method: paymentMethod,
+      payment_provider: paymentProvider,
+      status: "paid",
+      note: paymentNote,
+      paid_at: paidAt,
+    })
+    .select("id")
+    .single();
 
-  if (paymentError) {
-    throw new Error(paymentError.message);
+  if (paymentError || !payment) {
+    throw new Error(
+      paymentError?.message || "Unable to save payment."
+    );
   }
 
   const { error: updateError } = await supabaseAdmin
@@ -190,7 +228,7 @@ export async function markChargePaid(
       status: "paid",
       paid_at: paidAt,
       payment_method: paymentMethod,
-      payment_provider: paymentMethod === "Sola" ? "sola" : "manual",
+      payment_provider: paymentProvider,
       paid_amount: paidAmount,
       payment_note: paymentNote,
     })
@@ -198,14 +236,50 @@ export async function markChargePaid(
     .eq("member_id", memberId);
 
   if (updateError) {
-    throw new Error(updateError.message);
+    throw new Error(
+      `Payment was saved, but the charge could not be updated: ${updateError.message}`
+    );
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?chargePaid=1`);
+  try {
+    await createAndSendReceipt({
+      paymentId: payment.id,
+    });
+  } catch (receiptError) {
+    console.error("MANUAL_PAYMENT_RECEIPT_ERROR", {
+      memberId,
+      chargeId,
+      paymentId: payment.id,
+      error: receiptError,
+    });
+  }
+
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=payments&chargePaid=1`);
 }
 
-export async function deleteCharge(memberId: string, chargeId: string) {
+export async function deleteCharge(
+  memberId: string,
+  chargeId: string
+) {
+  const { data: paymentRows, error: paymentLookupError } =
+    await supabaseAdmin
+      .from("payments")
+      .select("id")
+      .eq("charge_id", chargeId)
+      .limit(1);
+
+  if (paymentLookupError) {
+    throw new Error(paymentLookupError.message);
+  }
+
+  if (paymentRows && paymentRows.length > 0) {
+    throw new Error(
+      "This charge has payment history and cannot be deleted."
+    );
+  }
+
   const { error } = await supabaseAdmin
     .from("member_charges")
     .delete()
@@ -216,6 +290,7 @@ export async function deleteCharge(memberId: string, chargeId: string) {
     throw new Error(error.message);
   }
 
-  revalidatePath(`/admin/members/${memberId}`);
-  redirect(`/admin/members/${memberId}?chargeDeleted=1`);
+  refreshMemberPages(memberId);
+
+  redirect(`/admin/members/${memberId}?tab=payments&chargeDeleted=1`);
 }
