@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { signOut } from "../actions";
 import SolaMemberPaymentForm from "./SolaMemberPaymentForm";
+import GenerateReceiptButton from "./GenerateReceiptButton";
 
 export const dynamic = "force-dynamic";
 
@@ -510,19 +511,17 @@ export default async function MemberDashboardPage() {
                       </td>
 
                       <td className="px-3 py-4 text-right">
-                        {payment.receipt_pdf_url ? (
-                          <Link
-                            href={`/api/member/receipts/${payment.id}`}
-                            target="_blank"
-                            className="inline-flex rounded-full border border-[#8b6b2e] px-4 py-2 text-sm font-bold text-[#8b6b2e] hover:bg-[#f7f3ea]"
-                          >
-                            View PDF
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-slate-400">
-                            Processing
-                          </span>
-                        )}
+                 {payment.receipt_pdf_url ? (
+  <Link
+    href={`/api/member/receipts/${payment.id}`}
+    target="_blank"
+    className="inline-flex rounded-full border border-[#8b6b2e] px-4 py-2 text-sm font-bold text-[#8b6b2e] hover:bg-[#f7f3ea]"
+  >
+    View PDF
+  </Link>
+) : (
+  <GenerateReceiptButton paymentId={payment.id} />
+)}
                       </td>
                     </tr>
                   ))}
