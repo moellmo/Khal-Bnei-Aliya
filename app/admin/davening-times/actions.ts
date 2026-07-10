@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { parseKbaSchedulePdf } from "@/lib/schedules/parseKbaSchedulePdf";
 
 type ScheduleEntryInput = {
   eventName: string;
@@ -19,15 +20,17 @@ type ScheduleDayInput = {
   entries: ScheduleEntryInput[];
 };
 
+type AnnouncementType =
+  | "kiddush"
+  | "simcha"
+  | "mazel_tov"
+  | "ner_lamaor"
+  | "shiur"
+  | "sponsorship"
+  | "general";
+
 type AnnouncementInput = {
-  announcementType:
-    | "kiddush"
-    | "simcha"
-    | "mazel_tov"
-    | "ner_lamaor"
-    | "shiur"
-    | "sponsorship"
-    | "general";
+  announcementType: AnnouncementType;
   title: string;
   body: string;
   sponsorName?: string;
@@ -35,6 +38,23 @@ type AnnouncementInput = {
   contactPhone?: string;
   contactEmail?: string;
 };
+
+const VALID_WEEKLY_SCHEDULE_TYPES = [
+  "shabbos",
+  "yom_tov",
+  "yom_tov_shabbos",
+  "fast_day",
+  "special",
+] as const;
+
+const VALID_SEASONAL_SCHEDULE_TYPES = [
+  "winter",
+  "summer",
+  "selichos",
+  "yom_tov",
+  "seasonal",
+  "special",
+] as const;
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -75,9 +95,9 @@ function parseJsonArray<T>(value: FormDataEntryValue | null): T[] {
   }
 
   try {
-    const parsed = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
 
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
   }
@@ -89,21 +109,35 @@ function sanitizeFileName(fileName: string) {
     .replace(/-+/g, "-");
 }
 
+function isPdfFile(file: File | null): file is File {
+  return Boolean(
+    file &&
+      file.size > 0 &&
+      (file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf"))
+  );
+}
+
 async function uploadPdfToBucket(file: File, bucket: string) {
-  if (!file || file.size === 0) {
+  if (file.size === 0) {
     throw new Error("Please choose a PDF file.");
   }
 
-  if (file.type !== "application/pdf") {
+  if (
+    file.type !== "application/pdf" &&
+    !file.name.toLowerCase().endsWith(".pdf")
+  ) {
     throw new Error("Only PDF files are allowed.");
   }
 
   const safeName = sanitizeFileName(file.name);
   const filePath = `${Date.now()}-${safeName}`;
 
+  const bytes = await file.arrayBuffer();
+
   const { error: uploadError } = await supabaseAdmin.storage
     .from(bucket)
-    .upload(filePath, file, {
+    .upload(filePath, bytes, {
       contentType: "application/pdf",
       upsert: false,
     });
@@ -122,6 +156,16 @@ async function uploadPdfToBucket(file: File, bucket: string) {
     originalName: file.name,
   };
 }
+
+function revalidateSchedulePages() {
+  revalidatePath("/");
+  revalidatePath("/davening-times");
+  revalidatePath("/admin/davening-times");
+}
+
+/* =========================================================
+   REGULAR WEEKDAY TIMES
+   ========================================================= */
 
 export async function saveDaveningTimes(formData: FormData) {
   await requireAdmin();
@@ -159,11 +203,11 @@ export async function saveDaveningTimes(formData: FormData) {
     .from("davening_schedules")
     .insert({
       title,
-      weekday_shacharis: weekdayShacharis,
-      sunday_shacharis: sundayShacharis,
-      mincha,
-      maariv,
-      notes,
+      weekday_shacharis: weekdayShacharis || null,
+      sunday_shacharis: sundayShacharis || null,
+      mincha: mincha || null,
+      maariv: maariv || null,
+      notes: notes || null,
       is_published: true,
       show_on_homepage: true,
     });
@@ -172,63 +216,144 @@ export async function saveDaveningTimes(formData: FormData) {
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  revalidateSchedulePages();
 
   redirect("/admin/davening-times?saved=1");
 }
 
+/* =========================================================
+   WEEKLY SHABBOS / YOM TOV PDF
+   ========================================================= */
+
 export async function uploadWeeklySchedule(formData: FormData) {
   await requireAdmin();
 
-  const title =
-    getString(formData, "title") || "Weekly Shul Schedule";
-
-  const hebrewTitle = getString(formData, "hebrew_title");
-  const hebrewDate = getString(formData, "hebrew_date");
-
-  const scheduleType =
-    getString(formData, "schedule_type") || "shabbos";
+  const submittedTitle = getString(formData, "title");
+  const submittedHebrewTitle = getString(
+    formData,
+    "hebrew_title"
+  );
+  const submittedHebrewDate = getString(
+    formData,
+    "hebrew_date"
+  );
+  const submittedScheduleType = getString(
+    formData,
+    "schedule_type"
+  );
+  const submittedGeneralNote = getString(
+    formData,
+    "general_note"
+  );
 
   const startDate = getString(formData, "start_date");
   const endDate = getString(formData, "end_date");
-
   const subtitle = getString(formData, "subtitle");
-  const generalNote = getString(formData, "general_note");
 
-  const scheduleDays = parseJsonArray<ScheduleDayInput>(
-    formData.get("schedule_days_json")
-  );
+  const submittedScheduleDays =
+    parseJsonArray<ScheduleDayInput>(
+      formData.get("schedule_days_json")
+    );
 
-  const announcements = parseJsonArray<AnnouncementInput>(
-    formData.get("announcements_json")
-  );
+  const submittedAnnouncements =
+    parseJsonArray<AnnouncementInput>(
+      formData.get("announcements_json")
+    );
 
-  const file = formData.get("pdf_file") as File | null;
+  const fileEntry = formData.get("pdf_file");
+  const file =
+    fileEntry instanceof File ? fileEntry : null;
+
+  if (!isPdfFile(file)) {
+    throw new Error("Please choose a valid PDF file.");
+  }
 
   if (!startDate || !endDate) {
-    throw new Error("Please enter the schedule start and end dates.");
+    throw new Error(
+      "Please enter the schedule start and end dates."
+    );
   }
+
+  if (endDate < startDate) {
+    throw new Error(
+      "The schedule end date cannot be before the start date."
+    );
+  }
+
+  /*
+   * Read the PDF before uploading it.
+   * If automatic parsing fails, retain the manually entered
+   * schedule instead of rejecting the entire upload.
+   */
+  let parsedPdf:
+    | Awaited<ReturnType<typeof parseKbaSchedulePdf>>
+    | null = null;
+
+  try {
+    parsedPdf = await parseKbaSchedulePdf(file);
+  } catch (error) {
+    console.error("SCHEDULE_PDF_PARSE_ERROR", error);
+  }
+
+  /*
+   * Prefer automatic PDF extraction when it found schedule days.
+   * Otherwise use the entries entered in the admin form.
+   */
+  const scheduleDays: ScheduleDayInput[] =
+    parsedPdf && parsedPdf.days.length > 0
+      ? parsedPdf.days
+      : submittedScheduleDays;
+
+  const announcements: AnnouncementInput[] =
+    parsedPdf && parsedPdf.announcements.length > 0
+      ? parsedPdf.announcements
+      : submittedAnnouncements;
 
   if (scheduleDays.length === 0) {
-    throw new Error("Please add at least one schedule day.");
+    throw new Error(
+      "No schedule times were found in the PDF. Please enter at least one schedule day manually."
+    );
   }
 
-  const validScheduleTypes = [
-    "shabbos",
-    "yom_tov",
-    "yom_tov_shabbos",
-    "fast_day",
-    "special",
-  ];
+  /*
+   * Manually entered headings take priority.
+   * Parsed PDF values fill fields that were left blank.
+   */
+  const title =
+    submittedTitle ||
+    parsedPdf?.englishTitle ||
+    "Weekly Shul Schedule";
 
-  if (!validScheduleTypes.includes(scheduleType)) {
+  const hebrewTitle =
+    submittedHebrewTitle ||
+    parsedPdf?.hebrewTitle ||
+    "";
+
+  const hebrewDate =
+    submittedHebrewDate ||
+    parsedPdf?.hebrewDate ||
+    "";
+
+  const scheduleType =
+    submittedScheduleType ||
+    parsedPdf?.scheduleType ||
+    "shabbos";
+
+  const generalNote =
+    submittedGeneralNote ||
+    parsedPdf?.generalNote ||
+    "";
+
+  if (
+    !VALID_WEEKLY_SCHEDULE_TYPES.includes(
+      scheduleType as (typeof VALID_WEEKLY_SCHEDULE_TYPES)[number]
+    )
+  ) {
     throw new Error("Invalid schedule type.");
   }
 
   const uploadedPdf = await uploadPdfToBucket(
-    file as File,
+    file,
     "weekly-schedule-pdfs"
   );
 
@@ -247,6 +372,7 @@ export async function uploadWeeklySchedule(formData: FormData) {
         source_pdf_url: uploadedPdf.publicUrl,
         source_pdf_name: uploadedPdf.originalName,
         is_published: false,
+        published_at: null,
       })
       .select("id")
       .single();
@@ -257,19 +383,23 @@ export async function uploadWeeklySchedule(formData: FormData) {
       .remove([uploadedPdf.filePath]);
 
     throw new Error(
-      scheduleError?.message || "Could not create the weekly schedule."
+      scheduleError?.message ||
+        "Could not create the weekly schedule."
     );
   }
 
   try {
+    let createdDayCount = 0;
+
     for (
       let dayIndex = 0;
       dayIndex < scheduleDays.length;
       dayIndex += 1
     ) {
       const day = scheduleDays[dayIndex];
+      const dayTitle = day.dayTitle?.trim();
 
-      if (!day.dayTitle?.trim()) {
+      if (!dayTitle) {
         continue;
       }
 
@@ -278,7 +408,7 @@ export async function uploadWeeklySchedule(formData: FormData) {
           .from("schedule_days")
           .insert({
             schedule_id: schedule.id,
-            day_title: day.dayTitle.trim(),
+            day_title: dayTitle,
             day_date: day.dayDate || null,
             hebrew_day_title:
               day.hebrewDayTitle?.trim() || null,
@@ -289,32 +419,48 @@ export async function uploadWeeklySchedule(formData: FormData) {
 
       if (dayError || !createdDay) {
         throw new Error(
-          dayError?.message || "Could not create a schedule day."
+          dayError?.message ||
+            "Could not create a schedule day."
         );
       }
+
+      createdDayCount += 1;
 
       const validEntries = (day.entries || []).filter(
         (entry) => entry.eventName?.trim()
       );
 
-      if (validEntries.length > 0) {
-        const entryRows = validEntries.map((entry, entryIndex) => ({
+      if (validEntries.length === 0) {
+        continue;
+      }
+
+      const entryRows = validEntries.map(
+        (entry, entryIndex) => ({
           schedule_day_id: createdDay.id,
           event_name: entry.eventName.trim(),
           event_time: entry.eventTime?.trim() || null,
           note: entry.note?.trim() || null,
-          is_highlighted: Boolean(entry.isHighlighted),
+          is_highlighted: Boolean(
+            entry.isHighlighted
+          ),
           display_order: entryIndex,
-        }));
+        })
+      );
 
-        const { error: entriesError } = await supabaseAdmin
+      const { error: entriesError } =
+        await supabaseAdmin
           .from("schedule_entries")
           .insert(entryRows);
 
-        if (entriesError) {
-          throw new Error(entriesError.message);
-        }
+      if (entriesError) {
+        throw new Error(entriesError.message);
       }
+    }
+
+    if (createdDayCount === 0) {
+      throw new Error(
+        "No valid schedule days could be created."
+      );
     }
 
     const validAnnouncements = announcements.filter(
@@ -324,49 +470,73 @@ export async function uploadWeeklySchedule(formData: FormData) {
     );
 
     if (validAnnouncements.length > 0) {
-      const announcementRows = validAnnouncements.map(
-        (announcement, index) => ({
-          schedule_id: schedule.id,
-          announcement_type:
-            announcement.announcementType || "general",
-          title: announcement.title.trim(),
-          body: announcement.body.trim(),
-          sponsor_name:
-            announcement.sponsorName?.trim() || null,
-          contact_name:
-            announcement.contactName?.trim() || null,
-          contact_phone:
-            announcement.contactPhone?.trim() || null,
-          contact_email:
-            announcement.contactEmail?.trim() || null,
-          display_order: index,
-          is_published: true,
-        })
-      );
+      const announcementRows =
+        validAnnouncements.map(
+          (announcement, index) => ({
+            schedule_id: schedule.id,
+            announcement_type:
+              announcement.announcementType ||
+              "general",
+            title: announcement.title.trim(),
+            body: announcement.body.trim(),
+            sponsor_name:
+              announcement.sponsorName?.trim() ||
+              null,
+            contact_name:
+              announcement.contactName?.trim() ||
+              null,
+            contact_phone:
+              announcement.contactPhone?.trim() ||
+              null,
+            contact_email:
+              announcement.contactEmail?.trim() ||
+              null,
+            display_order: index,
+            is_published: true,
+          })
+        );
 
-      const { error: announcementsError } = await supabaseAdmin
-        .from("weekly_announcements")
-        .insert(announcementRows);
+      const { error: announcementsError } =
+        await supabaseAdmin
+          .from("weekly_announcements")
+          .insert(announcementRows);
 
       if (announcementsError) {
-        throw new Error(announcementsError.message);
+        throw new Error(
+          announcementsError.message
+        );
       }
     }
 
-    const { error: importError } = await supabaseAdmin
-      .from("schedule_pdf_imports")
-      .insert({
-        file_name: uploadedPdf.originalName,
-        file_url: uploadedPdf.publicUrl,
-        import_type: "weekly",
-        status: "ready_for_review",
-        schedule_id: schedule.id,
-        extracted_data: {
-          scheduleDays,
-          announcements,
-        },
-        processed_at: new Date().toISOString(),
-      });
+    const { error: importError } =
+      await supabaseAdmin
+        .from("schedule_pdf_imports")
+        .insert({
+          file_name: uploadedPdf.originalName,
+          file_url: uploadedPdf.publicUrl,
+          import_type: "weekly",
+          status: "ready_for_review",
+          schedule_id: schedule.id,
+          extracted_text:
+            parsedPdf?.extractedText || null,
+          extracted_data: {
+            parserSucceeded: Boolean(parsedPdf),
+            usedAutomaticSchedule:
+              Boolean(parsedPdf?.days.length),
+            usedAutomaticAnnouncements:
+              Boolean(
+                parsedPdf?.announcements.length
+              ),
+            scheduleDays,
+            announcements,
+            title,
+            hebrewTitle,
+            hebrewDate,
+            scheduleType,
+            generalNote,
+          },
+          processed_at: new Date().toISOString(),
+        });
 
     if (importError) {
       console.error(
@@ -387,32 +557,53 @@ export async function uploadWeeklySchedule(formData: FormData) {
     throw error;
   }
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  revalidateSchedulePages();
 
   redirect(
     `/admin/davening-times?created=1&schedule=${schedule.id}`
   );
 }
 
-export async function publishWeeklySchedule(formData: FormData) {
+/* =========================================================
+   PUBLISH / UNPUBLISH WEEKLY SCHEDULE
+   ========================================================= */
+
+export async function publishWeeklySchedule(
+  formData: FormData
+) {
   await requireAdmin();
 
-  const scheduleId = getString(formData, "schedule_id");
+  const scheduleId = getString(
+    formData,
+    "schedule_id"
+  );
 
   if (!scheduleId) {
     throw new Error("Schedule ID is missing.");
   }
 
-  const { error: unpublishError } = await supabaseAdmin
-    .from("weekly_schedules")
-    .update({
-      is_published: false,
-      published_at: null,
-    })
-    .eq("is_published", true)
-    .neq("id", scheduleId);
+  const { data: selectedSchedule, error: findError } =
+    await supabaseAdmin
+      .from("weekly_schedules")
+      .select("id")
+      .eq("id", scheduleId)
+      .maybeSingle();
+
+  if (findError || !selectedSchedule) {
+    throw new Error(
+      findError?.message || "Schedule not found."
+    );
+  }
+
+  const { error: unpublishError } =
+    await supabaseAdmin
+      .from("weekly_schedules")
+      .update({
+        is_published: false,
+        published_at: null,
+      })
+      .eq("is_published", true)
+      .neq("id", scheduleId);
 
   if (unpublishError) {
     throw new Error(unpublishError.message);
@@ -430,16 +621,22 @@ export async function publishWeeklySchedule(formData: FormData) {
     throw new Error(error.message);
   }
 
-  await supabaseAdmin
-    .from("schedule_pdf_imports")
-    .update({
-      status: "published",
-    })
-    .eq("schedule_id", scheduleId);
+  const { error: importUpdateError } =
+    await supabaseAdmin
+      .from("schedule_pdf_imports")
+      .update({
+        status: "published",
+      })
+      .eq("schedule_id", scheduleId);
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  if (importUpdateError) {
+    console.error(
+      "Could not update PDF import status:",
+      importUpdateError.message
+    );
+  }
+
+  revalidateSchedulePages();
 
   redirect("/admin/davening-times?published=1");
 }
@@ -449,7 +646,10 @@ export async function unpublishWeeklySchedule(
 ) {
   await requireAdmin();
 
-  const scheduleId = getString(formData, "schedule_id");
+  const scheduleId = getString(
+    formData,
+    "schedule_id"
+  );
 
   if (!scheduleId) {
     throw new Error("Schedule ID is missing.");
@@ -467,21 +667,43 @@ export async function unpublishWeeklySchedule(
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  const { error: importUpdateError } =
+    await supabaseAdmin
+      .from("schedule_pdf_imports")
+      .update({
+        status: "ready_for_review",
+      })
+      .eq("schedule_id", scheduleId);
+
+  if (importUpdateError) {
+    console.error(
+      "Could not update PDF import status:",
+      importUpdateError.message
+    );
+  }
+
+  revalidateSchedulePages();
 
   redirect("/admin/davening-times?unpublished=1");
 }
+
+/* =========================================================
+   SEASONAL SCHEDULE PDF
+   ========================================================= */
 
 export async function uploadSeasonalSchedule(
   formData: FormData
 ) {
   await requireAdmin();
 
-  const title = getString(formData, "seasonal_title");
+  const title = getString(
+    formData,
+    "seasonal_title"
+  );
+
   const scheduleType =
-    getString(formData, "seasonal_type") || "seasonal";
+    getString(formData, "seasonal_type") ||
+    "seasonal";
 
   const description = getString(
     formData,
@@ -493,31 +715,52 @@ export async function uploadSeasonalSchedule(
     "seasonal_start_date"
   );
 
-  const endDate = getString(formData, "seasonal_end_date");
+  const endDate = getString(
+    formData,
+    "seasonal_end_date"
+  );
 
-  const file = formData.get(
+  const fileEntry = formData.get(
     "seasonal_pdf_file"
-  ) as File | null;
+  );
+
+  const file =
+    fileEntry instanceof File ? fileEntry : null;
 
   if (!title) {
-    throw new Error("Please enter a seasonal schedule title.");
+    throw new Error(
+      "Please enter a seasonal schedule title."
+    );
   }
 
-  const validTypes = [
-    "winter",
-    "summer",
-    "selichos",
-    "yom_tov",
-    "seasonal",
-    "special",
-  ];
+  if (!isPdfFile(file)) {
+    throw new Error(
+      "Please choose a valid seasonal PDF file."
+    );
+  }
 
-  if (!validTypes.includes(scheduleType)) {
-    throw new Error("Invalid seasonal schedule type.");
+  if (
+    startDate &&
+    endDate &&
+    endDate < startDate
+  ) {
+    throw new Error(
+      "The seasonal end date cannot be before the start date."
+    );
+  }
+
+  if (
+    !VALID_SEASONAL_SCHEDULE_TYPES.includes(
+      scheduleType as (typeof VALID_SEASONAL_SCHEDULE_TYPES)[number]
+    )
+  ) {
+    throw new Error(
+      "Invalid seasonal schedule type."
+    );
   }
 
   const uploadedPdf = await uploadPdfToBucket(
-    file as File,
+    file,
     "seasonal-schedule-pdfs"
   );
 
@@ -530,7 +773,8 @@ export async function uploadSeasonalSchedule(
         description: description || null,
         pdf_url: uploadedPdf.publicUrl,
         pdf_name: uploadedPdf.originalName,
-        effective_start_date: startDate || null,
+        effective_start_date:
+          startDate || null,
         effective_end_date: endDate || null,
         display_on_homepage: true,
         is_published: true,
@@ -544,26 +788,36 @@ export async function uploadSeasonalSchedule(
       .remove([uploadedPdf.filePath]);
 
     throw new Error(
-      error?.message || "Could not save seasonal schedule."
+      error?.message ||
+        "Could not save seasonal schedule."
     );
   }
 
-  await supabaseAdmin
-    .from("schedule_pdf_imports")
-    .insert({
-      file_name: uploadedPdf.originalName,
-      file_url: uploadedPdf.publicUrl,
-      import_type: "seasonal",
-      status: "published",
-      seasonal_schedule_id: seasonalSchedule.id,
-      processed_at: new Date().toISOString(),
-    });
+  const { error: importError } =
+    await supabaseAdmin
+      .from("schedule_pdf_imports")
+      .insert({
+        file_name: uploadedPdf.originalName,
+        file_url: uploadedPdf.publicUrl,
+        import_type: "seasonal",
+        status: "published",
+        seasonal_schedule_id:
+          seasonalSchedule.id,
+        processed_at: new Date().toISOString(),
+      });
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  if (importError) {
+    console.error(
+      "Could not save seasonal PDF import:",
+      importError.message
+    );
+  }
 
-  redirect("/admin/davening-times?seasonalUploaded=1");
+  revalidateSchedulePages();
+
+  redirect(
+    "/admin/davening-times?seasonalUploaded=1"
+  );
 }
 
 export async function toggleSeasonalSchedule(
@@ -571,11 +825,18 @@ export async function toggleSeasonalSchedule(
 ) {
   await requireAdmin();
 
-  const scheduleId = getString(formData, "schedule_id");
-  const publish = getString(formData, "publish") === "true";
+  const scheduleId = getString(
+    formData,
+    "schedule_id"
+  );
+
+  const publish =
+    getString(formData, "publish") === "true";
 
   if (!scheduleId) {
-    throw new Error("Seasonal schedule ID is missing.");
+    throw new Error(
+      "Seasonal schedule ID is missing."
+    );
   }
 
   const { error } = await supabaseAdmin
@@ -590,9 +851,29 @@ export async function toggleSeasonalSchedule(
     throw new Error(error.message);
   }
 
-  revalidatePath("/");
-  revalidatePath("/davening-times");
-  revalidatePath("/admin/davening-times");
+  const { error: importUpdateError } =
+    await supabaseAdmin
+      .from("schedule_pdf_imports")
+      .update({
+        status: publish
+          ? "published"
+          : "ready_for_review",
+      })
+      .eq(
+        "seasonal_schedule_id",
+        scheduleId
+      );
 
-  redirect("/admin/davening-times?seasonalUpdated=1");
+  if (importUpdateError) {
+    console.error(
+      "Could not update seasonal PDF status:",
+      importUpdateError.message
+    );
+  }
+
+  revalidateSchedulePages();
+
+  redirect(
+    "/admin/davening-times?seasonalUpdated=1"
+  );
 }
