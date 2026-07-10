@@ -12,6 +12,11 @@ const adminLinks = [
     href: "/admin/members",
   },
   {
+    label: "Membership Applications",
+    description: "Review new membership requests and approve or reject applicants.",
+    href: "/admin/membership-applications",
+  },
+  {
     label: "Billing",
     description: "Generate dues and review member billing.",
     href: "/admin/billing",
@@ -93,6 +98,7 @@ export default function AdminPage() {
                 {item.description}
               </p>
             </Link>
+            
           ))}
         </div>
       </section>
