@@ -19,6 +19,7 @@ type Member = {
   recurring_status: string | null;
   next_billing_date: string | null;
   portal_status: string | null;
+  portal_role: string | null;
 };
 
 type Charge = {
@@ -95,24 +96,25 @@ export default async function MemberDashboardPage() {
   }
 
   const { data: member, error: memberError } = await supabaseAdmin
-    .from("members")
-    .select(
-      `
-        id,
-        first_name,
-        last_name,
-        email,
-        membership_type,
-        custom_dues_amount,
-        autopay_active,
-        recurring_amount,
-        recurring_status,
-        next_billing_date,
-        portal_status
-      `
-    )
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
+  .from("members")
+  .select(
+    `
+      id,
+      first_name,
+      last_name,
+      email,
+      membership_type,
+      custom_dues_amount,
+      autopay_active,
+      recurring_amount,
+      recurring_status,
+      next_billing_date,
+      portal_status,
+      portal_role
+    `
+  )
+  .eq("auth_user_id", user.id)
+  .maybeSingle();
 
   if (memberError) {
     console.error("Unable to load member account:", memberError.message);
@@ -147,6 +149,8 @@ export default async function MemberDashboardPage() {
   }
 
   const typedMember = member as Member;
+
+  const isAdmin = typedMember.portal_role === "admin";
 
   const { data: chargeData, error: chargeError } = await supabaseAdmin
     .from("member_charges")
@@ -224,30 +228,66 @@ export default async function MemberDashboardPage() {
   return (
     <main className="min-h-screen bg-[#f7f3ea] px-5 py-8 text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-col gap-5 rounded-[2rem] bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-8">
-          <div>
-            <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#8b6b2e]">
-              Khal Bnei Aliya
-            </p>
+        <header className="rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
+  <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <Link
+        href="/"
+        className="text-sm font-bold text-[#8b6b2e] hover:underline"
+      >
+        ← Back to Main Site
+      </Link>
 
-            <h1 className="mt-2 text-3xl font-bold">
-              Welcome, {typedMember.first_name}
-            </h1>
+      <p className="mt-5 text-sm font-bold uppercase tracking-[0.18em] text-[#8b6b2e]">
+        Khal Bnei Aliya
+      </p>
 
-            <p className="mt-2 text-slate-600">
-              View your membership dues, charges, payments, and receipts.
-            </p>
-          </div>
+      <h1 className="mt-2 text-3xl font-bold">
+        Welcome, {typedMember.first_name}
+      </h1>
 
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="rounded-xl border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold hover:bg-slate-50"
-            >
-              Sign Out
-            </button>
-          </form>
-        </header>
+      <p className="mt-2 text-slate-600">
+        View your membership dues, charges, payments, and receipts.
+      </p>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href="/"
+        className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
+      >
+        Main Site
+      </Link>
+
+      {isAdmin ? (
+        <>
+          <Link
+            href="/admin"
+            className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#10192b]"
+          >
+            Admin Dashboard
+          </Link>
+
+          <Link
+            href="/admin/accounting"
+            className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
+          >
+            Accounting Dashboard
+          </Link>
+        </>
+      ) : null}
+
+      <form action={signOut}>
+        <button
+          type="submit"
+          className="rounded-full border border-red-200 bg-white px-5 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-50"
+        >
+          Sign Out
+        </button>
+      </form>
+    </div>
+  </div>
+</header>
 
         <section className="mt-6 grid gap-5 md:grid-cols-3">
           <div className="rounded-[1.5rem] bg-white p-6 shadow-sm">
@@ -401,13 +441,12 @@ export default async function MemberDashboardPage() {
                     {formatMoney(charge.amount)}
                   </p>
 
-                  <button
-                    type="button"
-                    disabled
-                    className="cursor-not-allowed rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white opacity-50"
-                  >
-                    Pay Online
-                  </button>
+                  <SolaMemberPaymentForm
+  chargeId={charge.id}
+  amount={Number(charge.amount || 0)}
+  memberName={`${typedMember.first_name} ${typedMember.last_name}`}
+  memberEmail={typedMember.email || ""}
+/>
                 </div>
               </div>
             ))}
@@ -473,7 +512,7 @@ export default async function MemberDashboardPage() {
                       <td className="px-3 py-4 text-right">
                         {payment.receipt_pdf_url ? (
                           <Link
-                            href={`/api/receipts/${payment.id}`}
+                            href={`/api/member/receipts/${payment.id}`}
                             target="_blank"
                             className="inline-flex rounded-full border border-[#8b6b2e] px-4 py-2 text-sm font-bold text-[#8b6b2e] hover:bg-[#f7f3ea]"
                           >
