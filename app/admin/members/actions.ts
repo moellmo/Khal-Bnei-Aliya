@@ -7,6 +7,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 export async function createMember(formData: FormData) {
   const first_name = String(formData.get("first_name") || "").trim();
   const last_name = String(formData.get("last_name") || "").trim();
+  const hebrew_name = String(formData.get("hebrew_name") || "").trim();
+  const tribe_status = String(formData.get("tribe_status") || "Yisroel").trim();
   const email = String(formData.get("email") || "").trim();
   const phone = String(formData.get("phone") || "").trim();
   const address = String(formData.get("address") || "").trim();
@@ -23,6 +25,8 @@ export async function createMember(formData: FormData) {
   const { error } = await supabaseAdmin.from("members").insert({
     first_name,
     last_name,
+    hebrew_name: hebrew_name || null,
+    tribe_status,
     email: email || null,
     phone: phone || null,
     address: address || null,

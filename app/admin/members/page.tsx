@@ -8,6 +8,8 @@ type Member = {
   id: string;
   first_name: string;
   last_name: string;
+  hebrew_name: string | null;
+  tribe_status: string | null;
   email: string | null;
   phone: string | null;
   address: string | null;
@@ -29,7 +31,7 @@ async function getMembers(): Promise<Member[]> {
   const { data, error } = await supabaseAdmin
     .from("members")
     .select(
-      "id, first_name, last_name, email, phone, address, membership_type, custom_dues_amount, status, seating_location, notes, created_at"
+      "id, first_name, last_name, hebrew_name, tribe_status, email, phone, address, membership_type, custom_dues_amount, status, seating_location, notes, created_at"
     )
     .order("created_at", { ascending: false });
 
@@ -73,7 +75,8 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
           </p>
           <h1 className="mt-3 text-4xl font-bold">Members</h1>
           <p className="mt-4 max-w-2xl text-slate-200">
-            Add and manage shul members, custom dues, seating, and account status.
+            Add and manage shul members, Hebrew names, custom dues, seating, and
+            account status.
           </p>
         </div>
 
@@ -91,7 +94,8 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
             <div>
               <h2 className="text-2xl font-bold">Add Member</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Start with the main member. Family and Hebrew names will be added next.
+                Start with the main member. Family, Hebrew names, and other
+                Mishaberach names can be added from the member file.
               </p>
             </div>
 
@@ -107,7 +111,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
               </label>
 
               <label className="space-y-2">
-                <span className="font-semibold">Last Name</span>
+                <span className="font-semibold">Last Name / Family Name</span>
                 <input
                   name="last_name"
                   required
@@ -116,6 +120,29 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                 />
               </label>
             </div>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Main Hebrew Name</span>
+              <input
+                name="hebrew_name"
+                dir="rtl"
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
+                placeholder="משה בן ..."
+              />
+            </label>
+
+            <label className="block space-y-2">
+              <span className="font-semibold">Kohen / Levi / Yisroel</span>
+              <select
+                name="tribe_status"
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                defaultValue="Yisroel"
+              >
+                <option value="Yisroel">Yisroel</option>
+                <option value="Kohen">Kohen</option>
+                <option value="Levi">Levi</option>
+              </select>
+            </label>
 
             <label className="block space-y-2">
               <span className="font-semibold">Email</span>
@@ -219,16 +246,18 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
               <div>
                 <h2 className="text-2xl font-bold">Member List</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {members.length} member{members.length === 1 ? "" : "s"} currently in the system.
+                  {members.length} member{members.length === 1 ? "" : "s"}{" "}
+                  currently in the system.
                 </p>
               </div>
             </div>
 
             <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[850px] border-separate border-spacing-y-3 text-left text-sm">
+              <table className="w-full min-w-[1050px] border-separate border-spacing-y-3 text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-[0.18em] text-slate-500">
                     <th className="px-4">Member</th>
+                    <th className="px-4">Action</th>
                     <th className="px-4">Contact</th>
                     <th className="px-4">Type</th>
                     <th className="px-4">Dues</th>
@@ -244,11 +273,31 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                         <p className="font-bold">
                           {member.first_name} {member.last_name}
                         </p>
+
+                        {member.hebrew_name && (
+                          <p dir="rtl" className="mt-1 text-right text-sm">
+                            {member.hebrew_name}
+                          </p>
+                        )}
+
+                        <p className="mt-1 text-xs font-bold text-[#8b6b2e]">
+                          {member.tribe_status || "Yisroel"}
+                        </p>
+
                         {member.notes && (
                           <p className="mt-1 max-w-xs truncate text-xs text-slate-500">
                             {member.notes}
                           </p>
                         )}
+                      </td>
+
+                      <td className="px-4 py-4">
+                        <Link
+                          href={`/admin/members/${member.id}`}
+                          className="inline-flex rounded-full bg-[#1d2940] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#10192b]"
+                        >
+                          View / Edit
+                        </Link>
                       </td>
 
                       <td className="px-4 py-4">
@@ -281,7 +330,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                   {members.length === 0 && (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         className="rounded-2xl bg-[#fbf8f2] px-4 py-10 text-center text-slate-500"
                       >
                         No members added yet.
