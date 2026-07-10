@@ -366,22 +366,12 @@ export async function createAndSendReceipt({
   paymentId,
   emailOverride,
 }: CreateReceiptOptions) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RECEIPT_FROM_EMAIL;
-
-  if (!resendApiKey) {
-    throw new Error("RESEND_API_KEY is missing.");
-  }
-
-  if (!fromEmail) {
-    throw new Error("RECEIPT_FROM_EMAIL is missing.");
-  }
-
   const payment = await loadPayment(paymentId);
   const member = await loadMember(payment.member_id);
   const charge = await loadCharge(payment.charge_id);
 
   const receiptNumber = makeReceiptNumber(payment);
+
   const pdfBytes = await buildReceiptPdf({
     payment,
     member,
@@ -391,6 +381,10 @@ export async function createAndSendReceipt({
 
   const storagePath = `${member.id}/${receiptNumber}.pdf`;
 
+  /*
+   * Step 1: create and upload the PDF.
+   * This is the essential receipt operation.
+   */
   const { error: uploadError } = await supabaseAdmin.storage
     .from("payment-receipts")
     .upload(storagePath, pdfBytes, {
@@ -399,7 +393,31 @@ export async function createAndSendReceipt({
     });
 
   if (uploadError) {
-    throw new Error(`Unable to upload receipt: ${uploadError.message}`);
+    throw new Error(
+      `Unable to upload receipt: ${uploadError.message}`
+    );
+  }
+
+  /*
+   * Step 2: save the receipt path immediately.
+   *
+   * This must happen before attempting email so that an email
+   * configuration or delivery error does not remove the member's
+   * ability to download the PDF.
+   */
+  const { error: receiptSaveError } = await supabaseAdmin
+    .from("payments")
+    .update({
+      receipt_number: receiptNumber,
+      receipt_pdf_url: storagePath,
+      receipt_email_status: "pending",
+    })
+    .eq("id", payment.id);
+
+  if (receiptSaveError) {
+    throw new Error(
+      `Unable to save receipt record: ${receiptSaveError.message}`
+    );
   }
 
   const recipient =
@@ -408,87 +426,150 @@ export async function createAndSendReceipt({
     member.email?.trim() ||
     "";
 
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.RECEIPT_FROM_EMAIL;
+
   let emailedAt: string | null = null;
+  let emailStatus = "not_sent";
+  let emailErrorMessage: string | null = null;
 
-  if (recipient) {
-    const resend = new Resend(resendApiKey);
+  /*
+   * Step 3: email is optional and must never block the PDF.
+   */
+  if (!recipient) {
+    emailStatus = "no_recipient";
+  } else if (!resendApiKey || !fromEmail) {
+    emailStatus = "not_configured";
 
-    const description =
-      charge?.description ||
-      charge?.charge_type ||
-      "Payment to Khal Bnei Aliya";
+    emailErrorMessage = !resendApiKey
+      ? "RESEND_API_KEY is missing."
+      : "RECEIPT_FROM_EMAIL is missing.";
 
-    const { error: emailError } = await resend.emails.send({
-      from: fromEmail,
-      to: [recipient],
-      subject: `Payment receipt ${receiptNumber}`,
-      html: `
-        <div style="font-family:Arial,sans-serif;background:#f7f3ea;padding:32px;color:#0f172a;">
-          <div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;">
-            <div style="background:#1d2940;padding:28px;color:#ffffff;">
-              <div style="font-size:12px;font-weight:700;letter-spacing:2px;color:#d9bf7a;">
-                KHAL BNEI ALIYA
+    console.warn("RECEIPT_EMAIL_NOT_CONFIGURED", {
+      paymentId: payment.id,
+      receiptNumber,
+      error: emailErrorMessage,
+    });
+  } else {
+    try {
+      const resend = new Resend(resendApiKey);
+
+      const description =
+        charge?.description ||
+        charge?.charge_type ||
+        "Payment to Khal Bnei Aliya";
+
+      const { error: emailError } = await resend.emails.send({
+        from: fromEmail,
+        to: [recipient],
+        subject: `Payment receipt ${receiptNumber}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;background:#f7f3ea;padding:32px;color:#0f172a;">
+            <div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:20px;overflow:hidden;">
+              <div style="background:#1d2940;padding:28px;color:#ffffff;">
+                <div style="font-size:12px;font-weight:700;letter-spacing:2px;color:#d9bf7a;">
+                  KHAL BNEI ALIYA
+                </div>
+
+                <h1 style="margin:10px 0 0;font-size:28px;">
+                  Payment received
+                </h1>
               </div>
-              <h1 style="margin:10px 0 0;font-size:28px;">Payment received</h1>
-            </div>
 
-            <div style="padding:28px;">
-              <p>Dear ${escapeHtml(member.first_name)},</p>
+              <div style="padding:28px;">
+                <p>
+                  Dear ${escapeHtml(member.first_name)},
+                </p>
 
-              <p>Thank you. We received your payment.</p>
+                <p>
+                  Thank you. We received your payment.
+                </p>
 
-              <div style="background:#fbf8f2;border-radius:14px;padding:18px;margin:22px 0;">
-                <p style="margin:0 0 8px;">
-                  <strong>Amount:</strong> ${escapeHtml(
-                    formatMoney(payment.amount)
-                  )}
+                <div style="background:#fbf8f2;border-radius:14px;padding:18px;margin:22px 0;">
+                  <p style="margin:0 0 8px;">
+                    <strong>Amount:</strong>
+                    ${escapeHtml(formatMoney(payment.amount))}
+                  </p>
+
+                  <p style="margin:0 0 8px;">
+                    <strong>Description:</strong>
+                    ${escapeHtml(description)}
+                  </p>
+
+                  <p style="margin:0 0 8px;">
+                    <strong>Date:</strong>
+                    ${escapeHtml(
+                      formatDate(
+                        payment.paid_at || payment.created_at
+                      )
+                    )}
+                  </p>
+
+                  <p style="margin:0;">
+                    <strong>Receipt:</strong>
+                    ${escapeHtml(receiptNumber)}
+                  </p>
+                </div>
+
+                <p>
+                  Your PDF receipt is attached to this email.
                 </p>
-                <p style="margin:0 0 8px;">
-                  <strong>Description:</strong> ${escapeHtml(description)}
-                </p>
-                <p style="margin:0 0 8px;">
-                  <strong>Date:</strong> ${escapeHtml(
-                    formatDate(payment.paid_at || payment.created_at)
-                  )}
-                </p>
-                <p style="margin:0;">
-                  <strong>Receipt:</strong> ${escapeHtml(receiptNumber)}
+
+                <p style="margin-top:26px;">
+                  Khal Bnei Aliya
                 </p>
               </div>
-
-              <p>Your PDF receipt is attached to this email.</p>
-
-              <p style="margin-top:26px;">Khal Bnei Aliya</p>
             </div>
           </div>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: `${receiptNumber}.pdf`,
-          content: Buffer.from(pdfBytes).toString("base64"),
-        },
-      ],
-    });
+        `,
+        attachments: [
+          {
+            filename: `${receiptNumber}.pdf`,
+            content: Buffer.from(pdfBytes).toString("base64"),
+          },
+        ],
+      });
 
-    if (emailError) {
-      throw new Error(`Unable to email receipt: ${emailError.message}`);
+      if (emailError) {
+        throw new Error(emailError.message);
+      }
+
+      emailedAt = new Date().toISOString();
+      emailStatus = "sent";
+    } catch (error) {
+      emailStatus = "failed";
+
+      emailErrorMessage =
+        error instanceof Error
+          ? error.message
+          : "Unable to email receipt.";
+
+      console.error("RECEIPT_EMAIL_ERROR", {
+        paymentId: payment.id,
+        receiptNumber,
+        recipient,
+        error: emailErrorMessage,
+      });
     }
-
-    emailedAt = new Date().toISOString();
   }
 
-  const { error: updateError } = await supabaseAdmin
+  /*
+   * Step 4: record the email result without touching the PDF path.
+   */
+  const { error: emailStatusUpdateError } = await supabaseAdmin
     .from("payments")
     .update({
-      receipt_number: receiptNumber,
-      receipt_pdf_url: storagePath,
       receipt_emailed_at: emailedAt,
+      receipt_email_status: emailStatus,
     })
     .eq("id", payment.id);
 
-  if (updateError) {
-    throw new Error(`Unable to update receipt record: ${updateError.message}`);
+  if (emailStatusUpdateError) {
+    console.error("RECEIPT_EMAIL_STATUS_UPDATE_ERROR", {
+      paymentId: payment.id,
+      receiptNumber,
+      error: emailStatusUpdateError.message,
+    });
   }
 
   return {
@@ -496,5 +577,7 @@ export async function createAndSendReceipt({
     storagePath,
     recipient: recipient || null,
     emailed: Boolean(emailedAt),
+    emailStatus,
+    emailError: emailErrorMessage,
   };
 }
