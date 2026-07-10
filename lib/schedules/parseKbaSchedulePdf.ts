@@ -47,240 +47,469 @@ export type ParsedKbaSchedule = {
   extractedText: string;
 };
 
-function cleanText(value: string) {
+function normalizeWhitespace(value: string) {
   return value
     .replace(/\u00a0/g, " ")
+    .replace(/[‐-‒–—]/g, "-")
     .replace(/[ \t]+/g, " ")
-    .replace(/\r/g, "")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
-function normalizeTime(value: string) {
-  const cleaned = value
-    .replace(/[–—]/g, "-")
+function normalizeForParsing(value: string) {
+  return normalizeWhitespace(value)
+    .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
 
-  const match = cleaned.match(
+function cleanCapturedText(value: string | undefined) {
+  return normalizeWhitespace(value || "")
+    .replace(/^[|•➢>\-\s]+/, "")
+    .replace(/[|•➢>\-\s]+$/, "")
+    .trim();
+}
+
+function normalizeTime(value: string | undefined) {
+  const time = cleanCapturedText(value);
+
+  if (!time) {
+    return "";
+  }
+
+  const match = time.match(
     /\b(\d{1,2}:\d{2}|\d{1,2})\s*(AM|PM)?\b/i
   );
 
-  if (!match) return "";
+  if (!match) {
+    return "";
+  }
 
-  const rawTime = match[1];
+  const numericTime = match[1];
   const meridiem = match[2]?.toUpperCase();
 
-  return meridiem ? `${rawTime} ${meridiem}` : rawTime;
+  return meridiem
+    ? `${numericTime} ${meridiem}`
+    : numericTime;
 }
 
-function findLine(
-  lines: string[],
-  matcher: RegExp,
-  startIndex = 0,
-  endIndex = lines.length
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractSection(
+  text: string,
+  startPattern: RegExp,
+  endPatterns: RegExp[]
 ) {
-  for (let index = startIndex; index < endIndex; index += 1) {
-    if (matcher.test(lines[index])) {
-      return {
-        index,
-        line: lines[index],
-      };
+  const startMatch = startPattern.exec(text);
+
+  if (!startMatch || startMatch.index === undefined) {
+    return "";
+  }
+
+  const startIndex =
+    startMatch.index + startMatch[0].length;
+
+  let endIndex = text.length;
+
+  for (const endPattern of endPatterns) {
+    const remainingText = text.slice(startIndex);
+    const endMatch = endPattern.exec(remainingText);
+
+    if (
+      endMatch &&
+      endMatch.index !== undefined &&
+      startIndex + endMatch.index < endIndex
+    ) {
+      endIndex = startIndex + endMatch.index;
     }
   }
 
-  return null;
+  return text.slice(startIndex, endIndex).trim();
 }
 
-function getSectionBounds(
-  lines: string[],
-  heading: RegExp,
-  followingHeadings: RegExp[]
+function findEventTime(
+  section: string,
+  labelPatterns: RegExp[]
 ) {
-  const start = findLine(lines, heading);
+  for (const labelPattern of labelPatterns) {
+    const labelMatch = labelPattern.exec(section);
 
-  if (!start) {
-    return null;
-  }
-
-  let end = lines.length;
-
-  for (const followingHeading of followingHeadings) {
-    const found = findLine(
-      lines,
-      followingHeading,
-      start.index + 1
-    );
-
-    if (found && found.index < end) {
-      end = found.index;
-    }
-  }
-
-  return {
-    start: start.index + 1,
-    end,
-  };
-}
-
-function parseEntryFromSection(
-  lines: string[],
-  start: number,
-  end: number,
-  matcher: RegExp,
-  label: string
-): ParsedScheduleEntry | null {
-  for (let index = start; index < end; index += 1) {
-    const line = lines[index];
-
-    if (!matcher.test(line)) {
+    if (
+      !labelMatch ||
+      labelMatch.index === undefined
+    ) {
       continue;
     }
 
-    const time = normalizeTime(line);
+    const labelStart = labelMatch.index;
+    const labelEnd =
+      labelStart + labelMatch[0].length;
 
-    if (time) {
-      return {
-        eventName: label,
-        eventTime: time,
-        note: "",
-        isHighlighted: false,
-      };
-    }
-
-    for (
-      let lookAhead = index + 1;
-      lookAhead <= Math.min(index + 2, end - 1);
-      lookAhead += 1
-    ) {
-      const nearbyTime = normalizeTime(lines[lookAhead]);
-
-      if (nearbyTime) {
-        return {
-          eventName: label,
-          eventTime: nearbyTime,
-          note: "",
-          isHighlighted: false,
-        };
-      }
-    }
-  }
-
-  return null;
-}
-
-function parseSectionEntries(
-  lines: string[],
-  start: number,
-  end: number,
-  definitions: Array<{
-    matcher: RegExp;
-    label: string;
-  }>
-) {
-  return definitions
-    .map(({ matcher, label }) =>
-      parseEntryFromSection(
-        lines,
-        start,
-        end,
-        matcher,
-        label
-      )
-    )
-    .filter(
-      (entry): entry is ParsedScheduleEntry =>
-        entry !== null
+    const before = section.slice(
+      Math.max(0, labelStart - 25),
+      labelStart
     );
-}
 
-function detectEnglishTitle(lines: string[]) {
-  const ignored = [
-    /^friday\b/i,
-    /^shabbos\b/i,
-    /^announcements?\b/i,
-    /^weekday\b/i,
-    /^please join\b/i,
-    /^dues\b/i,
-    /^khal bnei/i,
-  ];
+    const after = section.slice(
+      labelEnd,
+      Math.min(section.length, labelEnd + 25)
+    );
 
-  for (const line of lines.slice(0, 12)) {
-    if (
-      line.length >= 3 &&
-      line.length <= 80 &&
-      !ignored.some((pattern) => pattern.test(line)) &&
-      !/\d{1,2}:\d{2}/.test(line) &&
-      !/^\d/.test(line)
-    ) {
-      return line;
+    const beforeTimes = [
+      ...before.matchAll(
+        /(\d{1,2}:\d{2}|\d{1,2})\s*(AM|PM)?/gi
+      ),
+    ];
+
+    if (beforeTimes.length > 0) {
+      const closest =
+        beforeTimes[beforeTimes.length - 1];
+
+      return normalizeTime(
+        `${closest[1]} ${closest[2] || ""}`
+      );
+    }
+
+    const afterTime = after.match(
+      /(\d{1,2}:\d{2}|\d{1,2})\s*(AM|PM)?/i
+    );
+
+    if (afterTime) {
+      return normalizeTime(
+        `${afterTime[1]} ${afterTime[2] || ""}`
+      );
     }
   }
 
-  return "Weekly Shul Schedule";
+  return "";
 }
 
-function detectHebrewTitle(lines: string[]) {
-  return (
-    lines.find(
-      (line) =>
-        /[\u0590-\u05FF]/.test(line) &&
-        /פרשת|יום טוב|ראש השנה|סוכות|פסח|שבועות/.test(
-          line
-        )
-    ) || ""
+function createEntry(
+  eventName: string,
+  eventTime: string,
+  note = "",
+  isHighlighted = false
+): ParsedScheduleEntry | null {
+  if (!eventTime && !note) {
+    return null;
+  }
+
+  return {
+    eventName,
+    eventTime,
+    note,
+    isHighlighted,
+  };
+}
+
+function removeNullEntries(
+  entries: Array<ParsedScheduleEntry | null>
+) {
+  return entries.filter(
+    (
+      entry
+    ): entry is ParsedScheduleEntry =>
+      entry !== null
   );
 }
 
-function detectHebrewDate(lines: string[]) {
-  return (
-    lines.find(
-      (line) =>
-        /[\u0590-\u05FF]/.test(line) &&
-        /תשרי|חשון|כסלו|טבת|שבט|אדר|ניסן|אייר|סיון|תמוז|אב|אלול/.test(
-          line
-        )
-    ) || ""
+function detectHebrewTitle(text: string) {
+  const match = text.match(
+    /(פרשת\s+[\u0590-\u05FF״׳"'־\-\s]{2,40})/u
   );
+
+  if (!match) {
+    return "";
+  }
+
+  const title = cleanCapturedText(match[1]);
+
+  return title.length <= 60 ? title : "";
+}
+
+function detectHebrewDate(text: string) {
+  const hebrewMonths =
+    "תשרי|חשון|מרחשון|כסלו|טבת|שבט|אדר|ניסן|אייר|סיון|תמוז|אב|אלול";
+
+  const match = text.match(
+    new RegExp(
+      `([א-ת״׳"'\\s]{1,12}\\s+(?:${hebrewMonths}))`,
+      "u"
+    )
+  );
+
+  if (!match) {
+    return "";
+  }
+
+  const date = cleanCapturedText(match[1]);
+
+  return date.length <= 30 ? date : "";
+}
+
+function detectEnglishTitle(text: string) {
+  const parshaMatch = text.match(
+    /\b(?:Parshas?|Parashas?)\s+([A-Za-z' -]{2,40})/i
+  );
+
+  if (parshaMatch) {
+    return cleanCapturedText(
+      `Parshas ${parshaMatch[1]}`
+    );
+  }
+
+  return "";
+}
+
+function detectScheduleType(
+  text: string
+): ParsedKbaSchedule["scheduleType"] {
+  const normalized = text.toLowerCase();
+
+  const hasYomTov =
+    /\byom tov\b|\berev yom tov\b|\bfirst day\b|\bsecond day\b/.test(
+      normalized
+    );
+
+  const hasShabbos =
+    /\bshabbos\b|\bkabbalas shabbos\b/.test(
+      normalized
+    );
+
+  if (hasYomTov && hasShabbos) {
+    return "yom_tov_shabbos";
+  }
+
+  if (hasYomTov) {
+    return "yom_tov";
+  }
+
+  if (
+    /\bfast day\b|\btaanis\b|\btaanit\b|תענית/.test(
+      normalized
+    )
+  ) {
+    return "fast_day";
+  }
+
+  return "shabbos";
+}
+
+function parseFriday(
+  text: string
+): ParsedScheduleDay | null {
+  const section = extractSection(
+    text,
+    /\bFRIDAY\b(?:\s*\([^)]+\))?/i,
+    [
+      /\bSHABBOS\b(?:\s*\([^)]+\))?/i,
+      /\bANNOUNCEMENTS?\b/i,
+    ]
+  );
+
+  if (!section) {
+    return null;
+  }
+
+  const entries = removeNullEntries([
+    createEntry(
+      "Mincha / Kabbalas Shabbos / Maariv",
+      findEventTime(section, [
+        /MINCHA\s*\/\s*KABBALAS\s+SHABBOS\s*\/\s*MAARIV/i,
+      ])
+    ),
+
+    createEntry(
+      "Plag Hamincha / Candle Lighting",
+      findEventTime(section, [
+        /PLAG\s+HAMINCHA[^0-9]{0,40}CANDLE\s+LIGHTING/i,
+        /PLAG[^0-9]{0,40}CANDLE\s+LIGHTING/i,
+      ])
+    ),
+
+    createEntry(
+      "Shkia",
+      findEventTime(section, [/\bSHKIA\b/i])
+    ),
+  ]);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return {
+    dayTitle: "Friday",
+    dayDate: "",
+    hebrewDayTitle: "",
+    entries,
+  };
+}
+
+function parseShabbos(
+  text: string
+): ParsedScheduleDay | null {
+  const section = extractSection(
+    text,
+    /\bSHABBOS\b(?:\s*\([^)]+\))?/i,
+    [/\bANNOUNCEMENTS?\b/i]
+  );
+
+  if (!section) {
+    return null;
+  }
+
+  const shacharis = createEntry(
+    "Shacharis",
+    findEventTime(section, [
+      /\bSHACHARIS\b/i,
+    ])
+  );
+
+  const sofZmanShema = createEntry(
+    "Sof Zman Krias Shema",
+    findEventTime(section, [
+      /SOF\s+ZMAN\s+KRIAS\s+SHEMA/i,
+    ])
+  );
+
+  const kiddush = /please join us for kiddush after davening/i.test(
+    section
+  )
+    ? createEntry(
+        "Kiddush",
+        "",
+        "Please join us for Kiddush after davening.",
+        true
+      )
+    : null;
+
+  const halachaChabura = createEntry(
+    "Halacha Chabura",
+    findEventTime(section, [
+      /HALACHA\s+CHABURA/i,
+    ]),
+    (() => {
+      const match = section.match(
+        /HALACHA\s+CHABURA\s*:?\s*([A-Za-z'’ -]{3,60}?)(?=\s+\d{1,2}:\d{2}\s+MINCHA|\s+MINCHA\b)/i
+      );
+
+      return cleanCapturedText(match?.[1]);
+    })()
+  );
+
+  const mincha = createEntry(
+    "Mincha",
+    findEventTime(section, [
+      /\bMINCHA\b/i,
+    ])
+  );
+
+  const shkia = createEntry(
+    "Shkia",
+    findEventTime(section, [
+      /\bSHKIA\b/i,
+    ])
+  );
+
+  const shaarHabitachon = createEntry(
+    "Shaar Habitachon",
+    findEventTime(section, [
+      /SHAAR\s+HABITACHON/i,
+    ])
+  );
+
+  const maariv = createEntry(
+    "Maariv",
+    findEventTime(section, [
+      /\bMAARIV\b/i,
+    ])
+  );
+
+  const entries = removeNullEntries([
+    shacharis,
+    sofZmanShema,
+    kiddush,
+    halachaChabura,
+    mincha,
+    shkia,
+    shaarHabitachon,
+    maariv,
+  ]);
+
+  if (entries.length === 0) {
+    return null;
+  }
+
+  return {
+    dayTitle: "Shabbos",
+    dayDate: "",
+    hebrewDayTitle: "",
+    entries,
+  };
+}
+
+function parseGeneralNote(text: string) {
+  const match = text.match(
+    /(Krias Shema should be repeated after\s+\d{1,2}:\d{2}(?:\s*(?:AM|PM))?)/i
+  );
+
+  return cleanCapturedText(match?.[1]);
 }
 
 function parseAnnouncements(
-  lines: string[]
+  text: string
 ): ParsedAnnouncement[] {
-  const heading = findLine(lines, /^announcements?$/i);
+  const announcements: ParsedAnnouncement[] =
+    [];
 
-  if (!heading) {
-    return [];
+  const announcementSection =
+    extractSection(
+      text,
+      /\bANNOUNCEMENTS?\b/i,
+      [
+        /\bHaRav\s+Avigdor\s+Gutnicki\b/i,
+        /\bKhal\s+Bnei\s+Aliyah?\s+Inc\b/i,
+      ]
+    ) || "";
+
+  if (!announcementSection) {
+    return announcements;
   }
 
-  const announcementLines = lines
-    .slice(heading.index + 1)
-    .filter(Boolean);
+  const nerLamaorMatch =
+    announcementSection.match(
+      /Ner\s+Lamaor\s+for\s+the\s+month\s+of\s+([A-Za-z]+)\s+is\s+sponsored\s+by\s+the\s+(.+?)(?=\s+To\s+inquire|\s+Future\s+kiddush|$)/i
+    );
 
-  const combined = announcementLines.join(" ");
+  if (nerLamaorMatch) {
+    const month = cleanCapturedText(
+      nerLamaorMatch[1]
+    );
 
-  const announcements: ParsedAnnouncement[] = [];
+    const sponsorName = cleanCapturedText(
+      nerLamaorMatch[2]
+    );
 
-  const nerMatch = combined.match(
-    /Ner Lamaor[\s\S]*?sponsored by the\s+(.+?)(?=To inquire|$)/i
-  );
-
-  if (nerMatch) {
-    const sponsorName = cleanText(nerMatch[1]);
-
-    announcements.push({
-      announcementType: "ner_lamaor",
-      title: "Ner Lamaor",
-      body: `Sponsored by the ${sponsorName}.`,
-      sponsorName,
-      contactName: "",
-      contactPhone: "",
-      contactEmail: "",
-    });
+    if (sponsorName.length <= 150) {
+      announcements.push({
+        announcementType: "ner_lamaor",
+        title: "Ner Lamaor",
+        body: `Ner Lamaor for the month of ${month} is sponsored by the ${sponsorName}.`,
+        sponsorName,
+        contactName: "",
+        contactPhone: "",
+        contactEmail: "",
+      });
+    }
   }
 
-  const sponsorshipMatch = combined.match(
-    /To inquire about future kiddush sponsorships.*?reach out to\s+(.+?)\s+at\s+([\d()-]{7,})/i
-  );
+  const sponsorshipMatch =
+    announcementSection.match(
+      /To\s+inquire\s+about\s+future\s+kiddush\s+sponsorships.*?(?:reach\s+out\s+to|contact)\s+([A-Za-z' -]{2,60})\s+at\s+(\d{3}[-.\s]\d{3}[-.\s]\d{4})/i
+    );
 
   if (sponsorshipMatch) {
     announcements.push({
@@ -289,24 +518,12 @@ function parseAnnouncements(
       body:
         "To inquire about future Kiddush sponsorships, please contact the person listed below.",
       sponsorName: "",
-      contactName: cleanText(sponsorshipMatch[1]),
-      contactPhone: cleanText(sponsorshipMatch[2]),
-      contactEmail: "",
-    });
-  }
-
-  if (
-    /please join us for kiddush after davening/i.test(
-      combined
-    )
-  ) {
-    announcements.push({
-      announcementType: "kiddush",
-      title: "Kiddush",
-      body: "Please join us for Kiddush after davening.",
-      sponsorName: "",
-      contactName: "",
-      contactPhone: "",
+      contactName: cleanCapturedText(
+        sponsorshipMatch[1]
+      ),
+      contactPhone: cleanCapturedText(
+        sponsorshipMatch[2]
+      ),
       contactEmail: "",
     });
   }
@@ -314,186 +531,86 @@ function parseAnnouncements(
   return announcements;
 }
 
-function detectGeneralNote(lines: string[]) {
-  return (
-    lines.find((line) =>
-      /Krias Shema should be repeated after/i.test(line)
-    ) || ""
-  );
-}
-
-function detectScheduleType(text: string) {
-  const normalized = text.toLowerCase();
-
-  const hasYomTov =
-    /yom tov|first day|second day|erev yom tov/.test(
-      normalized
-    );
-
-  const hasShabbos = /shabbos|kabbalas shabbos/.test(
-    normalized
-  );
-
-  if (hasYomTov && hasShabbos) {
-    return "yom_tov_shabbos" as const;
+function pageTextToString(value: unknown) {
+  if (typeof value === "string") {
+    return value;
   }
 
-  if (hasYomTov) {
-    return "yom_tov" as const;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : String(item || "")
+      )
+      .join("\n");
   }
 
-  if (/fast day|taanis|תענית/.test(normalized)) {
-    return "fast_day" as const;
-  }
-
-  return "shabbos" as const;
+  return String(value || "");
 }
 
 export async function parseKbaSchedulePdf(
   file: File
 ): Promise<ParsedKbaSchedule> {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = new Uint8Array(
+    await file.arrayBuffer()
+  );
 
   const pdf = await getDocumentProxy(bytes);
+
+  /*
+   * Keep pages separate. Previously mergePages caused the
+   * entire PDF to become one giant line.
+   */
   const result = await extractText(pdf, {
-    mergePages: true,
+    mergePages: false,
   });
 
-  const extractedText = cleanText(
-    Array.isArray(result.text)
-      ? result.text.join("\n")
-      : result.text
-  );
+  const rawPageText = Array.isArray(result.text)
+    ? result.text
+        .map(pageTextToString)
+        .join("\n\n")
+    : pageTextToString(result.text);
 
-  const lines = extractedText
-    .split("\n")
-    .map(cleanText)
-    .filter(Boolean);
+  const extractedText =
+    normalizeWhitespace(rawPageText);
 
-  const fridayBounds = getSectionBounds(
-    lines,
-    /^friday\b/i,
-    [/^shabbos\b/i, /^announcements?$/i]
-  );
+  const parsingText =
+    normalizeForParsing(extractedText);
 
-  const shabbosBounds = getSectionBounds(
-    lines,
-    /^shabbos\b/i,
-    [/^announcements?$/i]
-  );
+  if (!parsingText) {
+    throw new Error(
+      "No readable text was found in the PDF."
+    );
+  }
 
   const days: ParsedScheduleDay[] = [];
 
-  if (fridayBounds) {
-    const entries = parseSectionEntries(
-      lines,
-      fridayBounds.start,
-      fridayBounds.end,
-      [
-        {
-          matcher:
-            /mincha\s*\/\s*kabbalas shabbos\s*\/\s*maariv/i,
-          label: "Mincha / Kabbalas Shabbos / Maariv",
-        },
-        {
-          matcher:
-            /plag hamincha.*candle lighting/i,
-          label: "Plag Hamincha / Candle Lighting",
-        },
-        {
-          matcher: /^.*shkia.*$/i,
-          label: "Shkia",
-        },
-      ]
-    );
+  const friday = parseFriday(parsingText);
+  const shabbos = parseShabbos(parsingText);
 
-    if (entries.length > 0) {
-      days.push({
-        dayTitle: "Friday",
-        dayDate: "",
-        hebrewDayTitle: "",
-        entries,
-      });
-    }
+  if (friday) {
+    days.push(friday);
   }
 
-  if (shabbosBounds) {
-    const entries = parseSectionEntries(
-      lines,
-      shabbosBounds.start,
-      shabbosBounds.end,
-      [
-        {
-          matcher: /shacharis/i,
-          label: "Shacharis",
-        },
-        {
-          matcher: /sof zman krias shema/i,
-          label: "Sof Zman Krias Shema",
-        },
-        {
-          matcher: /halacha chabura/i,
-          label: "Halacha Chabura",
-        },
-        {
-          matcher: /^.*mincha.*$/i,
-          label: "Mincha",
-        },
-        {
-          matcher: /^.*shkia.*$/i,
-          label: "Shkia",
-        },
-        {
-          matcher: /shaar habitachon/i,
-          label: "Shaar Habitachon",
-        },
-        {
-          matcher: /^.*maariv.*$/i,
-          label: "Maariv",
-        },
-      ]
-    );
-
-    if (
-      extractedText.match(
-        /please join us for kiddush after davening/i
-      )
-    ) {
-      const shacharisIndex = entries.findIndex(
-        (entry) => entry.eventName === "Shacharis"
-      );
-
-      entries.splice(
-        shacharisIndex >= 0 ? shacharisIndex + 1 : 1,
-        0,
-        {
-          eventName: "Kiddush",
-          eventTime: "",
-          note:
-            "Please join us for Kiddush after davening.",
-          isHighlighted: true,
-        }
-      );
-    }
-
-    if (entries.length > 0) {
-      days.push({
-        dayTitle: "Shabbos",
-        dayDate: "",
-        hebrewDayTitle: "",
-        entries,
-      });
-    }
+  if (shabbos) {
+    days.push(shabbos);
   }
 
   return {
-    englishTitle: detectEnglishTitle(lines),
-    hebrewTitle: detectHebrewTitle(lines),
-    hebrewDate: detectHebrewDate(lines),
-    scheduleType: detectScheduleType(extractedText),
+    englishTitle:
+      detectEnglishTitle(parsingText),
+    hebrewTitle:
+      detectHebrewTitle(parsingText),
+    hebrewDate:
+      detectHebrewDate(parsingText),
+    scheduleType:
+      detectScheduleType(parsingText),
     days,
-    announcements: parseAnnouncements(lines),
-    generalNote: detectGeneralNote(lines),
+    announcements:
+      parseAnnouncements(parsingText),
+    generalNote:
+      parseGeneralNote(parsingText),
     extractedText,
   };
 }
