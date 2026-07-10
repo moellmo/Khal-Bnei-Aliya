@@ -90,7 +90,7 @@ export default function SolaCardPaymentForm({
       return;
     }
 
-    const response = await fetch("/api/sola/payment", {
+    const response = await fetch("/api/member/sola/payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -111,7 +111,11 @@ export default function SolaCardPaymentForm({
     }
 
     setSuccess(true);
-    setMessage(`Payment approved. Reference: ${result.reference || "recorded"}`);
+    setMessage(
+  result.receiptGenerated
+    ? "Payment approved. Your receipt is ready below and has been emailed."
+    : "Payment approved. Your receipt is still being prepared."
+);
     window.clearIfield?.("card-number");
     window.clearIfield?.("cvv");
     router.refresh();
@@ -170,7 +174,7 @@ export default function SolaCardPaymentForm({
           <div>
             <p className="text-sm font-bold text-slate-900">Card payment</p>
             <p className="mt-1 text-xs text-slate-500">
-              Securely charge this member&apos;s card for ${amount.toFixed(2)}.
+              Securely pay this charge online for ${amount.toFixed(2)}.
             </p>
           </div>
 
@@ -179,7 +183,7 @@ export default function SolaCardPaymentForm({
             onClick={() => setOpen(true)}
             className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
           >
-            Charge Card
+            Pay by Card
           </button>
         </div>
       ) : (
@@ -236,12 +240,20 @@ export default function SolaCardPaymentForm({
             <label className="space-y-1 text-xs font-bold text-slate-600">
               Expiration (MMYY)
               <input
-                name="expiration"
-                inputMode="numeric"
-                maxLength={4}
-                placeholder="0828"
-                required
-                className="w-full rounded-lg border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+  name="expiration"
+  inputMode="numeric"
+  maxLength={5}
+  placeholder="MM/YY"
+  required
+  onInput={(event) => {
+    const input = event.currentTarget;
+    const digits = input.value.replace(/\D/g, "").slice(0, 4);
+
+    input.value =
+      digits.length > 2
+        ? `${digits.slice(0, 2)}/${digits.slice(2)}`
+        : digits;
+  }}
               />
             </label>
 
@@ -303,7 +315,7 @@ export default function SolaCardPaymentForm({
             disabled={submitting || !scriptReady}
             className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "Processing…" : `Charge Card $${amount.toFixed(2)}`}
+            {submitting ? "Processing…" : `Pay $${amount.toFixed(2)}`}
           </button>
         </form>
       )}
