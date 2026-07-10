@@ -47,6 +47,9 @@ type Charge = {
   status: string | null;
   due_date: string | null;
   payment_method: string | null;
+  payment_provider: string | null;
+  paid_amount: number | null;
+  payment_note: string | null;
   paid_at: string | null;
 };
 
@@ -103,7 +106,7 @@ async function getCharges(memberId: string) {
   const { data, error } = await supabaseAdmin
     .from("member_charges")
     .select(
-      "id, charge_type, description, amount, status, due_date, payment_method, paid_at"
+      "id, charge_type, description, amount, status, due_date, payment_method, payment_provider, paid_amount, payment_note, paid_at"
     )
     .eq("member_id", memberId)
     .order("created_at", { ascending: false });
@@ -173,7 +176,10 @@ export default async function MemberDetailPage({
 
   const paidTotal = charges
     .filter((charge) => charge.status === "paid")
-    .reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+    .reduce(
+      (sum, charge) => sum + Number(charge.paid_amount || charge.amount || 0),
+      0
+    );
 
   const spouseNames = groupFamilyMembers(familyMembers, "Spouse");
   const childNames = groupFamilyMembers(familyMembers, "Child");
@@ -281,7 +287,7 @@ export default async function MemberDetailPage({
 
         {query?.chargePaid === "1" && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Charge was marked as paid.
+            Payment was recorded successfully.
           </div>
         )}
 
@@ -812,7 +818,7 @@ export default async function MemberDetailPage({
                     key={charge.id}
                     className="rounded-2xl bg-[#fbf8f2] p-4"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <p className="font-bold">{charge.charge_type}</p>
                         <p className="text-sm text-slate-500">
@@ -821,6 +827,7 @@ export default async function MemberDetailPage({
                         <p className="mt-1 text-xs text-slate-500">
                           Due: {formatDate(charge.due_date)}
                         </p>
+
                         {charge.paid_at && (
                           <p className="mt-1 text-xs text-green-700">
                             Paid: {formatDate(charge.paid_at)} ·{" "}
@@ -843,37 +850,120 @@ export default async function MemberDetailPage({
                         >
                           {charge.status || "unpaid"}
                         </p>
-
-                        <div className="mt-3 flex flex-wrap justify-end gap-2">
-                          {charge.status !== "paid" && (
-                            <form
-                              action={markChargePaid.bind(
-                                null,
-                                id,
-                                charge.id
-                              )}
-                            >
-                              <button
-                                type="submit"
-                                className="rounded-full bg-green-700 px-3 py-1.5 text-xs font-bold text-white"
-                              >
-                                Mark Paid
-                              </button>
-                            </form>
-                          )}
-
-                          <form
-                            action={deleteCharge.bind(null, id, charge.id)}
-                          >
-                            <button
-                              type="submit"
-                              className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
-                            >
-                              Delete
-                            </button>
-                          </form>
-                        </div>
                       </div>
+                    </div>
+
+                    {charge.status !== "paid" && (
+                      <form
+                        action={markChargePaid.bind(null, id, charge.id)}
+                        className="mt-4 rounded-xl border border-green-100 bg-white p-3"
+                      >
+                        <div
+                          className="grid gap-3"
+                          style={{ gridTemplateColumns: "1fr 1fr" }}
+                        >
+                          <label className="space-y-1 text-xs font-bold text-slate-600">
+                            Amount Paid
+                            <input
+                              name="paid_amount"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              defaultValue={charge.amount}
+                              className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
+                            />
+                          </label>
+
+                          <label className="space-y-1 text-xs font-bold text-slate-600">
+                            Method
+                            <select
+                              name="payment_method"
+                              defaultValue="Sola"
+                              className="w-full rounded-lg border border-[#d8cdb7] bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                            >
+                              <option value="Sola">Sola</option>
+                              <option value="Zelle">Zelle</option>
+                              <option value="Cash">Cash</option>
+                              <option value="Check">Check</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <label className="mt-3 block space-y-1 text-xs font-bold text-slate-600">
+                          Payment Note
+                          <input
+                            name="payment_note"
+                            className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
+                            placeholder="Optional note"
+                          />
+                        </label>
+
+                        <button
+                          type="submit"
+                          className="mt-3 rounded-full bg-green-700 px-4 py-2 text-xs font-bold text-white"
+                        >
+                          Record Payment
+                        </button>
+                        <button
+  type="submit"
+  style={{
+    marginTop: "14px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "9999px",
+    background: "#15803d",
+    color: "white",
+    fontWeight: 800,
+    fontSize: "13px",
+    padding: "9px 16px",
+    border: "none",
+    cursor: "pointer",
+  }}
+>
+  Record Payment
+</button>
+                      </form>
+                    )}
+
+                    {charge.status === "paid" && (
+                      <div className="mt-4 rounded-xl border border-green-100 bg-white p-3 text-left text-xs text-slate-600">
+                        <p>
+                          <span className="font-bold">Paid amount:</span>{" "}
+                          {formatMoney(charge.paid_amount || charge.amount)}
+                        </p>
+
+                        <p className="mt-1">
+                          <span className="font-bold">Method:</span>{" "}
+                          {charge.payment_method || "—"}
+                        </p>
+
+                        {charge.payment_provider && (
+                          <p className="mt-1">
+                            <span className="font-bold">Provider:</span>{" "}
+                            {charge.payment_provider}
+                          </p>
+                        )}
+
+                        {charge.payment_note && (
+                          <p className="mt-1">
+                            <span className="font-bold">Note:</span>{" "}
+                            {charge.payment_note}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <form action={deleteCharge.bind(null, id, charge.id)}>
+                        <button
+                          type="submit"
+                          className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
+                        >
+                          Delete
+                        </button>
+                      </form>
                     </div>
                   </div>
                 ))}
@@ -904,6 +994,7 @@ export default async function MemberDetailPage({
                   >
                     <div className="text-center text-sm">
                       <p className="border-b-2 border-black pb-2">Other</p>
+
                       {[360, 300, 250, 225, 200, 180, 150].map((amount) => (
                         <div
                           key={amount}
@@ -982,6 +1073,7 @@ export default async function MemberDetailPage({
                       <p dir="rtl" className="border-b-2 border-black pb-2">
                         מתנה
                       </p>
+
                       {[18, 36, 50, 72, 90, 100, 125].map((amount) => (
                         <div
                           key={amount}
