@@ -8,6 +8,7 @@ import {
   deleteFamilyMember,
   markChargePaid,
   toggleFamilyMemberOnCard,
+  updateMember,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -54,13 +55,14 @@ type PageProps = {
     id: string;
   }>;
   searchParams?: Promise<{
-  familyAdded?: string;
-  familyDeleted?: string;
-  familyUpdated?: string;
-  chargeAdded?: string;
-  chargePaid?: string;
-  chargeDeleted?: string;
-}>;
+    memberUpdated?: string;
+    familyAdded?: string;
+    familyDeleted?: string;
+    familyUpdated?: string;
+    chargeAdded?: string;
+    chargePaid?: string;
+    chargeDeleted?: string;
+  }>;
 };
 
 async function getMember(id: string) {
@@ -121,14 +123,6 @@ function formatMoney(amount: number | null | undefined) {
   }).format(Number(amount || 0));
 }
 
-function groupFamilyMembers(familyMembers: FamilyMember[], relationship: string) {
-  return familyMembers.filter(
-    (person) =>
-      person.include_on_mishaberach_card &&
-      (person.relationship || "").toLowerCase() === relationship.toLowerCase()
-  );
-}
-
 function displayTribe(value: string | null | undefined) {
   return value || "Yisroel";
 }
@@ -173,11 +167,6 @@ export default async function MemberDetailPage({
     .filter((charge) => charge.status === "paid")
     .reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
 
-  const spouseNames = groupFamilyMembers(familyMembers, "Spouse");
-  const childNames = groupFamilyMembers(familyMembers, "Child");
-  const otherNames = groupFamilyMembers(familyMembers, "Other");
-  const guestOfNames = groupFamilyMembers(familyMembers, "Guest Of");
-
   const addFamilyMemberAction = addFamilyMember.bind(null, id);
   const addChargeAction = addCharge.bind(null, id);
 
@@ -212,7 +201,10 @@ export default async function MemberDetailPage({
             </p>
           )}
 
-          <div className="mt-5 grid gap-3 text-sm text-slate-200 md:grid-cols-5">
+          <div
+            className="mt-5 grid gap-3 text-sm text-slate-200"
+            style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
+          >
             <div>
               <p className="text-slate-400">Kohen / Levi / Yisroel</p>
               <p className="font-bold">{displayTribe(member.tribe_status)}</p>
@@ -250,6 +242,24 @@ export default async function MemberDetailPage({
           </div>
         )}
 
+        {query?.familyUpdated === "1" && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Mishaberach/card name was updated.
+          </div>
+        )}
+
+        {query?.familyDeleted === "1" && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
+            Mishaberach/card name was deleted.
+          </div>
+        )}
+
+        {query?.memberUpdated === "1" && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Member details were updated successfully.
+          </div>
+        )}
+
         {query?.chargeAdded === "1" && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Charge was added successfully.
@@ -262,30 +272,18 @@ export default async function MemberDetailPage({
           </div>
         )}
 
-        {query?.familyUpdated === "1" && (
-  <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-    Mishaberach/card name was updated.
-  </div>
-)}
-
-{query?.familyDeleted === "1" && (
-  <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
-    Mishaberach/card name was deleted.
-  </div>
-)}
-
         {query?.chargeDeleted === "1" && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
             Charge was deleted.
           </div>
         )}
 
-       <div
-  className="mt-8 grid gap-8"
-  style={{
-    gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
-  }}
->
+        <div
+          className="mt-8 grid gap-8"
+          style={{
+            gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
+          }}
+        >
           <div className="space-y-8">
             <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
               <h2 className="text-2xl font-bold">Member Details</h2>
@@ -297,7 +295,9 @@ export default async function MemberDetailPage({
                 </div>
 
                 <div>
-                  <p className="font-semibold text-slate-500">Main Hebrew Name</p>
+                  <p className="font-semibold text-slate-500">
+                    Main Hebrew Name
+                  </p>
                   <p dir="rtl" className="text-right text-lg">
                     {member.hebrew_name || "—"}
                   </p>
@@ -316,7 +316,9 @@ export default async function MemberDetailPage({
                 </div>
 
                 <div>
-                  <p className="font-semibold text-slate-500">Membership Type</p>
+                  <p className="font-semibold text-slate-500">
+                    Membership Type
+                  </p>
                   <p>{member.membership_type || "—"}</p>
                 </div>
 
@@ -328,7 +330,9 @@ export default async function MemberDetailPage({
                 </div>
 
                 <div>
-                  <p className="font-semibold text-slate-500">Seat / Location</p>
+                  <p className="font-semibold text-slate-500">
+                    Seat / Location
+                  </p>
                   <p>{member.seating_location || "—"}</p>
                 </div>
 
@@ -337,6 +341,170 @@ export default async function MemberDetailPage({
                   <p>{member.notes || "—"}</p>
                 </div>
               </div>
+
+              <form
+                action={updateMember.bind(null, id)}
+                className="mt-8 space-y-5 border-t border-[#e3d9c7] pt-6"
+              >
+                <h3 className="text-xl font-bold">Edit Member Details</h3>
+
+                <div
+                  className="grid gap-4"
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
+                >
+                  <label className="space-y-2">
+                    <span className="font-semibold">First Name</span>
+                    <input
+                      name="first_name"
+                      required
+                      defaultValue={member.first_name}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="font-semibold">Last / Family Name</span>
+                    <input
+                      name="last_name"
+                      required
+                      defaultValue={member.last_name}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="font-semibold">Hebrew Name</span>
+                  <input
+                    name="hebrew_name"
+                    dir="rtl"
+                    defaultValue={member.hebrew_name || ""}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
+                  />
+                </label>
+
+                <div
+                  className="grid gap-4"
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
+                >
+                  <label className="space-y-2">
+                    <span className="font-semibold">
+                      Kohen / Levi / Yisroel
+                    </span>
+                    <select
+                      name="tribe_status"
+                      defaultValue={member.tribe_status || "Yisroel"}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                    >
+                      <option value="Yisroel">Yisroel</option>
+                      <option value="Kohen">Kohen</option>
+                      <option value="Levi">Levi</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="font-semibold">Status</span>
+                    <select
+                      name="status"
+                      defaultValue={member.status || "active"}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                    >
+                      <option value="active">Active</option>
+                      <option value="pending">Pending</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div
+                  className="grid gap-4"
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
+                >
+                  <label className="space-y-2">
+                    <span className="font-semibold">Email</span>
+                    <input
+                      name="email"
+                      type="email"
+                      defaultValue={member.email || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="font-semibold">Phone</span>
+                    <input
+                      name="phone"
+                      defaultValue={member.phone || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="font-semibold">Address</span>
+                  <input
+                    name="address"
+                    defaultValue={member.address || ""}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+
+                <div
+                  className="grid gap-4"
+                  style={{ gridTemplateColumns: "1fr 1fr" }}
+                >
+                  <label className="space-y-2">
+                    <span className="font-semibold">Membership Type</span>
+                    <select
+                      name="membership_type"
+                      defaultValue={member.membership_type || "Family"}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                    >
+                      <option value="Family">Family</option>
+                      <option value="Single">Single</option>
+                      <option value="Associate">Associate</option>
+                      <option value="Custom">Custom</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="font-semibold">Custom Dues Amount</span>
+                    <input
+                      name="custom_dues_amount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      defaultValue={member.custom_dues_amount || 0}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    />
+                  </label>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="font-semibold">Seat / Location</span>
+                  <input
+                    name="seating_location"
+                    defaultValue={member.seating_location || ""}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="font-semibold">Notes</span>
+                  <textarea
+                    name="notes"
+                    defaultValue={member.notes || ""}
+                    className="min-h-24 w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white"
+                >
+                  Save Member Changes
+                </button>
+              </form>
             </div>
 
             <form
@@ -352,9 +520,9 @@ export default async function MemberDetailPage({
               </div>
 
               <div
-  className="grid gap-4"
-  style={{ gridTemplateColumns: "1fr 1fr" }}
->
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
                 <label className="space-y-2">
                   <span className="font-semibold">English First Name</span>
                   <input
@@ -386,7 +554,10 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
                 <label className="block space-y-2">
                   <span className="font-semibold">Relationship / Section</span>
                   <select
@@ -469,7 +640,10 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
                 <label className="space-y-2">
                   <span className="font-semibold">Amount</span>
                   <input
@@ -530,56 +704,64 @@ export default async function MemberDetailPage({
                         )}
                       </div>
 
-                     <div className="flex flex-col items-end gap-2">
-  <span className="rounded-full bg-white px-3 py-1 text-xs font-bold">
-    {person.include_on_mishaberach_card ? "On card" : "Hidden"}
-  </span>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold">
+                          {person.include_on_mishaberach_card
+                            ? "On card"
+                            : "Hidden"}
+                        </span>
 
-  <div className="flex flex-wrap justify-end gap-2">
-    {person.include_on_mishaberach_card ? (
-      <form
-        action={toggleFamilyMemberOnCard.bind(
-          null,
-          id,
-          person.id,
-          false
-        )}
-      >
-        <button
-          type="submit"
-          className="rounded-full bg-slate-700 px-3 py-1.5 text-xs font-bold text-white"
-        >
-          Hide
-        </button>
-      </form>
-    ) : (
-      <form
-        action={toggleFamilyMemberOnCard.bind(
-          null,
-          id,
-          person.id,
-          true
-        )}
-      >
-        <button
-          type="submit"
-          className="rounded-full bg-green-700 px-3 py-1.5 text-xs font-bold text-white"
-        >
-          Show
-        </button>
-      </form>
-    )}
+                        <div className="flex flex-wrap justify-end gap-2">
+                          {person.include_on_mishaberach_card ? (
+                            <form
+                              action={toggleFamilyMemberOnCard.bind(
+                                null,
+                                id,
+                                person.id,
+                                false
+                              )}
+                            >
+                              <button
+                                type="submit"
+                                className="rounded-full bg-slate-700 px-3 py-1.5 text-xs font-bold text-white"
+                              >
+                                Hide
+                              </button>
+                            </form>
+                          ) : (
+                            <form
+                              action={toggleFamilyMemberOnCard.bind(
+                                null,
+                                id,
+                                person.id,
+                                true
+                              )}
+                            >
+                              <button
+                                type="submit"
+                                className="rounded-full bg-green-700 px-3 py-1.5 text-xs font-bold text-white"
+                              >
+                                Show
+                              </button>
+                            </form>
+                          )}
 
-    <form action={deleteFamilyMember.bind(null, id, person.id)}>
-      <button
-        type="submit"
-        className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
-      >
-        Delete
-      </button>
-    </form>
-  </div>
-</div>
+                          <form
+                            action={deleteFamilyMember.bind(
+                              null,
+                              id,
+                              person.id
+                            )}
+                          >
+                            <button
+                              type="submit"
+                              className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
+                            >
+                              Delete
+                            </button>
+                          </form>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
