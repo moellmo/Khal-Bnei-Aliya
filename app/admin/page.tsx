@@ -1,52 +1,97 @@
 import Link from "next/link";
 
 const adminLinks = [
-  { label: "Davening Times", href: "/admin/davening-times" },
-  { label: "Members", href: "/admin/members" },
-  { label: "Billing", href: "/admin/billing" },
-  { label: "Mishaberach Cards", href: "/admin/mishaberach-cards" },
-  { label: "Seating", href: "/admin/seating" },
+  {
+    label: "Davening Times",
+    description: "Update weekday, Shabbos, and weekly PDF schedules.",
+    href: "/admin/davening-times",
+  },
+  {
+    label: "Members",
+    description: "Manage member records, dues, payments, and portal access.",
+    href: "/admin/members",
+  },
+  {
+    label: "Billing",
+    description: "Generate dues and review member billing.",
+    href: "/admin/billing",
+  },
+  {
+    label: "Mishaberach Cards",
+    description: "View and print member Mishaberach cards.",
+    href: "/admin/mishaberach-cards",
+  },
 ];
 
 export default function AdminPage() {
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
-      <section className="mx-auto max-w-6xl px-6 py-8">
-        <Link href="/" className="text-sm font-semibold text-[#8b6b2e]">
-          ← Back Home
-        </Link>
+      <section className="mx-auto max-w-6xl px-5 py-8 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="text-sm font-semibold text-[#8b6b2e] hover:underline"
+          >
+            ← Back to Main Site
+          </Link>
 
-        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-8 text-white">
+          <Link
+            href="/member/dashboard"
+            className="text-sm font-semibold text-[#8b6b2e] hover:underline"
+          >
+            Member Dashboard
+          </Link>
+        </div>
+
+        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-7 text-white shadow-sm sm:p-8">
           <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#d9bf7a]">
             Admin Portal
           </p>
-          <h1 className="mt-3 text-4xl font-bold">Khal Bnei Aliya Admin</h1>
+
+          <h1 className="mt-3 text-3xl font-bold sm:text-4xl">
+            Khal Bnei Aliya Admin
+          </h1>
+
           <p className="mt-4 max-w-2xl text-slate-200">
-            Manage davening times, members, dues, pledges, seating, and payments.
+            Manage davening times, members, dues, pledges, Mishaberach cards,
+            and payments.
           </p>
         </div>
 
         <Link
-  href="/admin/accounting"
-  className="rounded-2xl border border-[#e3d9c7] bg-white p-5 shadow-sm transition hover:-translate-y-0.5"
->
-  <p className="text-lg font-bold text-slate-900">
-    Accountant Dashboard
-  </p>
+          href="/admin/accounting"
+          className="mt-6 block rounded-[1.5rem] border border-[#e3d9c7] bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xl font-bold text-slate-900">
+                Accountant Dashboard
+              </p>
 
-  <p className="mt-2 text-sm text-slate-500">
-    Review monthly billing, paid members, unpaid balances, and auto-pay status.
-  </p>
-</Link>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Review monthly billing, paid members, unpaid balances, and
+                automatic-payment status.
+              </p>
+            </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <span className="self-start rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white sm:self-center">
+              Open Accounting
+            </span>
+          </div>
+        </Link>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {adminLinks.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-2xl border border-[#e3d9c7] bg-white p-6 font-bold shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+              className="min-w-0 rounded-[1.5rem] border border-[#e3d9c7] bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-md"
             >
-              {item.label}
+              <p className="text-lg font-bold">{item.label}</p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                {item.description}
+              </p>
             </Link>
           ))}
         </div>

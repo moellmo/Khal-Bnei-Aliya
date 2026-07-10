@@ -86,10 +86,10 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[0.85fr_1.15fr]">
+        <div className="mt-8 grid min-w-0 gap-8 xl:grid-cols-[minmax(320px,0.75fr)_minmax(0,2.25fr)]">
           <form
             action={createMember}
-            className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            className="min-w-0 space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
           >
             <div>
               <h2 className="text-2xl font-bold">Add Member</h2>
@@ -241,7 +241,10 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
             </button>
           </form>
 
-          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+          <div className="mt-6 overflow-x-auto">
+
+
+          <div className="min-w-0 overflow-hidden rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-bold">Member List</h2>
@@ -250,6 +253,8 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                   currently in the system.
                 </p>
               </div>
+            </div>
+
             </div>
 
             <div className="mt-6 overflow-x-auto">
