@@ -260,6 +260,13 @@ export default async function MemberDashboardPage() {
         Main Site
       </Link>
 
+      <Link
+  href="/member/mishaberach"
+  className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
+>
+  Manage Mishaberach Card
+</Link>
+
       {isAdmin ? (
         <>
           <Link
@@ -277,6 +284,7 @@ export default async function MemberDashboardPage() {
           </Link>
         </>
       ) : null}
+      
 
       <form action={signOut}>
         <button
