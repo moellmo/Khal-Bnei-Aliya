@@ -2,10 +2,11 @@ import Link from "next/link";
 
 const adminLinks = [
   {
-    label: "Davening Times",
-    description: "Update weekday, Shabbos, and weekly PDF schedules.",
-    href: "/admin/davening-times",
-  },
+  label: "Davening Times",
+  description:
+    "Manage weekday, Shabbos, Yom Tov, announcements, and schedule PDFs.",
+  href: "/admin/davening-times",
+},
   {
     label: "Members",
     description: "Manage member records, dues, payments, and portal access.",
