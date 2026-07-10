@@ -5,12 +5,74 @@ const SOLA_RECURRING_API_URL =
 const SOLA_RECURRING_API_VERSION =
   process.env.SOLA_RECURRING_API_VERSION || "2.1";
 
-type SolaRecurringResponse = {
+export type SolaRecurringResponse = {
   Result?: string;
   Error?: string;
   RefNum?: string;
+  CustomerId?: string | number;
+  PaymentMethodId?: string;
+  ScheduleId?: string;
   [key: string]: unknown;
 };
+
+function parseNestedJson(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (
+    !trimmed ||
+    (!trimmed.startsWith("{") && !trimmed.startsWith("["))
+  ) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeResponse(
+  value: Record<string, unknown>
+): SolaRecurringResponse {
+  const normalized: Record<string, unknown> = {};
+
+  for (const [key, item] of Object.entries(value)) {
+    const parsed = parseNestedJson(item);
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    ) {
+      normalized[key] = normalizeResponse(
+        parsed as Record<string, unknown>
+      );
+    } else if (Array.isArray(parsed)) {
+      normalized[key] = parsed.map((entry) => {
+        if (
+          entry &&
+          typeof entry === "object" &&
+          !Array.isArray(entry)
+        ) {
+          return normalizeResponse(
+            entry as Record<string, unknown>
+          );
+        }
+
+        return parseNestedJson(entry);
+      });
+    } else {
+      normalized[key] = parsed;
+    }
+  }
+
+  return normalized as SolaRecurringResponse;
+}
 
 export async function callSolaRecurringApi(
   endpoint: string,
@@ -29,7 +91,8 @@ export async function callSolaRecurringApi(
       headers: {
         Authorization: apiKey,
         "Content-Type": "application/json",
-        "X-Recurring-Api-Version": SOLA_RECURRING_API_VERSION,
+        "X-Recurring-Api-Version":
+          SOLA_RECURRING_API_VERSION,
       },
       body: JSON.stringify({
         SoftwareName:
@@ -45,17 +108,19 @@ export async function callSolaRecurringApi(
 
   const responseText = await response.text();
 
-  let data: SolaRecurringResponse;
+  let rawData: Record<string, unknown>;
 
   try {
-    data = responseText
-      ? (JSON.parse(responseText) as SolaRecurringResponse)
+    rawData = responseText
+      ? (JSON.parse(responseText) as Record<string, unknown>)
       : {};
   } catch {
     throw new Error(
       `Sola returned an invalid response. HTTP ${response.status}.`
     );
   }
+
+  const data = normalizeResponse(rawData);
 
   const result = String(data.Result || "").toUpperCase();
 
@@ -73,4 +138,23 @@ export async function callSolaRecurringApi(
   }
 
   return data;
+}
+
+export function requireSolaString(
+  response: SolaRecurringResponse,
+  key: string
+) {
+  const value = response[key];
+
+  if (
+    value === null ||
+    value === undefined ||
+    String(value).trim() === ""
+  ) {
+    throw new Error(
+      `Sola did not return the required ${key}.`
+    );
+  }
+
+  return String(value);
 }
