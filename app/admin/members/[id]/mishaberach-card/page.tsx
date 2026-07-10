@@ -3,10 +3,11 @@ import type { CSSProperties } from "react";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import PrintButton from "./PrintButton";
-const logoUrl =
-  "https://lh3.googleusercontent.com/sitesv/AA5AbUBOBiJ3ZyHEQsgQeS5AnlHZG6UC7SiEm3dlp3kYOvxEZ3N7_OGZCzaoVfDUtrPonoq7ZPnpK_8vDrkXESrXi5HPm_reVBRY_l0PYxLMrYoa-uFOb3fsypEma8Eo8ubrpN3MFfSSMBs1sifxdtfHZlnin6ql7pTbsF35QCxICEtSUYKxxUqPYGzhqoN2hZb-27RwliyE1vTUbDSQ1b0dGM61Yg6mZUcFp-utkHUH=w1280";
 
 export const dynamic = "force-dynamic";
+
+const logoUrl =
+  "https://lh3.googleusercontent.com/sitesv/AA5AbUBOBiJ3ZyHEQsgQeS5AnlHZG6UC7SiEm3dlp3kYOvxEZ3N7_OGZCzaoVfDUtrPonoq7ZPnpK_8vDrkXESrXi5HPm_reVBRY_l0PYxLMrYoa-uFOb3fsypEma8Eo8ubrpN3MFfSSMBs1sifxdtfHZlnin6ql7pTbsF35QCxICEtSUYKxxUqPYGzhqoN2hZb-27RwliyE1vTUbDSQ1b0dGM61Yg6mZUcFp-utkHUH=w1280";
 
 type Member = {
   id: string;
@@ -79,13 +80,51 @@ function NameLines({ people }: { people: FamilyMember[] }) {
   if (people.length === 0) return null;
 
   return (
-    <div className="mt-1 space-y-1">
+    <div style={{ marginTop: "4px" }}>
       {people.map((person) => (
-        <p key={person.id} dir="rtl" className="text-[19px] leading-tight">
+        <p
+          key={person.id}
+          dir="rtl"
+          style={{
+            fontSize: "13px",
+            lineHeight: "1.15",
+            margin: "3px 0 0",
+          }}
+        >
           {person.hebrew_name ||
             `${person.first_name} ${person.last_name || ""}`}
         </p>
       ))}
+    </div>
+  );
+}
+
+function Logo() {
+  return (
+    <div
+      style={{
+        width: "54px",
+        height: "54px",
+        margin: "0 auto",
+        borderRadius: "9999px",
+        overflow: "hidden",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#fff",
+        border: "1px solid #d4d4d4",
+      }}
+    >
+      <img
+        src={logoUrl}
+        alt="Khal Bnei Aliya logo"
+        style={{
+          width: "54px",
+          height: "54px",
+          objectFit: "cover",
+          display: "block",
+        }}
+      />
     </div>
   );
 }
@@ -111,16 +150,84 @@ export default async function PrintableMishaberachCardPage({
   const leftAmounts = [360, 300, 250, 225, 200, 180, 150];
   const rightAmounts = [18, 36, 50, 72, 90, 100, 125];
 
-  const cardGridStyle: CSSProperties = {
+  const pageStyle: CSSProperties = {
+    minHeight: "100vh",
+    background: "#f7f3ea",
+    padding: "32px 16px",
+    color: "#000",
+  };
+
+  const topBarStyle: CSSProperties = {
+    maxWidth: "900px",
+    margin: "0 auto 48px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+  };
+
+  const cardWrapStyle: CSSProperties = {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+  };
+
+  // postcard size: 6in x 4in landscape
+  const cardStyle: CSSProperties = {
+    width: "6in",
+    height: "4in",
+    background: "#fff",
+    padding: "20px 18px",
+    boxShadow: "0 12px 24px rgba(0,0,0,0.10)",
+    boxSizing: "border-box",
+  };
+
+  const gridStyle: CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "130px 1fr 130px",
-    columnGap: "34px",
+    gridTemplateColumns: "92px 1fr 92px",
+    columnGap: "16px",
     alignItems: "stretch",
+    height: "100%",
+  };
+
+  const sideColumnStyle: CSSProperties = {
+    textAlign: "center",
+    fontSize: "10px",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+  };
+
+  const sideHeaderStyle: CSSProperties = {
+    borderBottom: "2px solid black",
+    paddingBottom: "4px",
+    margin: "0",
+    fontSize: "10px",
+    fontWeight: 600,
+  };
+
+  const amountRowStyle: CSSProperties = {
+    height: "28px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderBottom: "2px solid black",
+    fontSize: "10px",
+  };
+
+  const centerStyle: CSSProperties = {
+    textAlign: "center",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    minHeight: "100%",
+    overflow: "hidden",
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f3ea] px-4 py-8 text-black print:bg-white print:p-0">
-      <div className="mx-auto mb-8 flex max-w-5xl flex-wrap items-center justify-between gap-3 print:hidden">
+    <main style={pageStyle}>
+      <div style={topBarStyle} className="print:hidden">
         <Link
           href={`/admin/members/${member.id}`}
           className="rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-900 shadow-sm"
@@ -131,60 +238,74 @@ export default async function PrintableMishaberachCardPage({
         <PrintButton />
       </div>
 
-      <section className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center print:min-h-0 print:max-w-none">
-        <div className="w-[1040px] bg-white p-8 shadow-xl print:w-[10in] print:p-6 print:shadow-none">
-          <div style={cardGridStyle}>
-            <div className="text-center text-[18px]">
-              <p className="border-b-2 border-black pb-2">Other</p>
+      <section style={cardWrapStyle}>
+        <div style={cardStyle}>
+          <div style={gridStyle}>
+            <div style={sideColumnStyle}>
+              <p style={sideHeaderStyle}>Other</p>
 
               {leftAmounts.map((amount) => (
-                <div
-                  key={amount}
-                  className="flex h-[54px] items-center justify-center border-b-2 border-black"
-                >
+                <div key={amount} style={amountRowStyle}>
                   {amount}
                 </div>
               ))}
             </div>
 
-            <div className="min-h-[400px] text-center">
-             <div
-  style={{
-    width: "62px",
-    height: "62px",
-    borderRadius: "9999px",
-    overflow: "hidden",
-    margin: "0 auto",
-    background: "white",
-  }}
->
-  <img
-    src={logoUrl}
-    alt="Khal Bnei Aliya logo"
-    style={{
-      width: "62px",
-      height: "62px",
-      objectFit: "cover",
-      objectPosition: "center",
-      display: "block",
-      borderRadius: "9999px",
-    }}
-  />
-</div>
+            <div style={centerStyle}>
+              <Logo />
 
-              <h1 className="mt-4 text-[33px] font-black leading-tight">
+              <h1
+                style={{
+                  marginTop: "14px",
+                  marginBottom: "0",
+                  fontSize: "22px",
+                  fontWeight: 900,
+                  lineHeight: "1.1",
+                }}
+              >
                 {member.first_name} {member.last_name}
               </h1>
 
               {member.hebrew_name && (
-                <p dir="rtl" className="mt-1 text-[22px] leading-tight">
+                <p
+                  dir="rtl"
+                  style={{
+                    marginTop: "4px",
+                    marginBottom: "0",
+                    fontSize: "15px",
+                    lineHeight: "1.15",
+                  }}
+                >
                   {member.hebrew_name}
                 </p>
               )}
 
+              {member.tribe_status && (
+                <p
+                  style={{
+                    marginTop: "4px",
+                    marginBottom: "0",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    color: "#475569",
+                  }}
+                >
+                  {member.tribe_status}
+                </p>
+              )}
+
               {spouseNames.length > 0 && (
-                <div className="mt-2">
-                  <h2 className="text-[30px] font-black leading-tight">
+                <div style={{ marginTop: "8px" }}>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 900,
+                      lineHeight: "1.1",
+                      margin: 0,
+                    }}
+                  >
                     Spouse
                   </h2>
                   <NameLines people={spouseNames} />
@@ -192,8 +313,15 @@ export default async function PrintableMishaberachCardPage({
               )}
 
               {childNames.length > 0 && (
-                <div className="mt-3">
-                  <h2 className="text-[30px] font-black leading-tight">
+                <div style={{ marginTop: "8px" }}>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 900,
+                      lineHeight: "1.1",
+                      margin: 0,
+                    }}
+                  >
                     Children
                   </h2>
                   <NameLines people={childNames} />
@@ -201,8 +329,15 @@ export default async function PrintableMishaberachCardPage({
               )}
 
               {otherNames.length > 0 && (
-                <div className="mt-9">
-                  <h2 className="text-[30px] font-black leading-tight">
+                <div style={{ marginTop: "10px" }}>
+                  <h2
+                    style={{
+                      fontSize: "18px",
+                      fontWeight: 900,
+                      lineHeight: "1.1",
+                      margin: 0,
+                    }}
+                  >
                     Others
                   </h2>
                   <NameLines people={otherNames} />
@@ -210,8 +345,15 @@ export default async function PrintableMishaberachCardPage({
               )}
 
               {guestOfNames.length > 0 && (
-                <div className="mt-6">
-                  <h2 className="text-[26px] font-black leading-tight">
+                <div style={{ marginTop: "10px" }}>
+                  <h2
+                    style={{
+                      fontSize: "16px",
+                      fontWeight: 900,
+                      lineHeight: "1.1",
+                      margin: 0,
+                    }}
+                  >
                     Guest Of
                   </h2>
                   <NameLines people={guestOfNames} />
@@ -219,16 +361,13 @@ export default async function PrintableMishaberachCardPage({
               )}
             </div>
 
-            <div className="text-center text-[18px]">
-              <p dir="rtl" className="border-b-2 border-black pb-2">
+            <div style={sideColumnStyle}>
+              <p dir="rtl" style={sideHeaderStyle}>
                 מתנה
               </p>
 
               {rightAmounts.map((amount) => (
-                <div
-                  key={amount}
-                  className="flex h-[54px] items-center justify-center border-b-2 border-black"
-                >
+                <div key={amount} style={amountRowStyle}>
                   {amount}
                 </div>
               ))}

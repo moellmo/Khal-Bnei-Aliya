@@ -127,6 +127,14 @@ function displayTribe(value: string | null | undefined) {
   return value || "Yisroel";
 }
 
+function groupFamilyMembers(familyMembers: FamilyMember[], relationship: string) {
+  return familyMembers.filter(
+    (person) =>
+      person.include_on_mishaberach_card &&
+      (person.relationship || "").toLowerCase() === relationship.toLowerCase()
+  );
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "—";
 
@@ -166,6 +174,11 @@ export default async function MemberDetailPage({
   const paidTotal = charges
     .filter((charge) => charge.status === "paid")
     .reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+
+  const spouseNames = groupFamilyMembers(familyMembers, "Spouse");
+  const childNames = groupFamilyMembers(familyMembers, "Child");
+  const otherNames = groupFamilyMembers(familyMembers, "Other");
+  const guestOfNames = groupFamilyMembers(familyMembers, "Guest Of");
 
   const addFamilyMemberAction = addFamilyMember.bind(null, id);
   const addChargeAction = addCharge.bind(null, id);
@@ -236,6 +249,12 @@ export default async function MemberDetailPage({
           </div>
         </div>
 
+        {query?.memberUpdated === "1" && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Member details were updated successfully.
+          </div>
+        )}
+
         {query?.familyAdded === "1" && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Mishaberach/card name was added successfully.
@@ -251,12 +270,6 @@ export default async function MemberDetailPage({
         {query?.familyDeleted === "1" && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
             Mishaberach/card name was deleted.
-          </div>
-        )}
-
-        {query?.memberUpdated === "1" && (
-          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Member details were updated successfully.
           </div>
         )}
 
@@ -878,6 +891,109 @@ export default async function MemberDetailPage({
               <p className="mt-1 text-sm text-slate-500">
                 Preview based on your Canva sample.
               </p>
+
+              <div className="mt-6 overflow-x-auto">
+                <div className="mx-auto w-[640px] bg-white p-6 shadow-sm">
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "90px 1fr 90px",
+                      columnGap: "22px",
+                      alignItems: "stretch",
+                    }}
+                  >
+                    <div className="text-center text-sm">
+                      <p className="border-b-2 border-black pb-2">Other</p>
+                      {[360, 300, 250, 225, 200, 180, 150].map((amount) => (
+                        <div
+                          key={amount}
+                          className="flex h-[38px] items-center justify-center border-b-2 border-black"
+                        >
+                          {amount}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="min-h-[280px] text-center">
+                      <div className="mx-auto flex h-[48px] w-[48px] items-center justify-center rounded-full bg-black text-[8px] font-black leading-tight text-white">
+                        KBA
+                      </div>
+
+                      <h3 className="mt-4 text-2xl font-black">
+                        {member.first_name} {member.last_name}
+                      </h3>
+
+                      {member.hebrew_name && (
+                        <p dir="rtl" className="mt-1 text-lg">
+                          {member.hebrew_name}
+                        </p>
+                      )}
+
+                      {spouseNames.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-xl font-black">Spouse</h4>
+                          {spouseNames.map((person) => (
+                            <p key={person.id} dir="rtl" className="text-base">
+                              {person.hebrew_name ||
+                                `${person.first_name} ${person.last_name || ""}`}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+
+                      {childNames.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-xl font-black">Children</h4>
+                          {childNames.map((person) => (
+                            <p key={person.id} dir="rtl" className="text-base">
+                              {person.hebrew_name ||
+                                `${person.first_name} ${person.last_name || ""}`}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+
+                      {otherNames.length > 0 && (
+                        <div className="mt-6">
+                          <h4 className="text-xl font-black">Others</h4>
+                          {otherNames.map((person) => (
+                            <p key={person.id} dir="rtl" className="text-base">
+                              {person.hebrew_name ||
+                                `${person.first_name} ${person.last_name || ""}`}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+
+                      {guestOfNames.length > 0 && (
+                        <div className="mt-6">
+                          <h4 className="text-xl font-black">Guest Of</h4>
+                          {guestOfNames.map((person) => (
+                            <p key={person.id} dir="rtl" className="text-base">
+                              {person.hebrew_name ||
+                                `${person.first_name} ${person.last_name || ""}`}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-center text-sm">
+                      <p dir="rtl" className="border-b-2 border-black pb-2">
+                        מתנה
+                      </p>
+                      {[18, 36, 50, 72, 90, 100, 125].map((amount) => (
+                        <div
+                          key={amount}
+                          className="flex h-[38px] items-center justify-center border-b-2 border-black"
+                        >
+                          {amount}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               <div className="mt-5">
                 <Link
