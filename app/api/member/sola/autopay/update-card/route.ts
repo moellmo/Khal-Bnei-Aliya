@@ -53,7 +53,6 @@ export async function POST(request: NextRequest) {
             id,
             first_name,
             last_name,
-            email,
             status,
             portal_status,
             sola_customer_id,
@@ -80,7 +79,10 @@ export async function POST(request: NextRequest) {
       member.status !== "active"
     ) {
       return NextResponse.json(
-        { error: "This account cannot update automatic payments." },
+        {
+          error:
+            "This account cannot update automatic payments.",
+        },
         { status: 403 }
       );
     }
@@ -117,7 +119,9 @@ export async function POST(request: NextRequest) {
       body.cardholderName || ""
     ).trim();
 
-    const billingZip = String(body.billingZip || "").trim();
+    const billingZip = String(
+      body.billingZip || ""
+    ).trim();
 
     if (
       !cardToken ||
@@ -131,10 +135,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /*
-     * Create a new reusable Sola payment method from
-     * the iFields single-use card token.
-     */
     const paymentMethodResponse =
       await callSolaRecurringApi(
         "CreatePaymentMethod",
@@ -155,10 +155,6 @@ export async function POST(request: NextRequest) {
       "PaymentMethodId"
     );
 
-    /*
-     * Retrieve the current schedule because UpdateSchedule
-     * requires its latest revision.
-     */
     const scheduleResponse =
       await callSolaRecurringApi("GetSchedule", {
         ScheduleId: member.sola_recurring_id,
@@ -174,23 +170,17 @@ export async function POST(request: NextRequest) {
       "Revision"
     );
 
-    /*
-     * Point the existing recurring schedule to the new
-     * saved payment method.
-     */
     await callSolaRecurringApi("UpdateSchedule", {
       ScheduleId: scheduleId,
       Revision: revision,
       PaymentMethodId: newPaymentMethodId,
     });
 
-    const now = new Date().toISOString();
-
     const { error: updateError } = await supabaseAdmin
       .from("members")
       .update({
         sola_payment_method_id: newPaymentMethodId,
-        updated_at: now,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", member.id);
 
@@ -203,7 +193,7 @@ export async function POST(request: NextRequest) {
       });
 
       throw new Error(
-        "The card was updated in Sola, but the member record could not be updated. Please contact the administrator."
+        "The card was updated in Sola, but the member record could not be updated."
       );
     }
 
@@ -212,7 +202,10 @@ export async function POST(request: NextRequest) {
       paymentMethodId: newPaymentMethodId,
     });
   } catch (error) {
-    console.error("MEMBER_AUTOPAY_UPDATE_CARD_ERROR", error);
+    console.error(
+      "MEMBER_AUTOPAY_UPDATE_CARD_ERROR",
+      error
+    );
 
     return NextResponse.json(
       {

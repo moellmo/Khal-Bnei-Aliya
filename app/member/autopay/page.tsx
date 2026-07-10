@@ -269,6 +269,14 @@ export default async function MemberAutopayPage() {
                 active={Boolean(member.autopay_active)}
                 amount={Number(member.recurring_amount || 0)}
               />
+              <div className="mt-5">
+  <Link
+    href="/member/autopay/update-card"
+    className="inline-flex rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold text-slate-900 transition hover:bg-[#f2eadc]"
+  >
+    Replace Saved Card
+  </Link>
+</div>
             </section>
 
             <section className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
