@@ -26,6 +26,17 @@ const adminLinks = [
     description: "View and print member Mishaberach cards.",
     href: "/admin/mishaberach-cards",
   },
+  {
+  label: "Recurring Schedules",
+  description:
+    "Link existing Sola schedules to members and review automatic-payment status.",
+  href: "/admin/recurring-schedules",
+},
+{
+  label: "Admin Users",
+  description: "Manage who can access the admin and accounting dashboards.",
+  href: "/admin/admin-users",
+},
 ];
 
 export default function AdminPage() {
