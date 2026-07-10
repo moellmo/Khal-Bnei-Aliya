@@ -1,6 +1,8 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import SolaCardPaymentForm from "./SolaCardPaymentForm";
 import {
   addCharge,
   addFamilyMember,
@@ -58,6 +60,7 @@ type PageProps = {
     id: string;
   }>;
   searchParams?: Promise<{
+    tab?: string;
     memberUpdated?: string;
     familyAdded?: string;
     familyDeleted?: string;
@@ -154,6 +157,171 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
+function TabLink({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={
+        active
+          ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+          : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+      }
+    >
+      {children}
+    </Link>
+  );
+}
+
+function ChargeCard({ charge, member }: { charge: Charge; member: Member }) {
+  return (
+    <div className="rounded-2xl bg-[#fbf8f2] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-bold">{charge.charge_type}</p>
+          <p className="text-sm text-slate-500">{charge.description || "—"}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Due: {formatDate(charge.due_date)}
+          </p>
+
+          {charge.paid_at && (
+            <p className="mt-1 text-xs text-green-700">
+              Paid: {formatDate(charge.paid_at)} · {charge.payment_method || "manual"}
+            </p>
+          )}
+        </div>
+
+        <div className="text-right">
+          <p className="font-black">{formatMoney(charge.amount)}</p>
+          <p
+            className={
+              charge.status === "paid"
+                ? "text-xs font-bold capitalize text-green-700"
+                : "text-xs font-bold capitalize text-red-700"
+            }
+          >
+            {charge.status || "unpaid"}
+          </p>
+        </div>
+      </div>
+
+      {charge.status !== "paid" && (
+        <SolaCardPaymentForm
+          chargeId={charge.id}
+          amount={Number(charge.amount || 0)}
+          memberName={`${member.first_name} ${member.last_name}`}
+          memberEmail={member.email || ""}
+        />
+      )}
+
+      {charge.status !== "paid" && (
+        <details className="mt-4 rounded-xl border border-[#e3d9c7] bg-white p-4">
+          <summary className="cursor-pointer text-sm font-bold text-slate-700">
+            Record cash, check, Zelle, or another offline payment
+          </summary>
+
+          <form
+            action={markChargePaid.bind(null, member.id, charge.id)}
+            className="mt-4"
+          >
+            <div
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "1fr 1fr" }}
+            >
+              <label className="space-y-1 text-xs font-bold text-slate-600">
+                Amount Paid
+                <input
+                  name="paid_amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  defaultValue={charge.amount}
+                  className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
+                />
+              </label>
+
+              <label className="space-y-1 text-xs font-bold text-slate-600">
+                Method
+                <select
+                  name="payment_method"
+                  defaultValue="Check"
+                  className="w-full rounded-lg border border-[#d8cdb7] bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                >
+                  <option value="Check">Check</option>
+                  <option value="Zelle">Zelle</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+            </div>
+
+            <label className="mt-3 block space-y-1 text-xs font-bold text-slate-600">
+              Payment Note
+              <input
+                name="payment_note"
+                className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
+                placeholder="Check number or optional note"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-3 rounded-full bg-green-700 px-4 py-2 text-xs font-bold text-white"
+            >
+              Record Offline Payment
+            </button>
+          </form>
+        </details>
+      )}
+
+      {charge.status === "paid" && (
+        <div className="mt-4 rounded-xl border border-green-100 bg-white p-3 text-left text-xs text-slate-600">
+          <p>
+            <span className="font-bold">Paid amount:</span>{" "}
+            {formatMoney(charge.paid_amount || charge.amount)}
+          </p>
+
+          <p className="mt-1">
+            <span className="font-bold">Method:</span>{" "}
+            {charge.payment_method || "—"}
+          </p>
+
+          {charge.payment_provider && (
+            <p className="mt-1">
+              <span className="font-bold">Provider:</span>{" "}
+              {charge.payment_provider}
+            </p>
+          )}
+
+          {charge.payment_note && (
+            <p className="mt-1">
+              <span className="font-bold">Note:</span> {charge.payment_note}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        <form action={deleteCharge.bind(null, member.id, charge.id)}>
+          <button
+            type="submit"
+            className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
+          >
+            Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default async function MemberDetailPage({
   params,
   searchParams,
@@ -170,16 +338,19 @@ export default async function MemberDetailPage({
   const familyMembers = await getFamilyMembers(id);
   const charges = await getCharges(id);
 
-  const unpaidTotal = charges
-    .filter((charge) => charge.status !== "paid")
-    .reduce((sum, charge) => sum + Number(charge.amount || 0), 0);
+  const unpaidCharges = charges.filter((charge) => charge.status !== "paid");
+  const paidCharges = charges.filter((charge) => charge.status === "paid");
+  const recentPaidCharges = paidCharges.slice(0, 2);
 
-  const paidTotal = charges
-    .filter((charge) => charge.status === "paid")
-    .reduce(
-      (sum, charge) => sum + Number(charge.paid_amount || charge.amount || 0),
-      0
-    );
+  const unpaidTotal = unpaidCharges.reduce(
+    (sum, charge) => sum + Number(charge.amount || 0),
+    0
+  );
+
+  const paidTotal = paidCharges.reduce(
+    (sum, charge) => sum + Number(charge.paid_amount || charge.amount || 0),
+    0
+  );
 
   const spouseNames = groupFamilyMembers(familyMembers, "Spouse");
   const childNames = groupFamilyMembers(familyMembers, "Child");
@@ -188,6 +359,8 @@ export default async function MemberDetailPage({
 
   const addFamilyMemberAction = addFamilyMember.bind(null, id);
   const addChargeAction = addCharge.bind(null, id);
+
+  const activeTab = query?.tab || "overview";
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -255,277 +428,278 @@ export default async function MemberDetailPage({
           </div>
         </div>
 
-        {query?.memberUpdated === "1" && (
+        {(query?.memberUpdated === "1" ||
+          query?.familyAdded === "1" ||
+          query?.familyUpdated === "1" ||
+          query?.chargeAdded === "1" ||
+          query?.chargePaid === "1") && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Member details were updated successfully.
+            Saved successfully.
           </div>
         )}
 
-        {query?.familyAdded === "1" && (
-          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Mishaberach/card name was added successfully.
-          </div>
-        )}
-
-        {query?.familyUpdated === "1" && (
-          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Mishaberach/card name was updated.
-          </div>
-        )}
-
-        {query?.familyDeleted === "1" && (
+        {(query?.familyDeleted === "1" || query?.chargeDeleted === "1") && (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
-            Mishaberach/card name was deleted.
+            Deleted successfully.
           </div>
         )}
 
-        {query?.chargeAdded === "1" && (
-          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Charge was added successfully.
-          </div>
-        )}
+        <div className="mt-8 flex flex-wrap gap-3">
+          <TabLink
+            href={`/admin/members/${id}?tab=overview`}
+            active={activeTab === "overview"}
+          >
+            Overview
+          </TabLink>
 
-        {query?.chargePaid === "1" && (
-          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
-            Payment was recorded successfully.
-          </div>
-        )}
+          <TabLink
+            href={`/admin/members/${id}?tab=mishaberach`}
+            active={activeTab === "mishaberach"}
+          >
+            Mishaberach Names
+          </TabLink>
 
-        {query?.chargeDeleted === "1" && (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
-            Charge was deleted.
-          </div>
-        )}
+          <TabLink
+            href={`/admin/members/${id}?tab=payments`}
+            active={activeTab === "payments"}
+          >
+            Charges / Payments
+          </TabLink>
 
-        <div
-          className="mt-8 grid gap-8"
-          style={{
-            gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
-          }}
-        >
-          <div className="space-y-8">
-            <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-              <h2 className="text-2xl font-bold">Member Details</h2>
+          <TabLink
+            href={`/admin/members/${id}?tab=card`}
+            active={activeTab === "card"}
+          >
+            Card Preview
+          </TabLink>
+        </div>
 
-              <div className="mt-5 space-y-4 text-sm">
-                <div>
-                  <p className="font-semibold text-slate-500">Family Name</p>
-                  <p className="font-bold">{member.last_name}</p>
-                </div>
+        {activeTab === "overview" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold">Member Details</h2>
 
-                <div>
-                  <p className="font-semibold text-slate-500">
-                    Main Hebrew Name
-                  </p>
-                  <p dir="rtl" className="text-right text-lg">
-                    {member.hebrew_name || "—"}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">
-                    Kohen / Levi / Yisroel
-                  </p>
-                  <p>{displayTribe(member.tribe_status)}</p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">Address</p>
-                  <p>{member.address || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">
-                    Membership Type
-                  </p>
-                  <p>{member.membership_type || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">
-                    Custom Dues Amount
-                  </p>
-                  <p>{formatMoney(member.custom_dues_amount)}</p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">
-                    Seat / Location
-                  </p>
-                  <p>{member.seating_location || "—"}</p>
-                </div>
-
-                <div>
-                  <p className="font-semibold text-slate-500">Notes</p>
-                  <p>{member.notes || "—"}</p>
-                </div>
+            <div
+              className="mt-5 grid gap-5 text-sm"
+              style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+            >
+              <div>
+                <p className="font-semibold text-slate-500">Family Name</p>
+                <p className="font-bold">{member.last_name}</p>
               </div>
 
-              <form
-                action={updateMember.bind(null, id)}
-                className="mt-8 space-y-5 border-t border-[#e3d9c7] pt-6"
-              >
-                <h3 className="text-xl font-bold">Edit Member Details</h3>
+              <div>
+                <p className="font-semibold text-slate-500">Main Hebrew Name</p>
+                <p dir="rtl" className="text-right text-lg">
+                  {member.hebrew_name || "—"}
+                </p>
+              </div>
 
-                <div
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: "1fr 1fr" }}
-                >
-                  <label className="space-y-2">
-                    <span className="font-semibold">First Name</span>
-                    <input
-                      name="first_name"
-                      required
-                      defaultValue={member.first_name}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    />
-                  </label>
+              <div>
+                <p className="font-semibold text-slate-500">
+                  Kohen / Levi / Yisroel
+                </p>
+                <p>{displayTribe(member.tribe_status)}</p>
+              </div>
 
-                  <label className="space-y-2">
-                    <span className="font-semibold">Last / Family Name</span>
-                    <input
-                      name="last_name"
-                      required
-                      defaultValue={member.last_name}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    />
-                  </label>
-                </div>
+              <div>
+                <p className="font-semibold text-slate-500">Address</p>
+                <p>{member.address || "—"}</p>
+              </div>
 
-                <label className="block space-y-2">
-                  <span className="font-semibold">Hebrew Name</span>
-                  <input
-                    name="hebrew_name"
-                    dir="rtl"
-                    defaultValue={member.hebrew_name || ""}
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
-                  />
-                </label>
+              <div>
+                <p className="font-semibold text-slate-500">Membership Type</p>
+                <p>{member.membership_type || "—"}</p>
+              </div>
 
-                <div
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: "1fr 1fr" }}
-                >
-                  <label className="space-y-2">
-                    <span className="font-semibold">
-                      Kohen / Levi / Yisroel
-                    </span>
-                    <select
-                      name="tribe_status"
-                      defaultValue={member.tribe_status || "Yisroel"}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                    >
-                      <option value="Yisroel">Yisroel</option>
-                      <option value="Kohen">Kohen</option>
-                      <option value="Levi">Levi</option>
-                    </select>
-                  </label>
+              <div>
+                <p className="font-semibold text-slate-500">
+                  Custom Dues Amount
+                </p>
+                <p>{formatMoney(member.custom_dues_amount)}</p>
+              </div>
 
-                  <label className="space-y-2">
-                    <span className="font-semibold">Status</span>
-                    <select
-                      name="status"
-                      defaultValue={member.status || "active"}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                    >
-                      <option value="active">Active</option>
-                      <option value="pending">Pending</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
-                  </label>
-                </div>
+              <div>
+                <p className="font-semibold text-slate-500">Seat / Location</p>
+                <p>{member.seating_location || "—"}</p>
+              </div>
 
-                <div
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: "1fr 1fr" }}
-                >
-                  <label className="space-y-2">
-                    <span className="font-semibold">Email</span>
-                    <input
-                      name="email"
-                      type="email"
-                      defaultValue={member.email || ""}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    />
-                  </label>
-
-                  <label className="space-y-2">
-                    <span className="font-semibold">Phone</span>
-                    <input
-                      name="phone"
-                      defaultValue={member.phone || ""}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    />
-                  </label>
-                </div>
-
-                <label className="block space-y-2">
-                  <span className="font-semibold">Address</span>
-                  <input
-                    name="address"
-                    defaultValue={member.address || ""}
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  />
-                </label>
-
-                <div
-                  className="grid gap-4"
-                  style={{ gridTemplateColumns: "1fr 1fr" }}
-                >
-                  <label className="space-y-2">
-                    <span className="font-semibold">Membership Type</span>
-                    <select
-                      name="membership_type"
-                      defaultValue={member.membership_type || "Family"}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                    >
-                      <option value="Family">Family</option>
-                      <option value="Single">Single</option>
-                      <option value="Associate">Associate</option>
-                      <option value="Custom">Custom</option>
-                    </select>
-                  </label>
-
-                  <label className="space-y-2">
-                    <span className="font-semibold">Custom Dues Amount</span>
-                    <input
-                      name="custom_dues_amount"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      defaultValue={member.custom_dues_amount || 0}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    />
-                  </label>
-                </div>
-
-                <label className="block space-y-2">
-                  <span className="font-semibold">Seat / Location</span>
-                  <input
-                    name="seating_location"
-                    defaultValue={member.seating_location || ""}
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  />
-                </label>
-
-                <label className="block space-y-2">
-                  <span className="font-semibold">Notes</span>
-                  <textarea
-                    name="notes"
-                    defaultValue={member.notes || ""}
-                    className="min-h-24 w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white"
-                >
-                  Save Member Changes
-                </button>
-              </form>
+              <div>
+                <p className="font-semibold text-slate-500">Notes</p>
+                <p>{member.notes || "—"}</p>
+              </div>
             </div>
 
+            <form
+              action={updateMember.bind(null, id)}
+              className="mt-8 space-y-5 border-t border-[#e3d9c7] pt-6"
+            >
+              <h3 className="text-xl font-bold">Edit Member Details</h3>
+
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <label className="space-y-2">
+                  <span className="font-semibold">First Name</span>
+                  <input
+                    name="first_name"
+                    required
+                    defaultValue={member.first_name}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Last / Family Name</span>
+                  <input
+                    name="last_name"
+                    required
+                    defaultValue={member.last_name}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Hebrew Name</span>
+                <input
+                  name="hebrew_name"
+                  dir="rtl"
+                  defaultValue={member.hebrew_name || ""}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
+                />
+              </label>
+
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <label className="space-y-2">
+                  <span className="font-semibold">Kohen / Levi / Yisroel</span>
+                  <select
+                    name="tribe_status"
+                    defaultValue={member.tribe_status || "Yisroel"}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  >
+                    <option value="Yisroel">Yisroel</option>
+                    <option value="Kohen">Kohen</option>
+                    <option value="Levi">Levi</option>
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Status</span>
+                  <select
+                    name="status"
+                    defaultValue={member.status || "active"}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  >
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
+              </div>
+
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <label className="space-y-2">
+                  <span className="font-semibold">Email</span>
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={member.email || ""}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Phone</span>
+                  <input
+                    name="phone"
+                    defaultValue={member.phone || ""}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Address</span>
+                <input
+                  name="address"
+                  defaultValue={member.address || ""}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <label className="space-y-2">
+                  <span className="font-semibold">Membership Type</span>
+                  <select
+                    name="membership_type"
+                    defaultValue={member.membership_type || "Family"}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  >
+                    <option value="Family">Family</option>
+                    <option value="Single">Single</option>
+                    <option value="Associate">Associate</option>
+                    <option value="Custom">Custom</option>
+                  </select>
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Custom Dues Amount</span>
+                  <input
+                    name="custom_dues_amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    defaultValue={member.custom_dues_amount || 0}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+              </div>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Seat / Location</span>
+                <input
+                  name="seating_location"
+                  defaultValue={member.seating_location || ""}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Notes</span>
+                <textarea
+                  name="notes"
+                  defaultValue={member.notes || ""}
+                  className="min-h-24 w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white"
+              >
+                Save Member Changes
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === "mishaberach" && (
+          <div
+            className="mt-8 grid gap-8"
+            style={{
+              gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
+            }}
+          >
             <form
               action={addFamilyMemberAction}
               className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -623,79 +797,6 @@ export default async function MemberDetailPage({
               </button>
             </form>
 
-            <form
-              action={addChargeAction}
-              className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
-            >
-              <div>
-                <h2 className="text-2xl font-bold">Add Charge / Pledge</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Dues, Mishaberach pledge, aliyah pledge, donation, or custom
-                  charge.
-                </p>
-              </div>
-
-              <label className="block space-y-2">
-                <span className="font-semibold">Charge Type</span>
-                <select
-                  name="charge_type"
-                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                  defaultValue="Mishaberach"
-                >
-                  <option value="Membership Dues">Membership Dues</option>
-                  <option value="Mishaberach">Mishaberach</option>
-                  <option value="Aliyah">Aliyah</option>
-                  <option value="Donation">Donation</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label className="block space-y-2">
-                <span className="font-semibold">Description</span>
-                <input
-                  name="description"
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  placeholder="Mishaberach pledge, annual dues, donation..."
-                />
-              </label>
-
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
-                <label className="space-y-2">
-                  <span className="font-semibold">Amount</span>
-                  <input
-                    name="amount"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    required
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                    placeholder="360"
-                  />
-                </label>
-
-                <label className="space-y-2">
-                  <span className="font-semibold">Due Date</span>
-                  <input
-                    name="due_date"
-                    type="date"
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white"
-              >
-                Add Charge
-              </button>
-            </form>
-          </div>
-
-          <div className="space-y-8">
             <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
               <h2 className="text-2xl font-bold">Saved Mishaberach Names</h2>
 
@@ -792,312 +893,287 @@ export default async function MemberDetailPage({
                 )}
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold">Charges / Pledges</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Unpaid total:{" "}
-                    <span className="font-bold text-slate-900">
-                      {formatMoney(unpaidTotal)}
-                    </span>
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Paid total:{" "}
-                    <span className="font-bold text-green-700">
-                      {formatMoney(paidTotal)}
-                    </span>
-                  </p>
-                </div>
+        {activeTab === "payments" && (
+          <div
+            className="mt-8 grid gap-8"
+            style={{
+              gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
+            }}
+          >
+            <form
+              action={addChargeAction}
+              className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            >
+              <div>
+                <h2 className="text-2xl font-bold">Add Charge / Pledge</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Dues, Mishaberach pledge, aliyah pledge, donation, or custom
+                  charge.
+                </p>
               </div>
 
-              <div className="mt-6 space-y-3">
-                {charges.map((charge) => (
-                  <div
-                    key={charge.id}
-                    className="rounded-2xl bg-[#fbf8f2] p-4"
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="font-bold">{charge.charge_type}</p>
-                        <p className="text-sm text-slate-500">
-                          {charge.description || "—"}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Due: {formatDate(charge.due_date)}
-                        </p>
-
-                        {charge.paid_at && (
-                          <p className="mt-1 text-xs text-green-700">
-                            Paid: {formatDate(charge.paid_at)} ·{" "}
-                            {charge.payment_method || "manual"}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="text-right">
-                        <p className="font-black">
-                          {formatMoney(charge.amount)}
-                        </p>
-
-                        <p
-                          className={
-                            charge.status === "paid"
-                              ? "text-xs font-bold capitalize text-green-700"
-                              : "text-xs font-bold capitalize text-red-700"
-                          }
-                        >
-                          {charge.status || "unpaid"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {charge.status !== "paid" && (
-                      <form
-                        action={markChargePaid.bind(null, id, charge.id)}
-                        className="mt-4 rounded-xl border border-green-100 bg-white p-3"
-                      >
-                        <div
-                          className="grid gap-3"
-                          style={{ gridTemplateColumns: "1fr 1fr" }}
-                        >
-                          <label className="space-y-1 text-xs font-bold text-slate-600">
-                            Amount Paid
-                            <input
-                              name="paid_amount"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              defaultValue={charge.amount}
-                              className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
-                            />
-                          </label>
-
-                          <label className="space-y-1 text-xs font-bold text-slate-600">
-                            Method
-                            <select
-                              name="payment_method"
-                              defaultValue="Sola"
-                              className="w-full rounded-lg border border-[#d8cdb7] bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-                            >
-                              <option value="Sola">Sola</option>
-                              <option value="Zelle">Zelle</option>
-                              <option value="Cash">Cash</option>
-                              <option value="Check">Check</option>
-                              <option value="Other">Other</option>
-                            </select>
-                          </label>
-                        </div>
-
-                        <label className="mt-3 block space-y-1 text-xs font-bold text-slate-600">
-                          Payment Note
-                          <input
-                            name="payment_note"
-                            className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
-                            placeholder="Optional note"
-                          />
-                        </label>
-
-                        <button
-                          type="submit"
-                          className="mt-3 rounded-full bg-green-700 px-4 py-2 text-xs font-bold text-white"
-                        >
-                          Record Payment
-                        </button>
-                        <button
-  type="submit"
-  style={{
-    marginTop: "14px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: "9999px",
-    background: "#15803d",
-    color: "white",
-    fontWeight: 800,
-    fontSize: "13px",
-    padding: "9px 16px",
-    border: "none",
-    cursor: "pointer",
-  }}
->
-  Record Payment
-</button>
-                      </form>
-                    )}
-
-                    {charge.status === "paid" && (
-                      <div className="mt-4 rounded-xl border border-green-100 bg-white p-3 text-left text-xs text-slate-600">
-                        <p>
-                          <span className="font-bold">Paid amount:</span>{" "}
-                          {formatMoney(charge.paid_amount || charge.amount)}
-                        </p>
-
-                        <p className="mt-1">
-                          <span className="font-bold">Method:</span>{" "}
-                          {charge.payment_method || "—"}
-                        </p>
-
-                        {charge.payment_provider && (
-                          <p className="mt-1">
-                            <span className="font-bold">Provider:</span>{" "}
-                            {charge.payment_provider}
-                          </p>
-                        )}
-
-                        {charge.payment_note && (
-                          <p className="mt-1">
-                            <span className="font-bold">Note:</span>{" "}
-                            {charge.payment_note}
-                          </p>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-3 flex flex-wrap justify-end gap-2">
-                      <form action={deleteCharge.bind(null, id, charge.id)}>
-                        <button
-                          type="submit"
-                          className="rounded-full bg-red-700 px-3 py-1.5 text-xs font-bold text-white"
-                        >
-                          Delete
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                ))}
-
-                {charges.length === 0 && (
-                  <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
-                    No charges or pledges added yet.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-              <h2 className="text-2xl font-bold">Mishaberach Card Preview</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Preview based on your Canva sample.
-              </p>
-
-              <div className="mt-6 overflow-x-auto">
-                <div className="mx-auto w-[640px] bg-white p-6 shadow-sm">
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "90px 1fr 90px",
-                      columnGap: "22px",
-                      alignItems: "stretch",
-                    }}
-                  >
-                    <div className="text-center text-sm">
-                      <p className="border-b-2 border-black pb-2">Other</p>
-
-                      {[360, 300, 250, 225, 200, 180, 150].map((amount) => (
-                        <div
-                          key={amount}
-                          className="flex h-[38px] items-center justify-center border-b-2 border-black"
-                        >
-                          {amount}
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="min-h-[280px] text-center">
-                      <div className="mx-auto flex h-[48px] w-[48px] items-center justify-center rounded-full bg-black text-[8px] font-black leading-tight text-white">
-                        KBA
-                      </div>
-
-                      <h3 className="mt-4 text-2xl font-black">
-                        {member.first_name} {member.last_name}
-                      </h3>
-
-                      {member.hebrew_name && (
-                        <p dir="rtl" className="mt-1 text-lg">
-                          {member.hebrew_name}
-                        </p>
-                      )}
-
-                      {spouseNames.length > 0 && (
-                        <div className="mt-3">
-                          <h4 className="text-xl font-black">Spouse</h4>
-                          {spouseNames.map((person) => (
-                            <p key={person.id} dir="rtl" className="text-base">
-                              {person.hebrew_name ||
-                                `${person.first_name} ${person.last_name || ""}`}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      {childNames.length > 0 && (
-                        <div className="mt-3">
-                          <h4 className="text-xl font-black">Children</h4>
-                          {childNames.map((person) => (
-                            <p key={person.id} dir="rtl" className="text-base">
-                              {person.hebrew_name ||
-                                `${person.first_name} ${person.last_name || ""}`}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      {otherNames.length > 0 && (
-                        <div className="mt-6">
-                          <h4 className="text-xl font-black">Others</h4>
-                          {otherNames.map((person) => (
-                            <p key={person.id} dir="rtl" className="text-base">
-                              {person.hebrew_name ||
-                                `${person.first_name} ${person.last_name || ""}`}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-
-                      {guestOfNames.length > 0 && (
-                        <div className="mt-6">
-                          <h4 className="text-xl font-black">Guest Of</h4>
-                          {guestOfNames.map((person) => (
-                            <p key={person.id} dir="rtl" className="text-base">
-                              {person.hebrew_name ||
-                                `${person.first_name} ${person.last_name || ""}`}
-                            </p>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="text-center text-sm">
-                      <p dir="rtl" className="border-b-2 border-black pb-2">
-                        מתנה
-                      </p>
-
-                      {[18, 36, 50, 72, 90, 100, 125].map((amount) => (
-                        <div
-                          key={amount}
-                          className="flex h-[38px] items-center justify-center border-b-2 border-black"
-                        >
-                          {amount}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <Link
-                  href={`/admin/members/${member.id}/mishaberach-card`}
-                  className="inline-flex rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+              <label className="block space-y-2">
+                <span className="font-semibold">Charge Type</span>
+                <select
+                  name="charge_type"
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  defaultValue="Mishaberach"
                 >
-                  Open Printable Card
-                </Link>
+                  <option value="Membership Dues">Membership Dues</option>
+                  <option value="Mishaberach">Mishaberach</option>
+                  <option value="Aliyah">Aliyah</option>
+                  <option value="Donation">Donation</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="block space-y-2">
+                <span className="font-semibold">Description</span>
+                <input
+                  name="description"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  placeholder="Mishaberach pledge, annual dues, donation..."
+                />
+              </label>
+
+              <div
+                className="grid gap-4"
+                style={{ gridTemplateColumns: "1fr 1fr" }}
+              >
+                <label className="space-y-2">
+                  <span className="font-semibold">Amount</span>
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                    placeholder="360"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Due Date</span>
+                  <input
+                    name="due_date"
+                    type="date"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                className="rounded-full bg-[#1d2940] px-6 py-3 font-semibold text-white"
+              >
+                Add Charge
+              </button>
+            </form>
+
+            <div className="space-y-8">
+              <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Open Charges</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Unpaid total:{" "}
+                      <span className="font-bold text-slate-900">
+                        {formatMoney(unpaidTotal)}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {unpaidCharges.map((charge) => (
+                    <ChargeCard
+                      key={charge.id}
+                      charge={charge}
+                      member={member}
+                    />
+                  ))}
+
+                  {unpaidCharges.length === 0 && (
+                    <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                      No unpaid charges.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-bold">Recent Payments</h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Paid total:{" "}
+                      <span className="font-bold text-green-700">
+                        {formatMoney(paidTotal)}
+                      </span>
+                    </p>
+                  </div>
+
+                  <Link
+                    href={`/admin/members/${id}/payments`}
+                    className="rounded-full bg-[#1d2940] px-4 py-2 text-xs font-bold text-white"
+                  >
+                    View All Payments
+                  </Link>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  {recentPaidCharges.map((charge) => (
+                    <ChargeCard
+                      key={charge.id}
+                      charge={charge}
+                      member={member}
+                    />
+                  ))}
+
+                  {recentPaidCharges.length === 0 && (
+                    <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                      No payments recorded yet.
+                    </div>
+                  )}
+
+                  {paidCharges.length > 2 && (
+                    <p className="text-center text-sm font-semibold text-slate-500">
+                      Showing latest 2 paid payments. Use View All Payments for
+                      full history.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {activeTab === "card" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold">Mishaberach Card Preview</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Preview based on your Canva sample.
+            </p>
+
+            <div className="mt-6 overflow-x-auto">
+              <div className="mx-auto w-[640px] bg-white p-6 shadow-sm">
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "90px 1fr 90px",
+                    columnGap: "22px",
+                    alignItems: "stretch",
+                  }}
+                >
+                  <div className="text-center text-sm">
+                    <p className="border-b-2 border-black pb-2">Other</p>
+
+                    {[360, 300, 250, 225, 200, 180, 150].map((amount) => (
+                      <div
+                        key={amount}
+                        className="flex h-[38px] items-center justify-center border-b-2 border-black"
+                      >
+                        {amount}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="min-h-[280px] text-center">
+                    <div className="mx-auto flex h-[48px] w-[48px] items-center justify-center rounded-full bg-black text-[8px] font-black leading-tight text-white">
+                      KBA
+                    </div>
+
+                    <h3 className="mt-4 text-2xl font-black">
+                      {member.first_name} {member.last_name}
+                    </h3>
+
+                    {member.hebrew_name && (
+                      <p dir="rtl" className="mt-1 text-lg">
+                        {member.hebrew_name}
+                      </p>
+                    )}
+
+                    {spouseNames.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="text-xl font-black">Spouse</h4>
+                        {spouseNames.map((person) => (
+                          <p key={person.id} dir="rtl" className="text-base">
+                            {person.hebrew_name ||
+                              `${person.first_name} ${person.last_name || ""}`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {childNames.length > 0 && (
+                      <div className="mt-3">
+                        <h4 className="text-xl font-black">Children</h4>
+                        {childNames.map((person) => (
+                          <p key={person.id} dir="rtl" className="text-base">
+                            {person.hebrew_name ||
+                              `${person.first_name} ${person.last_name || ""}`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {otherNames.length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="text-xl font-black">Others</h4>
+                        {otherNames.map((person) => (
+                          <p key={person.id} dir="rtl" className="text-base">
+                            {person.hebrew_name ||
+                              `${person.first_name} ${person.last_name || ""}`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {guestOfNames.length > 0 && (
+                      <div className="mt-6">
+                        <h4 className="text-xl font-black">Guest Of</h4>
+                        {guestOfNames.map((person) => (
+                          <p key={person.id} dir="rtl" className="text-base">
+                            {person.hebrew_name ||
+                              `${person.first_name} ${person.last_name || ""}`}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="text-center text-sm">
+                    <p dir="rtl" className="border-b-2 border-black pb-2">
+                      מתנה
+                    </p>
+
+                    {[18, 36, 50, 72, 90, 100, 125].map((amount) => (
+                      <div
+                        key={amount}
+                        className="flex h-[38px] items-center justify-center border-b-2 border-black"
+                      >
+                        {amount}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <Link
+                href={`/admin/members/${member.id}/mishaberach-card`}
+                className="inline-flex rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+              >
+                Open Printable Card
+              </Link>
+            </div>
+          </div>
+        )}
       </section>
     </main>
   );
