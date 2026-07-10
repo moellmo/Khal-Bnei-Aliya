@@ -12,6 +12,24 @@ type Member = {
   email: string | null;
 };
 
+type Payment = {
+  id: string;
+  member_id: string;
+  charge_id: string | null;
+  amount: number;
+  payment_method: string | null;
+  payment_provider: string | null;
+  external_payment_id: string | null;
+  payer_email: string | null;
+  status: string | null;
+  note: string | null;
+  paid_at: string | null;
+  created_at: string | null;
+  sola_recurring_id: string | null;
+  receipt_number: string | null;
+  receipt_pdf_url: string | null;
+};
+
 type Charge = {
   id: string;
   charge_type: string;
@@ -19,12 +37,10 @@ type Charge = {
   amount: number;
   status: string | null;
   due_date: string | null;
-  payment_method: string | null;
-  payment_provider: string | null;
-  paid_amount: number | null;
-  payment_note: string | null;
-  paid_at: string | null;
-  created_at: string | null;
+};
+
+type PaymentRow = Payment & {
+  charge: Charge | null;
 };
 
 type PageProps = {
@@ -48,18 +64,90 @@ async function getMember(id: string) {
   return data as Member | null;
 }
 
-async function getCharges(memberId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("member_charges")
+async function getPayments(memberId: string): Promise<PaymentRow[]> {
+  const { data: payments, error: paymentError } = await supabaseAdmin
+    .from("payments")
     .select(
-      "id, charge_type, description, amount, status, due_date, payment_method, payment_provider, paid_amount, payment_note, paid_at, created_at"
+      `
+        id,
+        member_id,
+        charge_id,
+        amount,
+        payment_method,
+        payment_provider,
+        external_payment_id,
+        payer_email,
+        status,
+        note,
+        paid_at,
+        created_at,
+        sola_recurring_id,
+        receipt_number,
+        receipt_pdf_url
+      `
     )
     .eq("member_id", memberId)
     .order("paid_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false });
 
+  if (paymentError) {
+    console.error("Error loading payments:", paymentError.message);
+    return [];
+  }
+
+  const typedPayments = (payments || []) as Payment[];
+
+  const chargeIds = [
+    ...new Set(
+      typedPayments
+        .map((payment) => payment.charge_id)
+        .filter((value): value is string => Boolean(value))
+    ),
+  ];
+
+  if (chargeIds.length === 0) {
+    return typedPayments.map((payment) => ({
+      ...payment,
+      charge: null,
+    }));
+  }
+
+  const { data: charges, error: chargeError } = await supabaseAdmin
+    .from("member_charges")
+    .select("id, charge_type, description, amount, status, due_date")
+    .in("id", chargeIds);
+
+  if (chargeError) {
+    console.error("Error loading payment charges:", chargeError.message);
+
+    return typedPayments.map((payment) => ({
+      ...payment,
+      charge: null,
+    }));
+  }
+
+  const chargeMap = new Map(
+    ((charges || []) as Charge[]).map((charge) => [charge.id, charge])
+  );
+
+  return typedPayments.map((payment) => ({
+    ...payment,
+    charge: payment.charge_id
+      ? chargeMap.get(payment.charge_id) || null
+      : null,
+  }));
+}
+
+async function getOpenCharges(memberId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("member_charges")
+    .select("id, charge_type, description, amount, status, due_date")
+    .eq("member_id", memberId)
+    .neq("status", "paid")
+    .order("due_date", { ascending: true, nullsFirst: false });
+
   if (error) {
-    console.error("Error loading payment history:", error.message);
+    console.error("Error loading open charges:", error.message);
     return [];
   }
 
@@ -89,6 +177,14 @@ function formatDate(value: string | null | undefined) {
   });
 }
 
+function displayMethod(payment: Payment) {
+  if (payment.sola_recurring_id) {
+    return "Sola Auto-Pay";
+  }
+
+  return payment.payment_method || payment.payment_provider || "—";
+}
+
 export default async function MemberPaymentsPage({ params }: PageProps) {
   const { id } = await params;
 
@@ -98,17 +194,14 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
     notFound();
   }
 
-  const charges = await getCharges(id);
+  const payments = await getPayments(id);
+  const openCharges = await getOpenCharges(id);
 
-  const paidCharges = charges.filter((charge) => charge.status === "paid");
-  const unpaidCharges = charges.filter((charge) => charge.status !== "paid");
+  const paidTotal = payments
+    .filter((payment) => payment.status === "paid")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
-  const paidTotal = paidCharges.reduce(
-    (sum, charge) => sum + Number(charge.paid_amount || charge.amount || 0),
-    0
-  );
-
-  const unpaidTotal = unpaidCharges.reduce(
+  const openTotal = openCharges.reduce(
     (sum, charge) => sum + Number(charge.amount || 0),
     0
   );
@@ -145,12 +238,19 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
           )}
 
           <div
-            className="mt-5 grid gap-3 text-sm text-slate-200"
-            style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
+            className="mt-5 grid gap-4 text-sm text-slate-200"
+            style={{
+              gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            }}
           >
             <div>
               <p className="text-slate-400">Email</p>
               <p className="font-bold">{member.email || "—"}</p>
+            </div>
+
+            <div>
+              <p className="text-slate-400">Payments</p>
+              <p className="font-bold">{payments.length}</p>
             </div>
 
             <div>
@@ -163,7 +263,7 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
             <div>
               <p className="text-slate-400">Open Balance</p>
               <p className="font-bold text-[#f0d99a]">
-                {formatMoney(unpaidTotal)}
+                {formatMoney(openTotal)}
               </p>
             </div>
           </div>
@@ -174,7 +274,8 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
             <div>
               <h2 className="text-2xl font-bold">All Recorded Payments</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Full payment history for this member.
+                Includes Sola online payments, automatic recurring payments,
+                checks, cash, Zelle and other manual payments.
               </p>
             </div>
 
@@ -182,61 +283,90 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
               href={`/admin/members/${member.id}?tab=payments`}
               className="rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
             >
-              Add / Record Payment
+              Add or Record Payment
             </Link>
           </div>
 
           <div className="mt-6 overflow-x-auto">
-            <table className="w-full min-w-[900px] border-separate border-spacing-y-3 text-left text-sm">
+            <table className="w-full min-w-[1100px] border-separate border-spacing-y-3 text-left text-sm">
               <thead>
-                <tr className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                <tr className="text-xs uppercase tracking-[0.16em] text-slate-500">
                   <th className="px-4">Paid Date</th>
-                  <th className="px-4">Charge Type</th>
+                  <th className="px-4">Charge</th>
                   <th className="px-4">Description</th>
-                  <th className="px-4 text-right">Amount Paid</th>
+                  <th className="px-4 text-right">Amount</th>
                   <th className="px-4">Method</th>
-                  <th className="px-4">Provider</th>
+                  <th className="px-4">Reference</th>
+                  <th className="px-4">Receipt</th>
                   <th className="px-4">Note</th>
                 </tr>
               </thead>
 
               <tbody>
-                {paidCharges.map((charge) => (
-                  <tr key={charge.id} className="bg-[#fbf8f2]">
+                {payments.map((payment) => (
+                  <tr key={payment.id} className="bg-[#fbf8f2]">
                     <td className="rounded-l-2xl px-4 py-4 font-semibold">
-                      {formatDate(charge.paid_at)}
+                      {formatDate(payment.paid_at || payment.created_at)}
                     </td>
 
                     <td className="px-4 py-4 font-bold">
-                      {charge.charge_type}
+                      {payment.charge?.charge_type ||
+                        (payment.sola_recurring_id
+                          ? "Membership Dues"
+                          : "Payment")}
                     </td>
 
                     <td className="px-4 py-4 text-slate-600">
-                      {charge.description || "—"}
+                      {payment.charge?.description || "—"}
                     </td>
 
                     <td className="px-4 py-4 text-right font-black">
-                      {formatMoney(charge.paid_amount || charge.amount)}
+                      {formatMoney(payment.amount)}
                     </td>
 
                     <td className="px-4 py-4">
-                      {charge.payment_method || "—"}
+                      <span
+                        className={
+                          payment.payment_provider === "sola"
+                            ? "rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800"
+                            : "rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
+                        }
+                      >
+                        {displayMethod(payment)}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-4 font-mono text-xs text-slate-600">
+                      {payment.external_payment_id || "—"}
                     </td>
 
                     <td className="px-4 py-4">
-                      {charge.payment_provider || "—"}
+                     {payment.receipt_pdf_url ? (
+  <a
+    href={`/api/receipts/${payment.id}`}
+    target="_blank"
+    rel="noreferrer"
+    className="font-bold text-[#8b6b2e] underline"
+  >
+    View PDF
+  </a>
+) : (
+                        <span className="text-slate-400">
+                          {payment.receipt_number || "Pending"}
+                        </span>
+                      )}
                     </td>
 
                     <td className="rounded-r-2xl px-4 py-4 text-slate-600">
-                      {charge.payment_note || "—"}
+                      {payment.note || "—"}
                     </td>
                   </tr>
                 ))}
 
-                {paidCharges.length === 0 && (
+                {payments.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="rounded-2xl bg-[#fbf8f2] px-4 py-10 text-center text-slate-500"
                     >
                       No payments recorded yet.
@@ -249,16 +379,26 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
         </div>
 
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold">Open / Unpaid Charges</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            These are still unpaid and can be recorded from the member payment
-            tab.
-          </p>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Open / Unpaid Charges</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Charges still awaiting payment.
+              </p>
+            </div>
+
+            <Link
+              href={`/admin/members/${member.id}?tab=payments`}
+              className="rounded-full bg-[#8b6b2e] px-5 py-3 text-sm font-bold text-white"
+            >
+              Manage Charges
+            </Link>
+          </div>
 
           <div className="mt-6 overflow-x-auto">
             <table className="w-full min-w-[760px] border-separate border-spacing-y-3 text-left text-sm">
               <thead>
-                <tr className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                <tr className="text-xs uppercase tracking-[0.16em] text-slate-500">
                   <th className="px-4">Due Date</th>
                   <th className="px-4">Charge Type</th>
                   <th className="px-4">Description</th>
@@ -268,7 +408,7 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
               </thead>
 
               <tbody>
-                {unpaidCharges.map((charge) => (
+                {openCharges.map((charge) => (
                   <tr key={charge.id} className="bg-[#fbf8f2]">
                     <td className="rounded-l-2xl px-4 py-4 font-semibold">
                       {formatDate(charge.due_date)}
@@ -292,7 +432,7 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
                   </tr>
                 ))}
 
-                {unpaidCharges.length === 0 && (
+                {openCharges.length === 0 && (
                   <tr>
                     <td
                       colSpan={5}
