@@ -1,11 +1,31 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { createAndSendReceipt } from "@/lib/payments/createReceipt";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 type WebhookPayload = Record<string, string>;
+
+type MemberRecord = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  sola_customer_id: string | null;
+  sola_recurring_id: string | null;
+};
+
+type ChargeRecord = {
+  id: string;
+  member_id: string;
+  amount: number;
+  status: string | null;
+  charge_type: string;
+  description: string | null;
+  due_date: string | null;
+};
 
 function formDataToObject(formData: FormData): WebhookPayload {
   const result: WebhookPayload = {};
@@ -95,14 +115,49 @@ function parseAmount(payload: WebhookPayload) {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+function parsePaidAt(payload: WebhookPayload) {
+  const rawDate = getField(payload, [
+    "xDate",
+    "xTransactionDate",
+    "xDateTime",
+    "xTimestamp",
+  ]);
+
+  if (!rawDate) {
+    return new Date().toISOString();
+  }
+
+  const normalized = rawDate.includes("T")
+    ? rawDate
+    : rawDate.replace(" ", "T");
+
+  const parsed = new Date(normalized);
+
+  return Number.isNaN(parsed.getTime())
+    ? new Date().toISOString()
+    : parsed.toISOString();
+}
+
 function extractChargeId(invoice: string) {
   if (!invoice.startsWith("KBA-")) {
     return null;
   }
 
-  const chargeId = invoice.slice(4).trim();
+  const possibleId = invoice.slice(4).trim();
 
-  return chargeId || null;
+  /*
+   * One-time portal invoices use KBA-{charge UUID}.
+   * Autopay schedule invoices such as KBA-AUTOPAY-{member UUID}
+   * must not be treated as charge IDs.
+   */
+  if (
+    possibleId.startsWith("AUTOPAY-") ||
+    !possibleId.includes("-")
+  ) {
+    return null;
+  }
+
+  return possibleId || null;
 }
 
 function sanitizePayload(payload: WebhookPayload) {
@@ -132,7 +187,25 @@ function sanitizePayload(payload: WebhookPayload) {
   return sanitized;
 }
 
-async function findChargeByInvoice(invoice: string) {
+function getBillingPeriod(paidAt: string) {
+  const date = new Date(paidAt);
+
+  return {
+    billingMonth: date.getUTCMonth() + 1,
+    billingYear: date.getUTCFullYear(),
+  };
+}
+
+function getMonthName(paidAt: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(paidAt));
+}
+
+async function findChargeByInvoice(
+  invoice: string
+): Promise<ChargeRecord | null> {
   const chargeId = extractChargeId(invoice);
 
   if (!chargeId) {
@@ -151,10 +224,12 @@ async function findChargeByInvoice(invoice: string) {
     throw new Error(`Unable to find charge: ${error.message}`);
   }
 
-  return data;
+  return (data || null) as ChargeRecord | null;
 }
 
-async function findMemberByRecurringId(recurringId: string) {
+async function findMemberByRecurringId(
+  recurringId: string
+): Promise<MemberRecord | null> {
   if (!recurringId) {
     return null;
   }
@@ -171,10 +246,12 @@ async function findMemberByRecurringId(recurringId: string) {
     throw new Error(`Unable to find recurring member: ${error.message}`);
   }
 
-  return data;
+  return (data || null) as MemberRecord | null;
 }
 
-async function findMemberByCustomerId(customerId: string) {
+async function findMemberByCustomerId(
+  customerId: string
+): Promise<MemberRecord | null> {
   if (!customerId) {
     return null;
   }
@@ -191,7 +268,7 @@ async function findMemberByCustomerId(customerId: string) {
     throw new Error(`Unable to find Sola customer: ${error.message}`);
   }
 
-  return data;
+  return (data || null) as MemberRecord | null;
 }
 
 async function findMatchingUnpaidCharge({
@@ -200,7 +277,7 @@ async function findMatchingUnpaidCharge({
 }: {
   memberId: string;
   amount: number;
-}) {
+}): Promise<ChargeRecord | null> {
   const { data, error } = await supabaseAdmin
     .from("member_charges")
     .select(
@@ -209,16 +286,111 @@ async function findMatchingUnpaidCharge({
     .eq("member_id", memberId)
     .neq("status", "paid")
     .eq("charge_type", "Membership Dues")
-    .eq("amount", amount)
-    .order("due_date", { ascending: true, nullsFirst: false })
-    .limit(1)
-    .maybeSingle();
+    .order("due_date", {
+      ascending: true,
+      nullsFirst: false,
+    })
+    .limit(20);
 
   if (error) {
     throw new Error(`Unable to find unpaid dues: ${error.message}`);
   }
 
-  return data;
+  const charges = (data || []) as ChargeRecord[];
+
+  return (
+    charges.find(
+      (charge) =>
+        Math.abs(Number(charge.amount || 0) - amount) < 0.01
+    ) ||
+    charges[0] ||
+    null
+  );
+}
+
+async function createHistoricalPaidCharge({
+  memberId,
+  amount,
+  paidAt,
+  refNum,
+}: {
+  memberId: string;
+  amount: number;
+  paidAt: string;
+  refNum: string;
+}) {
+  const { billingMonth, billingYear } =
+    getBillingPeriod(paidAt);
+
+  const monthName = getMonthName(paidAt);
+
+  const { data, error } = await supabaseAdmin
+    .from("member_charges")
+    .insert({
+      member_id: memberId,
+      charge_type: "Membership Dues",
+      description: `${monthName} ${billingYear} recurring membership payment`,
+      amount,
+      status: "paid",
+      due_date: paidAt.slice(0, 10),
+      paid_at: paidAt,
+      payment_method: "Card",
+      payment_provider: "sola",
+      paid_amount: amount,
+      external_payment_id: refNum,
+      payment_note: "Paid by Sola recurring automatic payment",
+      billing_month: billingMonth,
+      billing_year: billingYear,
+    })
+    .select(
+      "id, member_id, amount, status, charge_type, description, due_date"
+    )
+    .single();
+
+  if (error || !data) {
+    throw new Error(
+      error?.message || "Unable to create recurring charge."
+    );
+  }
+
+  return data as ChargeRecord;
+}
+
+async function writeSyncLog({
+  memberId,
+  scheduleId,
+  customerId,
+  externalPaymentId,
+  eventType,
+  status,
+  message,
+  payload,
+}: {
+  memberId?: string | null;
+  scheduleId?: string | null;
+  customerId?: string | null;
+  externalPaymentId?: string | null;
+  eventType: string;
+  status: string;
+  message?: string | null;
+  payload: Record<string, string>;
+}) {
+  const { error } = await supabaseAdmin
+    .from("sola_recurring_sync_log")
+    .insert({
+      member_id: memberId || null,
+      sola_schedule_id: scheduleId || null,
+      sola_customer_id: customerId || null,
+      external_payment_id: externalPaymentId || null,
+      event_type: eventType,
+      status,
+      message: message || null,
+      raw_payload: payload,
+    });
+
+  if (error) {
+    console.error("SOLA_SYNC_LOG_ERROR", error.message);
+  }
 }
 
 export async function GET() {
@@ -261,7 +433,9 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get("content-type") || "";
 
     if (
-      !contentType.includes("application/x-www-form-urlencoded") &&
+      !contentType.includes(
+        "application/x-www-form-urlencoded"
+      ) &&
       !contentType.includes("multipart/form-data")
     ) {
       return NextResponse.json(
@@ -275,6 +449,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData();
     const payload = formDataToObject(formData);
+    const sanitizedPayload = sanitizePayload(payload);
 
     const signatureValid = verifyWebhookSignature({
       payload,
@@ -310,11 +485,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const scheduleId = getField(payload, [
+      "xRecurringId",
+      "xRecurringID",
+      "xScheduleId",
+      "xScheduleID",
+      "xRecurringScheduleId",
+    ]);
+
+    const customerId = getField(payload, [
+      "xCustomerId",
+      "xCustomerID",
+      "xCustId",
+      "xCustID",
+    ]);
+
+    const recurringTransactionId = getField(payload, [
+      "xRecurringTransactionId",
+      "xRecurringTransactionID",
+      "xScheduleTransactionId",
+      "xScheduleTransactionID",
+    ]);
+
+    const isRecurring = Boolean(
+      scheduleId || recurringTransactionId
+    );
+
     const { data: existingPayment, error: duplicateCheckError } =
       await supabaseAdmin
         .from("payments")
         .select("id")
-        .eq("external_payment_id", refNum)
+        .or(
+          recurringTransactionId
+            ? `external_payment_id.eq.${refNum},sola_transaction_id.eq.${recurringTransactionId}`
+            : `external_payment_id.eq.${refNum}`
+        )
         .maybeSingle();
 
     if (duplicateCheckError) {
@@ -331,9 +536,25 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isApprovedPayment(payload)) {
+      await writeSyncLog({
+        scheduleId,
+        customerId,
+        externalPaymentId: refNum,
+        eventType: isRecurring
+          ? "recurring_payment"
+          : "payment",
+        status: "not_approved",
+        message: getField(payload, [
+          "xError",
+          "xErrorMessage",
+          "xMessage",
+        ]),
+        payload: sanitizedPayload,
+      });
+
       console.log("SOLA_WEBHOOK_NOT_APPROVED", {
         refNum,
-        payload: sanitizePayload(payload),
+        payload: sanitizedPayload,
       });
 
       return NextResponse.json({
@@ -356,112 +577,152 @@ export async function POST(request: NextRequest) {
 
     const invoice = getField(payload, ["xInvoice"]);
 
-    const recurringId = getField(payload, [
-      "xRecurringId",
-      "xRecurringID",
-      "xScheduleId",
-      "xScheduleID",
-      "xRecurringScheduleId",
-    ]);
-
-    const customerId = getField(payload, [
-      "xCustomerId",
-      "xCustomerID",
-      "xCustId",
-      "xCustID",
-    ]);
-
     const paymentEmail = getField(payload, [
       "xEmail",
       "xBillEmail",
       "xCustomerEmail",
     ]);
 
-    const paymentMethod = getField(payload, [
+    const cardType = getField(payload, [
       "xCardType",
       "xPaymentMethod",
     ]);
 
     let charge = await findChargeByInvoice(invoice);
-    let memberId = charge?.member_id || null;
+    let member: MemberRecord | null = null;
 
-    if (!memberId && recurringId) {
-      const recurringMember = await findMemberByRecurringId(recurringId);
+    if (charge) {
+      const { data, error } = await supabaseAdmin
+        .from("members")
+        .select(
+          "id, first_name, last_name, email, sola_customer_id, sola_recurring_id"
+        )
+        .eq("id", charge.member_id)
+        .maybeSingle();
 
-      if (recurringMember) {
-        memberId = recurringMember.id;
-
-        charge = await findMatchingUnpaidCharge({
-          memberId,
-          amount,
-        });
+      if (error) {
+        throw new Error(error.message);
       }
+
+      member = (data || null) as MemberRecord | null;
     }
 
-    if (!memberId && customerId) {
-      const customerMember = await findMemberByCustomerId(customerId);
-
-      if (customerMember) {
-        memberId = customerMember.id;
-
-        charge = await findMatchingUnpaidCharge({
-          memberId,
-          amount,
-        });
-      }
+    if (!member && scheduleId) {
+      member = await findMemberByRecurringId(scheduleId);
     }
 
-    if (!memberId) {
+    if (!member && customerId) {
+      member = await findMemberByCustomerId(customerId);
+    }
+
+    if (!member) {
+      await writeSyncLog({
+        scheduleId,
+        customerId,
+        externalPaymentId: refNum,
+        eventType: isRecurring
+          ? "recurring_payment"
+          : "payment",
+        status: "unmatched",
+        message: "Unable to match payment to a member.",
+        payload: sanitizedPayload,
+      });
+
       console.error("SOLA_WEBHOOK_UNMATCHED_PAYMENT", {
         refNum,
         amount,
         invoice,
-        recurringId,
+        scheduleId,
         customerId,
-        payload: sanitizePayload(payload),
+        payload: sanitizedPayload,
       });
 
-      return NextResponse.json(
-        {
-          received: false,
-          error: "Unable to match payment to a member.",
-        },
-        { status: 422 }
-      );
+      /*
+       * Return 200 so Sola does not endlessly retry an event
+       * that requires manual schedule linking.
+       */
+      return NextResponse.json({
+        received: true,
+        approved: true,
+        matched: false,
+      });
     }
 
-    const paidAt = new Date().toISOString();
-
-    const receiptNumber = `KBA-${new Date()
-      .toISOString()
-      .slice(0, 10)
-      .replaceAll("-", "")}-${refNum}`;
-
-    const { error: paymentInsertError } = await supabaseAdmin
-      .from("payments")
-      .insert({
-        member_id: memberId,
-        charge_id: charge?.id || null,
+    if (!charge && isRecurring) {
+      charge = await findMatchingUnpaidCharge({
+        memberId: member.id,
         amount,
-        payment_method: paymentMethod
-          ? `Sola ${paymentMethod}`
-          : "Sola",
-        payment_provider: "sola",
-        external_payment_id: refNum,
-        payer_email: paymentEmail || null,
-        status: "paid",
-        note: recurringId
-          ? `Sola recurring payment ${recurringId}`
-          : "Sola payment",
-        paid_at: paidAt,
-        sola_recurring_id: recurringId || null,
-        receipt_number: receiptNumber,
-        raw_provider_response: sanitizePayload(payload),
       });
+    }
 
-    if (paymentInsertError) {
+    const paidAt = parsePaidAt(payload);
+
+    if (!charge && isRecurring) {
+      charge = await createHistoricalPaidCharge({
+        memberId: member.id,
+        amount,
+        paidAt,
+        refNum,
+      });
+    }
+
+    const receiptNumber =
+      `KBA-${paidAt
+        .slice(0, 10)
+        .replaceAll("-", "")}-${refNum}`;
+
+    const { data: payment, error: paymentInsertError } =
+      await supabaseAdmin
+        .from("payments")
+        .insert({
+          member_id: member.id,
+          charge_id: charge?.id || null,
+          amount,
+
+          payment_method: cardType
+            ? `Sola ${cardType}`
+            : "Card",
+
+          payment_provider: "sola",
+          external_payment_id: refNum,
+
+          payer_email:
+            paymentEmail || member.email || null,
+
+          status: "paid",
+
+          note: isRecurring
+            ? `Sola recurring automatic payment${
+                scheduleId ? ` ${scheduleId}` : ""
+              }`
+            : "Sola payment",
+
+          paid_at: paidAt,
+          receipt_number: receiptNumber,
+
+          sola_recurring_id: scheduleId || null,
+          sola_schedule_id: scheduleId || null,
+          sola_customer_id:
+            customerId ||
+            member.sola_customer_id ||
+            null,
+
+          sola_transaction_id:
+            recurringTransactionId || null,
+
+          recurring_payment: isRecurring,
+          webhook_received_at: new Date().toISOString(),
+          receipt_email_status: "pending",
+
+          raw_provider_response: sanitizedPayload,
+        })
+        .select("id")
+        .single();
+
+    if (paymentInsertError || !payment) {
       throw new Error(
-        `Unable to save payment: ${paymentInsertError.message}`
+        paymentInsertError?.message ||
+          "Unable to save payment."
       );
     }
 
@@ -471,14 +732,14 @@ export async function POST(request: NextRequest) {
         .update({
           status: "paid",
           paid_at: paidAt,
-          payment_method: paymentMethod
-            ? `Sola ${paymentMethod}`
-            : "Sola",
+          payment_method: cardType
+            ? `Sola ${cardType}`
+            : "Card",
           payment_provider: "sola",
           paid_amount: amount,
           external_payment_id: refNum,
-          payment_note: recurringId
-            ? `Automatic Sola payment ${recurringId}`
+          payment_note: isRecurring
+            ? `Automatic Sola payment ${scheduleId}`
             : "Paid through Sola",
         })
         .eq("id", charge.id);
@@ -490,18 +751,81 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let receiptGenerated = false;
+    let receiptErrorMessage: string | null = null;
+
+    try {
+      await createAndSendReceipt({
+        paymentId: payment.id,
+        emailOverride:
+          paymentEmail || member.email || undefined,
+      });
+
+      receiptGenerated = true;
+
+      await supabaseAdmin
+        .from("payments")
+        .update({
+          receipt_email_status: "sent",
+        })
+        .eq("id", payment.id);
+    } catch (receiptError) {
+      receiptErrorMessage =
+        receiptError instanceof Error
+          ? receiptError.message
+          : "Unable to generate or email receipt.";
+
+      console.error("SOLA_WEBHOOK_RECEIPT_ERROR", {
+        paymentId: payment.id,
+        memberId: member.id,
+        scheduleId,
+        error: receiptErrorMessage,
+      });
+
+      await supabaseAdmin
+        .from("payments")
+        .update({
+          receipt_email_status: "failed",
+        })
+        .eq("id", payment.id);
+    }
+
+    await writeSyncLog({
+      memberId: member.id,
+      scheduleId,
+      customerId:
+        customerId || member.sola_customer_id,
+      externalPaymentId: refNum,
+      eventType: isRecurring
+        ? "recurring_payment"
+        : "payment",
+      status: "recorded",
+      message: receiptGenerated
+        ? "Payment and receipt recorded."
+        : `Payment recorded; receipt issue: ${
+            receiptErrorMessage || "unknown"
+          }`,
+      payload: sanitizedPayload,
+    });
+
     console.log("SOLA_WEBHOOK_PAYMENT_RECORDED", {
       refNum,
-      memberId,
+      paymentId: payment.id,
+      memberId: member.id,
       chargeId: charge?.id || null,
       amount,
-      recurringId: recurringId || null,
+      scheduleId: scheduleId || null,
+      recurring: isRecurring,
+      receiptGenerated,
     });
 
     return NextResponse.json({
       received: true,
       approved: true,
       matched: true,
+      recurring: isRecurring,
+      paymentId: payment.id,
+      receiptGenerated,
     });
   } catch (error) {
     console.error("SOLA_WEBHOOK_ERROR", error);
