@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@/lib/supabaseServer";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { signOut } from "./member/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +53,7 @@ function isGoodParsha(value: string | null | undefined) {
 }
 
 async function getCurrentSchedule(): Promise<DaveningSchedule | null> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("davening_schedules")
     .select("title, weekday_shacharis, sunday_shacharis, mincha, maariv, notes")
     .eq("is_published", true)
@@ -69,7 +71,7 @@ async function getCurrentSchedule(): Promise<DaveningSchedule | null> {
 }
 
 async function getCurrentPdf(): Promise<SchedulePdf | null> {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("schedule_pdfs")
     .select(
       "title, parsha, file_url, effective_from, effective_to, friday_mincha, candle_lighting, friday_shkia, shabbos_shacharis, sof_zman_shema, shabbos_mincha, shabbos_shkia, shabbos_maariv, announcements, created_at"
@@ -92,14 +94,74 @@ async function getCurrentPdf(): Promise<SchedulePdf | null> {
   return rowWithRealParsha || data[0];
 }
 
-const quickLinks = [
-  { label: "Membership", href: "/membership" },
-  { label: "Donate", href: "/donate" },
-  { label: "Member Login", href: "/login" },
-  { label: "Full Schedule", href: "/davening-times" },
-];
-
 export default async function Home() {
+    const authSupabase = await createClient();
+
+  const {
+    data: { user },
+  } = await authSupabase.auth.getUser();
+
+  let portalRole: "member" | "admin" | null = null;
+  let memberAccountLinked = false;
+
+  if (user) {
+    const { data: member } = await supabaseAdmin
+      .from("members")
+      .select("id, portal_role, portal_status")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (member) {
+      memberAccountLinked = true;
+      portalRole =
+        member.portal_role === "admin" ? "admin" : "member";
+    }
+  }
+
+  const isLoggedIn = Boolean(user);
+  const isAdmin = portalRole === "admin";
+
+  const quickLinks = isLoggedIn
+    ? [
+        {
+          label: "Member Dashboard",
+          href: "/member/dashboard",
+        },
+        ...(isAdmin
+          ? [
+              {
+                label: "Admin Dashboard",
+                href: "/admin",
+              },
+              {
+                label: "Accounting Dashboard",
+                href: "/admin/accounting",
+              },
+            ]
+          : []),
+        {
+          label: "Full Schedule",
+          href: "/davening-times",
+        },
+      ]
+    : [
+        {
+          label: "Create Account",
+          href: "/membership",
+        },
+        {
+          label: "Member Login",
+          href: "/login",
+        },
+        {
+          label: "Donate",
+          href: "/donate",
+        },
+        {
+          label: "Full Schedule",
+          href: "/davening-times",
+        },
+      ];
   const schedule = await getCurrentSchedule();
   const weeklyPdf = await getCurrentPdf();
 
@@ -204,36 +266,84 @@ export default async function Home() {
             </div>
           </Link>
 
-          <nav className="flex flex-wrap gap-3 text-sm font-bold">
-            <Link
-              href="/davening-times"
-              className="rounded-full bg-[#1d2940] px-5 py-2.5 text-white transition hover:bg-[#10192b]"
-            >
-              Davening Times
-            </Link>
-            <Link
-              href="/membership"
-              className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
-            >
-              Membership
-            </Link>
-            <Link
-              href="/donate"
-              className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
-            >
-              Donate
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
-            >
-              <Link href="/admin/accounting">
-  Accountant Dashboard
-</Link>
+         <nav className="flex flex-wrap items-center gap-3 text-sm font-bold">
+  <Link
+    href="/davening-times"
+    className="rounded-full bg-[#1d2940] px-5 py-2.5 text-white transition hover:bg-[#10192b]"
+  >
+    Davening Times
+  </Link>
 
-              Login
-            </Link>
-          </nav>
+  <Link
+    href="/membership"
+    className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+  >
+    Membership
+  </Link>
+
+  <Link
+    href="/donate"
+    className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+  >
+    Donate
+  </Link>
+
+  {!isLoggedIn ? (
+    <>
+      <Link
+        href="/login"
+        className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+      >
+        Log In
+      </Link>
+
+      <Link
+        href="/membership"
+        className="rounded-full bg-[#8b6b2e] px-5 py-2.5 text-white transition hover:bg-[#745822]"
+      >
+        Create Account
+      </Link>
+    </>
+  ) : (
+    <>
+      {memberAccountLinked ? (
+        <Link
+          href="/member/dashboard"
+          className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+        >
+          Member Dashboard
+        </Link>
+      ) : null}
+
+      {isAdmin ? (
+        <>
+          <Link
+            href="/admin"
+            className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+          >
+            Admin Dashboard
+          </Link>
+
+          <Link
+            href="/admin/accounting"
+            className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 transition hover:bg-[#f2eadc]"
+          >
+            Accounting Dashboard
+          </Link>
+        </>
+      ) : null}
+
+      <form action={signOut}>
+        <button
+          type="submit"
+          className="rounded-full border border-red-200 bg-white px-5 py-2.5 text-red-700 transition hover:bg-red-50"
+        >
+          Sign Out
+        </button>
+      </form>
+    </>
+  )}
+</nav>
         </header>
 
         <section
@@ -274,15 +384,57 @@ export default async function Home() {
               </Link>
             </div>
 
-            <div className="mt-10 rounded-2xl bg-[#f8f4eb] p-5">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
-                Member Portal Coming
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                Members will soon be able to view dues, pledges, payments,
-                receipts, and family Mishaberach information.
-              </p>
-            </div>
+         <div className="mt-10 rounded-2xl bg-[#f8f4eb] p-5">
+  <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+    {isLoggedIn ? "Your Online Account" : "Member Portal"}
+  </p>
+
+  <p className="mt-2 text-sm leading-6 text-slate-700">
+    {isLoggedIn
+      ? isAdmin
+        ? "Access your member account, member administration, billing, and accounting tools."
+        : "View your membership dues, pledges, payments, receipts, and account information."
+      : "Log in to view dues, pledges, payments, receipts, and membership information."}
+  </p>
+
+  <div className="mt-4 flex flex-wrap gap-3">
+    {!isLoggedIn ? (
+      <>
+        <Link
+          href="/login"
+          className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+        >
+          Log In
+        </Link>
+
+        <Link
+          href="/membership"
+          className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
+        >
+          Create Account
+        </Link>
+      </>
+    ) : (
+      <>
+        <Link
+          href="/member/dashboard"
+          className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+        >
+          Member Dashboard
+        </Link>
+
+        {isAdmin ? (
+          <Link
+            href="/admin"
+            className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
+          >
+            Admin Dashboard
+          </Link>
+        ) : null}
+      </>
+    )}
+  </div>
+</div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               {quickLinks.map((item) => (
