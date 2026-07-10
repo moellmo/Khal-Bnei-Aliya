@@ -34,6 +34,16 @@ type Charge = {
   created_at: string | null;
 };
 
+type PaymentAttempt = {
+  id: string;
+  charge_id: string | null;
+  amount: number;
+  status: string;
+  failure_message: string | null;
+  attempted_at: string;
+  resolved_at: string | null;
+};
+
 type Payment = {
   id: string;
   charge_id: string | null;
@@ -212,6 +222,38 @@ portal_role
     console.error("Unable to load member payments:", paymentError.message);
   }
 
+  const { data: attemptData, error: attemptError } =
+  await supabaseAdmin
+    .from("payment_attempts")
+    .select(
+      `
+        id,
+        charge_id,
+        amount,
+        status,
+        failure_message,
+        attempted_at,
+        resolved_at
+      `
+    )
+    .eq("member_id", typedMember.id)
+    .eq("status", "failed")
+    .is("resolved_at", null)
+    .order("attempted_at", {
+      ascending: false,
+    })
+    .limit(1);
+
+if (attemptError) {
+  console.error(
+    "Unable to load failed payment attempts:",
+    attemptError.message
+  );
+}
+
+const latestFailedAttempt =
+  ((attemptData || []) as PaymentAttempt[])[0] || null;
+
   const openCharges = (chargeData || []) as Charge[];
   const payments = (paymentData || []) as Payment[];
 
@@ -299,6 +341,57 @@ portal_role
     </div>
   </div>
 </header>
+{latestFailedAttempt ? (
+  <section className="mt-6 rounded-[1.5rem] border border-red-200 bg-red-50 p-6 shadow-sm">
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-sm font-bold uppercase tracking-[0.15em] text-red-700">
+          Automatic Payment Failed
+        </p>
+
+        <h2 className="mt-2 text-2xl font-bold text-red-900">
+          We could not process your payment of{" "}
+          {formatMoney(latestFailedAttempt.amount)}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-red-800">
+          {latestFailedAttempt.failure_message ||
+            "The card issuer did not approve the transaction."}
+        </p>
+
+        <p className="mt-2 text-sm text-red-700">
+          Attempted{" "}
+          {formatDate(latestFailedAttempt.attempted_at)}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/member/autopay/update-card"
+          className="rounded-full border border-red-300 bg-white px-5 py-2.5 text-sm font-bold text-red-800 transition hover:bg-red-100"
+        >
+          Replace Saved Card
+        </Link>
+
+        {latestFailedAttempt.charge_id ? (
+          <a
+            href={`#charge-${latestFailedAttempt.charge_id}`}
+            className="rounded-full bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-800"
+          >
+            Pay Now
+          </a>
+        ) : (
+          <Link
+            href="/member/autopay"
+            className="rounded-full bg-red-700 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-800"
+          >
+            Manage Automatic Payments
+          </Link>
+        )}
+      </div>
+    </div>
+  </section>
+) : null}
 
         <section className="mt-6 grid gap-5 md:grid-cols-3">
           <div className="rounded-[1.5rem] bg-white p-6 shadow-sm">
@@ -418,7 +511,8 @@ portal_role
           <div className="mt-6 space-y-4">
             {membershipCharges.map((charge) => (
               <div
-                key={charge.id}
+  key={charge.id}
+  id={`charge-${charge.id}`}
                 className="flex flex-col gap-4 rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
@@ -466,7 +560,8 @@ portal_role
           <div className="mt-6 space-y-4">
             {otherCharges.map((charge) => (
               <div
-                key={charge.id}
+  key={charge.id}
+  id={`charge-${charge.id}`}
                 className="flex flex-col gap-4 rounded-2xl border border-[#e3d9c7] p-5 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>

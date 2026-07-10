@@ -368,15 +368,13 @@ async function findMatchingUnpaidCharge({
   const charges = (data || []) as ChargeRecord[];
 
   return (
-    charges.find(
-      (charge) =>
-        Math.abs(
-          Number(charge.amount || 0) - amount
-        ) < 0.01
-    ) ||
-    charges[0] ||
-    null
-  );
+  charges.find(
+    (charge) =>
+      Math.abs(
+        Number(charge.amount || 0) - amount
+      ) < 0.01
+  ) || null
+);
 }
 
 async function createHistoricalPaidCharge({
@@ -1094,92 +1092,119 @@ export async function POST(request: NextRequest) {
     }
 
     if (charge) {
-      const {
-        error: chargeUpdateError,
-      } = await supabaseAdmin
-        .from("member_charges")
-        .update({
-          status: "paid",
-          paid_at: paidAt,
+  const {
+    error: chargeUpdateError,
+  } = await supabaseAdmin
+    .from("member_charges")
+    .update({
+      status: "paid",
+      paid_at: paidAt,
 
-          payment_method: cardType
-            ? `Sola ${cardType}`
-            : "Card",
+      payment_method: cardType
+        ? `Sola ${cardType}`
+        : "Card",
 
-          payment_provider: "sola",
-          paid_amount: amount,
+      payment_provider: "sola",
+      paid_amount: amount,
 
-          external_payment_id:
-            refNum,
+      external_payment_id:
+        refNum,
 
-          payment_note: isRecurring
-            ? `Automatic Sola payment ${scheduleId}`
-            : "Paid through Sola",
-        })
-        .eq("id", charge.id);
+      payment_note: isRecurring
+        ? `Automatic Sola payment ${scheduleId}`
+        : "Paid through Sola",
+    })
+    .eq("id", charge.id);
 
-      if (chargeUpdateError) {
-        throw new Error(
-          `Payment saved but charge update failed: ${chargeUpdateError.message}`
-        );
-      }
-    }
+  if (chargeUpdateError) {
+    throw new Error(
+      `Payment saved but charge update failed: ${chargeUpdateError.message}`
+    );
+  }
+
+  /*
+   * Mark any earlier failed attempt for this charge as resolved
+   * now that the charge has been paid successfully.
+   */
+  const { error: resolveAttemptError } =
+    await supabaseAdmin
+      .from("payment_attempts")
+      .update({
+        status: "resolved",
+        resolved_at: paidAt,
+      })
+      .eq("member_id", member.id)
+      .eq("charge_id", charge.id)
+      .eq("status", "failed")
+      .is("resolved_at", null);
+
+  if (resolveAttemptError) {
+    console.error(
+      "PAYMENT_ATTEMPT_RESOLVE_ERROR",
+      resolveAttemptError.message
+    );
+  }
+}
 
     let receiptGenerated = false;
+let receiptErrorMessage: string | null = null;
 
-    let receiptErrorMessage:
-      | string
-      | null = null;
+try {
+  await createAndSendReceipt({
+    paymentId: payment.id,
+    emailOverride:
+      paymentEmail ||
+      member.email ||
+      undefined,
+  });
 
-    try {
-      await createAndSendReceipt({
-        paymentId: payment.id,
+  receiptGenerated = true;
 
-        emailOverride:
-          paymentEmail ||
-          member.email ||
-          undefined,
-      });
+  const { error: receiptStatusError } =
+    await supabaseAdmin
+      .from("payments")
+      .update({
+        receipt_email_status: "sent",
+      })
+      .eq("id", payment.id);
 
-      receiptGenerated = true;
-    } catch (receiptError) {
-      receiptErrorMessage =
-        receiptError instanceof Error
-          ? receiptError.message
-          : "Unable to generate or email receipt.";
+  if (receiptStatusError) {
+    console.error(
+      "RECEIPT_STATUS_UPDATE_ERROR",
+      receiptStatusError.message
+    );
+  }
+} catch (receiptError) {
+  receiptErrorMessage =
+    receiptError instanceof Error
+      ? receiptError.message
+      : "Unable to generate or email receipt.";
 
-      console.error(
-        "SOLA_WEBHOOK_RECEIPT_ERROR",
-        {
-          paymentId: payment.id,
-          memberId: member.id,
-          scheduleId,
-          error:
-            receiptErrorMessage,
-        }
-      );
-
-      /*
-       * createAndSendReceipt now saves the PDF
-       * before attempting email, so a mail error
-       * does not remove the downloadable receipt.
-       */
-      const { error: statusUpdateError } =
-        await supabaseAdmin
-          .from("payments")
-          .update({
-            receipt_email_status:
-              "failed",
-          })
-          .eq("id", payment.id);
-
-      if (statusUpdateError) {
-        console.error(
-          "RECEIPT_STATUS_UPDATE_ERROR",
-          statusUpdateError.message
-        );
-      }
+  console.error(
+    "SOLA_WEBHOOK_RECEIPT_ERROR",
+    {
+      paymentId: payment.id,
+      memberId: member.id,
+      scheduleId,
+      error: receiptErrorMessage,
     }
+  );
+
+  const { error: statusUpdateError } =
+    await supabaseAdmin
+      .from("payments")
+      .update({
+        receipt_email_status: "failed",
+      })
+      .eq("id", payment.id);
+
+  if (statusUpdateError) {
+    console.error(
+      "RECEIPT_STATUS_UPDATE_ERROR",
+      statusUpdateError.message
+    );
+  }
+}
 
     await writeSyncLog({
       memberId: member.id,
