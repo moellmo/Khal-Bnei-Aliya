@@ -106,6 +106,7 @@ export default function SolaCardPaymentForm({
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const walletsConfiguredRef = useRef(false);
+  const walletConfigureAttemptsRef = useRef(0);
   const walletKey = chargeId.replace(/[^a-zA-Z0-9]/g, "");
   const applePayContainerId = `ap-container-${walletKey}`;
   const googlePayIframeId = `igp-${walletKey}`;
@@ -118,6 +119,8 @@ export default function SolaCardPaymentForm({
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [applePayButtonReady, setApplePayButtonReady] = useState(false);
+  const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [googlePaySupported, setGooglePaySupported] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
   const [walletConfig, setWalletConfig] =
@@ -194,11 +197,30 @@ export default function SolaCardPaymentForm({
       return;
     }
 
+    const needsApplePay = applePayConfigured && isApplePaySupported();
+    const needsGooglePay = googlePayConfigured;
+    const applePayMissing = needsApplePay && !window.ckApplePay;
+    const googlePayMissing = needsGooglePay && !window.ckGooglePay;
+
+    if (applePayMissing || googlePayMissing) {
+      walletConfigureAttemptsRef.current += 1;
+
+      if (walletConfigureAttemptsRef.current <= 30) {
+        window.setTimeout(configureWallets, 150);
+      } else if (applePayMissing) {
+        setApplePayLoadFailed(true);
+      }
+
+      return;
+    }
+
     walletsConfiguredRef.current = true;
 
     window.memberWalletRequests ||= {};
 
-    if (applePayConfigured && window.ckApplePay && isApplePaySupported()) {
+    if (needsApplePay && window.ckApplePay) {
+      setApplePayLoadFailed(false);
+
       window.memberWalletRequests[requestName] = {
         buttonOptions: {
           buttonContainer: applePayContainerId,
@@ -259,8 +281,11 @@ export default function SolaCardPaymentForm({
 
           if (resp.status === window.iStatus?.success) {
             setMessage("");
+            setApplePayButtonReady(true);
+            setApplePayLoadFailed(false);
           } else if (resp.reason) {
             console.info("MEMBER_APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+            setApplePayLoadFailed(true);
           }
         },
         initAP() {
@@ -292,9 +317,17 @@ export default function SolaCardPaymentForm({
           initFunction: `memberWalletRequests.${requestName}.initAP`,
           amountField: `amount-${walletKey}`,
         });
+
+        window.setTimeout(() => {
+          const container = document.getElementById(applePayContainerId);
+
+          if (!container?.children.length) {
+            setApplePayLoadFailed(true);
+          }
+        }, 2500);
       } catch (error) {
         console.info("MEMBER_APPLE_PAY_NOT_ENABLED", error);
-        setApplePayAvailable(false);
+        setApplePayLoadFailed(true);
       }
     }
 
@@ -583,17 +616,29 @@ export default function SolaCardPaymentForm({
                   <div
                     id={applePayContainerId}
                     className={
-                      applePayAvailable
+                      applePayAvailable && !applePayLoadFailed
                         ? "min-h-[40px] min-w-[130px] flex-1"
                         : "hidden"
                     }
                   />
-                  {!applePayAvailable && (
+                  {(!applePayAvailable ||
+                    applePayLoadFailed ||
+                    !applePayButtonReady) && (
                     <button
                       type="button"
                       disabled
-                      className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
-                      title="Apple Pay is available only on supported Apple devices."
+                      className={
+                        applePayAvailable &&
+                        !applePayLoadFailed &&
+                        !applePayButtonReady
+                          ? "hidden"
+                          : "rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
+                      }
+                      title={
+                        applePayLoadFailed
+                          ? "Sola/Cardknox did not load the Apple Pay button. Use card payment while Apple Pay setup is checked."
+                          : "Apple Pay is available only on supported Apple devices."
+                      }
                     >
                       Apple Pay
                     </button>

@@ -95,6 +95,7 @@ export default function DonationForm() {
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const walletsConfiguredRef = useRef(false);
+  const walletConfigureAttemptsRef = useRef(0);
 
   const [amount, setAmount] = useState("18");
   const [scriptReady, setScriptReady] = useState(false);
@@ -104,6 +105,8 @@ export default function DonationForm() {
   const [success, setSuccess] = useState(false);
 
   const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [applePayButtonReady, setApplePayButtonReady] = useState(false);
+  const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
   const [googlePaySupported, setGooglePaySupported] = useState(false);
   const [walletConfig, setWalletConfig] =
@@ -183,9 +186,28 @@ export default function DonationForm() {
       return;
     }
 
+    const needsApplePay = applePayConfigured && isApplePaySupported();
+    const needsGooglePay = googlePayConfigured;
+    const applePayMissing = needsApplePay && !window.ckApplePay;
+    const googlePayMissing = needsGooglePay && !window.ckGooglePay;
+
+    if (applePayMissing || googlePayMissing) {
+      walletConfigureAttemptsRef.current += 1;
+
+      if (walletConfigureAttemptsRef.current <= 30) {
+        window.setTimeout(configureWallets, 150);
+      } else if (applePayMissing) {
+        setApplePayLoadFailed(true);
+      }
+
+      return;
+    }
+
     walletsConfiguredRef.current = true;
 
-    if (applePayConfigured && window.ckApplePay && isApplePaySupported()) {
+    if (needsApplePay && window.ckApplePay) {
+      setApplePayLoadFailed(false);
+
       window.apRequest = {
         buttonOptions: {
           buttonContainer: "ap-container",
@@ -247,8 +269,11 @@ export default function DonationForm() {
 
           if (resp.status === window.iStatus?.success) {
             setMessage("");
+            setApplePayButtonReady(true);
+            setApplePayLoadFailed(false);
           } else if (resp.reason) {
             console.info("APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+            setApplePayLoadFailed(true);
           }
         },
         initAP() {
@@ -276,9 +301,17 @@ export default function DonationForm() {
           initFunction: "apRequest.initAP",
           amountField: "amount",
         });
+
+        window.setTimeout(() => {
+          const container = document.getElementById("ap-container");
+
+          if (!container?.children.length) {
+            setApplePayLoadFailed(true);
+          }
+        }, 2500);
       } catch (error) {
         console.info("APPLE_PAY_NOT_ENABLED", error);
-        setApplePayAvailable(false);
+        setApplePayLoadFailed(true);
       }
     }
 
@@ -646,14 +679,30 @@ export default function DonationForm() {
               <>
                 <div
                   id="ap-container"
-                  className={applePayAvailable ? "min-h-[44px]" : "hidden"}
+                  className={
+                    applePayAvailable && !applePayLoadFailed
+                      ? "min-h-[44px]"
+                      : "hidden"
+                  }
                 />
-                {!applePayAvailable && (
+                {(!applePayAvailable ||
+                  applePayLoadFailed ||
+                  !applePayButtonReady) && (
                   <button
                     type="button"
                     disabled
-                    className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                    title="Apple Pay is available only on supported Apple devices."
+                    className={
+                      applePayAvailable &&
+                      !applePayLoadFailed &&
+                      !applePayButtonReady
+                        ? "hidden"
+                        : "w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
+                    }
+                    title={
+                      applePayLoadFailed
+                        ? "Sola/Cardknox did not load the Apple Pay button. Use card payment while Apple Pay setup is checked."
+                        : "Apple Pay is available only on supported Apple devices."
+                    }
                   >
                     Apple Pay
                   </button>
