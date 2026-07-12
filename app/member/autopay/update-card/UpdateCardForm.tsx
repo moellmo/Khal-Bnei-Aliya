@@ -96,7 +96,7 @@ export default function UpdateCardForm({
 
   useEffect(() => {
     if (window.setAccount) {
-      configureIFields();
+      window.setTimeout(configureIFields, 0);
     }
   }, []);
 

@@ -27,6 +27,7 @@ type Props = {
   amount: number;
   memberName: string;
   memberEmail: string;
+  allowOpenAmount?: boolean;
 };
 
 export default function SolaCardPaymentForm({
@@ -34,6 +35,7 @@ export default function SolaCardPaymentForm({
   amount,
   memberName,
   memberEmail,
+  allowOpenAmount = false,
 }: Props) {
   const router = useRouter();
   const cardTokenRef = useRef<HTMLInputElement>(null);
@@ -44,6 +46,12 @@ export default function SolaCardPaymentForm({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
+  const applePayAvailable =
+    typeof window !== "undefined" && Boolean(window.ApplePaySession);
+  const applePayConfigured =
+    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true";
+  const googlePayConfigured =
+    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
 
   const configureIFields = () => {
     const key = process.env.NEXT_PUBLIC_SOLA_IFIELDS_KEY;
@@ -75,7 +83,7 @@ export default function SolaCardPaymentForm({
 
   useEffect(() => {
     if (open && window.setAccount) {
-      configureIFields();
+      window.setTimeout(configureIFields, 0);
     }
   }, [open]);
 
@@ -101,6 +109,9 @@ export default function SolaCardPaymentForm({
         cardholderName: String(formData.get("cardholderName") || ""),
         billingZip: String(formData.get("billingZip") || ""),
         email: String(formData.get("email") || ""),
+        amount: allowOpenAmount
+          ? String(formData.get("amount") || "")
+          : undefined,
       }),
     });
 
@@ -170,7 +181,9 @@ export default function SolaCardPaymentForm({
           <div>
             <p className="text-sm font-bold text-slate-900">Card payment</p>
             <p className="mt-1 text-xs text-slate-500">
-              Securely charge this member&apos;s card for ${amount.toFixed(2)}.
+              {allowOpenAmount
+                ? "Enter the Matana amount before charging this card."
+                : `Securely charge this member's card for $${amount.toFixed(2)}.`}
             </p>
           </div>
 
@@ -188,18 +201,59 @@ export default function SolaCardPaymentForm({
             <div>
               <p className="text-sm font-bold text-slate-900">Charge card</p>
               <p className="mt-1 text-xs text-slate-500">
-                Amount: ${amount.toFixed(2)}
+                {allowOpenAmount
+                  ? "Amount: choose below"
+                  : `Amount: $${amount.toFixed(2)}`}
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="text-xs font-bold text-slate-500"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={!applePayAvailable || !applePayConfigured}
+                className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+                title={
+                  applePayConfigured
+                    ? "Apple Pay is available on supported Apple devices."
+                    : "Set up Sola/Cardknox Apple Pay merchant credentials before enabling."
+                }
+              >
+                Apple Pay
+              </button>
+
+              <button
+                type="button"
+                disabled={!googlePayConfigured}
+                className="rounded-full bg-[#1a73e8] px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+                title="Set up Sola/Cardknox Google Pay merchant credentials before enabling."
+              >
+                Google Pay
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-xs font-bold text-slate-500"
+              >
+                Close
+              </button>
+            </div>
           </div>
+
+          {allowOpenAmount && (
+            <label className="block space-y-1 text-xs font-bold text-slate-600">
+              Matana Amount
+              <input
+                name="amount"
+                type="number"
+                min="1"
+                step="0.01"
+                required
+                className="w-full rounded-lg border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                placeholder="Enter amount"
+              />
+            </label>
+          )}
 
           <label className="block space-y-1 text-xs font-bold text-slate-600">
             Cardholder Name
@@ -303,7 +357,11 @@ export default function SolaCardPaymentForm({
             disabled={submitting || !scriptReady}
             className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting ? "Processing…" : `Charge Card $${amount.toFixed(2)}`}
+            {submitting
+              ? "Processing…"
+              : allowOpenAmount
+                ? "Charge Matana"
+                : `Charge Card $${amount.toFixed(2)}`}
           </button>
         </form>
       )}

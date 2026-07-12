@@ -224,7 +224,7 @@ export default async function Home() {
               </p>
 
               <h1 className="mt-1 text-xl font-black tracking-tight sm:text-2xl md:text-3xl">
-                קהל בני עלייה
+                קהל בני עליה
               </h1>
 
               <p className="mt-1 hidden text-sm text-slate-600 sm:block">
@@ -448,29 +448,27 @@ export default async function Home() {
                   title="Khal Bnei Aliya Weekly Schedule"
                 />
 
-                <div className="p-7 text-center md:hidden">
-                  <img
-                    src={logoUrl}
-                    alt="Khal Bnei Aliya"
-                    className="mx-auto h-20 w-auto rounded-xl bg-white p-2 shadow-sm"
-                  />
-
-                  <h3 className="mt-5 text-xl font-black">
-                    {weeklyTitle}
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Open the schedule PDF for the
-                    clearest mobile view.
-                  </p>
-
+                <div className="md:hidden">
                   <a
                     href={weeklyPdfUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="mt-5 inline-flex rounded-full bg-[#8b6b2e] px-5 py-3 font-bold text-white"
+                    className="block"
+                    aria-label="Open weekly schedule PDF full size"
                   >
-                    View Weekly Schedule
+                    <div className="relative overflow-hidden bg-white">
+                      <iframe
+                        src={`${weeklyPdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                        className="pointer-events-none h-[520px] w-full bg-white"
+                        title="Khal Bnei Aliya Weekly Schedule Mobile Preview"
+                      />
+
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/65 to-transparent px-4 pb-4 pt-14 text-center">
+                        <span className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-bold text-[#1d2940] shadow-lg">
+                          Tap to open full size
+                        </span>
+                      </div>
+                    </div>
                   </a>
                 </div>
               </div>

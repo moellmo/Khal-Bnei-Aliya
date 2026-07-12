@@ -28,6 +28,16 @@ const adminLinks = [
     href: "/admin/mishaberach-cards",
   },
   {
+    label: "Seating Chart",
+    description: "Edit and print the Shabbos morning seating chart.",
+    href: "/admin/seating-chart",
+  },
+  {
+    label: "Ner Lamaor Signs",
+    description: "Edit and print monthly Ner Lamaor dedication signs.",
+    href: "/admin/ner-lamaor",
+  },
+  {
   label: "Recurring Schedules",
   description:
     "Link existing Sola schedules to members and review automatic-payment status.",

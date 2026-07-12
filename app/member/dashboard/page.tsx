@@ -84,6 +84,14 @@ function getChargeTitle(charge: Charge) {
   return charge.description || charge.charge_type || "Member charge";
 }
 
+function isOpenAmountCharge(charge: Charge) {
+  return (
+    Number(charge.amount || 0) <= 0 ||
+    charge.charge_type.toLowerCase() === "matana" ||
+    (charge.description || "").toLowerCase().includes("matana")
+  );
+}
+
 function getPaymentMethod(payment: Payment) {
   if (
     payment.payment_provider?.toLowerCase() === "sola" ||
@@ -527,7 +535,9 @@ const latestFailedAttempt =
 
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-xl font-bold">
-                    {formatMoney(charge.amount)}
+                    {isOpenAmountCharge(charge)
+                      ? "Choose amount"
+                      : formatMoney(charge.amount)}
                   </p>
 
                   <SolaMemberPaymentForm
@@ -535,7 +545,28 @@ const latestFailedAttempt =
   amount={Number(charge.amount || 0)}
   memberName={`${typedMember.first_name} ${typedMember.last_name}`}
   memberEmail={typedMember.email || ""}
+  allowOpenAmount={isOpenAmountCharge(charge)}
 />
+
+                  <details className="rounded-xl border border-[#e3d9c7] bg-white px-4 py-3 text-sm">
+                    <summary className="cursor-pointer font-bold text-[#8b6b2e]">
+                      Pay by Zelle
+                    </summary>
+                    <div className="mt-3 text-slate-600">
+                      <p>
+                        Send to{" "}
+                        <span className="font-bold text-slate-900">
+                          khalbneialiyah@gmail.com
+                        </span>
+                      </p>
+                      <p className="mt-1">
+                        Memo: KBA-{charge.id.slice(0, 8)}{" "}
+                        {isOpenAmountCharge(charge)
+                          ? "Matana"
+                          : formatMoney(charge.amount)}
+                      </p>
+                    </div>
+                  </details>
                 </div>
               </div>
             ))}
@@ -577,7 +608,9 @@ const latestFailedAttempt =
 
                 <div className="flex flex-wrap items-center gap-3">
                   <p className="text-xl font-bold">
-                    {formatMoney(charge.amount)}
+                    {isOpenAmountCharge(charge)
+                      ? "Choose amount"
+                      : formatMoney(charge.amount)}
                   </p>
 
                   <SolaMemberPaymentForm
@@ -585,7 +618,28 @@ const latestFailedAttempt =
   amount={Number(charge.amount || 0)}
   memberName={`${typedMember.first_name} ${typedMember.last_name}`}
   memberEmail={typedMember.email || ""}
+  allowOpenAmount={isOpenAmountCharge(charge)}
 />
+
+                  <details className="rounded-xl border border-[#e3d9c7] bg-white px-4 py-3 text-sm">
+                    <summary className="cursor-pointer font-bold text-[#8b6b2e]">
+                      Pay by Zelle
+                    </summary>
+                    <div className="mt-3 text-slate-600">
+                      <p>
+                        Send to{" "}
+                        <span className="font-bold text-slate-900">
+                          khalbneialiyah@gmail.com
+                        </span>
+                      </p>
+                      <p className="mt-1">
+                        Memo: KBA-{charge.id.slice(0, 8)}{" "}
+                        {isOpenAmountCharge(charge)
+                          ? "Matana"
+                          : formatMoney(charge.amount)}
+                      </p>
+                    </div>
+                  </details>
                 </div>
               </div>
             ))}

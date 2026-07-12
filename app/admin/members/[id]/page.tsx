@@ -143,6 +143,14 @@ function formatMoney(amount: number | null | undefined) {
   }).format(Number(amount || 0));
 }
 
+function isOpenAmountCharge(charge: Charge) {
+  return (
+    Number(charge.amount || 0) <= 0 ||
+    charge.charge_type.toLowerCase() === "matana" ||
+    (charge.description || "").toLowerCase().includes("matana")
+  );
+}
+
 function displayTribe(value: string | null | undefined) {
   return value || "Yisroel";
 }
@@ -213,7 +221,11 @@ function ChargeCard({ charge, member }: { charge: Charge; member: Member }) {
         </div>
 
         <div className="text-right">
-          <p className="font-black">{formatMoney(charge.amount)}</p>
+          <p className="font-black">
+            {isOpenAmountCharge(charge)
+              ? "Choose amount"
+              : formatMoney(charge.amount)}
+          </p>
           <p
             className={
               charge.status === "paid"
@@ -232,6 +244,7 @@ function ChargeCard({ charge, member }: { charge: Charge; member: Member }) {
           amount={Number(charge.amount || 0)}
           memberName={`${member.first_name} ${member.last_name}`}
           memberEmail={member.email || ""}
+          allowOpenAmount={isOpenAmountCharge(charge)}
         />
       )}
 
@@ -256,7 +269,9 @@ function ChargeCard({ charge, member }: { charge: Charge; member: Member }) {
                   type="number"
                   step="0.01"
                   min="0.01"
-                  defaultValue={charge.amount}
+                  defaultValue={
+                    isOpenAmountCharge(charge) ? "" : charge.amount
+                  }
                   className="w-full rounded-lg border border-[#d8cdb7] px-3 py-2 text-sm font-semibold text-slate-900"
                 />
               </label>
@@ -1087,6 +1102,7 @@ export default async function MemberDetailPage({
                 >
                   <option value="Membership Dues">Membership Dues</option>
                   <option value="Mishaberach">Mishaberach</option>
+                  <option value="Matana">Matana - member chooses amount</option>
                   <option value="Aliyah">Aliyah</option>
                   <option value="Donation">Donation</option>
                   <option value="Other">Other</option>
@@ -1128,6 +1144,23 @@ export default async function MemberDetailPage({
                   />
                 </label>
               </div>
+
+              <label className="flex items-start gap-3 rounded-2xl bg-[#fbf8f2] p-4 text-sm">
+                <input
+                  name="open_amount"
+                  type="checkbox"
+                  className="mt-1"
+                />
+                <span>
+                  <span className="block font-bold">
+                    Matana / open amount
+                  </span>
+                  <span className="text-slate-500">
+                    Send this as a request where the member chooses how much
+                    to pay.
+                  </span>
+                </span>
+              </label>
 
               <button
                 type="submit"

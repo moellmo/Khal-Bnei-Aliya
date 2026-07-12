@@ -14,6 +14,7 @@ type PaymentRequestBody = {
   cardholderName?: string;
   billingZip?: string;
   email?: string;
+  amount?: string | number;
 };
 
 type GatewayResponse = Record<string, unknown>;
@@ -167,6 +168,8 @@ export async function POST(request: NextRequest) {
       .trim()
       .toLowerCase();
 
+    const requestedAmount = Number(body.amount || 0);
+
     if (
       !chargeId ||
       !cardToken ||
@@ -233,12 +236,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const amount = Number(charge.amount || 0);
+    const storedAmount = Number(charge.amount || 0);
+    const isOpenAmountCharge =
+      storedAmount <= 0 ||
+      String(charge.charge_type || "").toLowerCase() === "matana" ||
+      String(charge.description || "")
+        .toLowerCase()
+        .includes("matana");
+
+    const amount = isOpenAmountCharge ? requestedAmount : storedAmount;
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json(
         {
-          error: "This charge has an invalid amount.",
+          error: isOpenAmountCharge
+            ? "Enter a Matana amount greater than $0."
+            : "This charge has an invalid amount.",
         },
         {
           status: 400,
@@ -417,9 +430,12 @@ export async function POST(request: NextRequest) {
           paid_at: paidAt,
           payment_method: "Card",
           payment_provider: "sola",
+          amount,
           paid_amount: amount,
           external_payment_id: reference,
-          payment_note: "Paid through member portal",
+          payment_note: isOpenAmountCharge
+            ? "Matana amount chosen at payment"
+            : "Paid through member portal",
         })
         .eq("id", charge.id)
         .eq("member_id", member.id)

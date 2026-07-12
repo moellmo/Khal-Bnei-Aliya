@@ -30,3 +30,14 @@ body {
   background: #f7f3ea;
   color: #0f172a;
 }
+
+@media print {
+  body {
+    background: #ffffff;
+  }
+
+  main {
+    min-height: auto !important;
+    background: #ffffff !important;
+  }
+}

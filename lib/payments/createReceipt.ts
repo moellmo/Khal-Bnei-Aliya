@@ -427,7 +427,10 @@ export async function createAndSendReceipt({
     "";
 
   const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RECEIPT_FROM_EMAIL;
+  const fromEmail =
+    process.env.RECEIPT_FROM_EMAIL ||
+    process.env.PAYMENT_ALERT_FROM_EMAIL ||
+    process.env.MEMBERSHIP_FROM_EMAIL;
 
   let emailedAt: string | null = null;
   let emailStatus = "not_sent";
@@ -443,7 +446,7 @@ export async function createAndSendReceipt({
 
     emailErrorMessage = !resendApiKey
       ? "RESEND_API_KEY is missing."
-      : "RECEIPT_FROM_EMAIL is missing.";
+      : "No receipt sender email is configured.";
 
     console.warn("RECEIPT_EMAIL_NOT_CONFIGURED", {
       paymentId: payment.id,

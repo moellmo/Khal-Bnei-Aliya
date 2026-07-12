@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { addExpense, addZellePayment } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,30 @@ type PageProps = {
   searchParams?: Promise<{
     month?: string;
     year?: string;
-    status?: string;
+  status?: string;
+    accountingError?: string;
+    expenseAdded?: string;
+    zelleAdded?: string;
   }>;
+};
+
+type Expense = {
+  id: string;
+  vendor: string;
+  category: string | null;
+  amount: number;
+  expense_date: string | null;
+  receipt_url: string | null;
+};
+
+type ZellePayment = {
+  id: string;
+  payer_name: string;
+  payer_email: string | null;
+  amount: number;
+  received_date: string | null;
+  purpose: string | null;
+  status: string | null;
 };
 
 function formatMoney(amount: number | null | undefined) {
@@ -118,6 +141,54 @@ async function getAccountingRows(
   }));
 }
 
+async function getExpenses(): Promise<{
+  rows: Expense[];
+  error: string | null;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from("accounting_expenses")
+    .select("id, vendor, category, amount, expense_date, receipt_url")
+    .order("expense_date", { ascending: false })
+    .limit(10);
+
+  if (error) {
+    return {
+      rows: [],
+      error: error.message,
+    };
+  }
+
+  return {
+    rows: (data || []) as Expense[],
+    error: null,
+  };
+}
+
+async function getZellePayments(): Promise<{
+  rows: ZellePayment[];
+  error: string | null;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from("zelle_payments")
+    .select(
+      "id, payer_name, payer_email, amount, received_date, purpose, status"
+    )
+    .order("received_date", { ascending: false })
+    .limit(10);
+
+  if (error) {
+    return {
+      rows: [],
+      error: error.message,
+    };
+  }
+
+  return {
+    rows: (data || []) as ZellePayment[],
+    error: null,
+  };
+}
+
 export default async function AccountingPage({
   searchParams,
 }: PageProps) {
@@ -141,7 +212,11 @@ export default async function AccountingPage({
 
   const selectedStatus = query?.status || "all";
 
-  const rows = await getAccountingRows(selectedMonth, selectedYear);
+  const [rows, expensesResult, zelleResult] = await Promise.all([
+    getAccountingRows(selectedMonth, selectedYear),
+    getExpenses(),
+    getZellePayments(),
+  ]);
 
   const billedRows = rows.filter((row) => Boolean(row.charge));
 
@@ -194,6 +269,25 @@ export default async function AccountingPage({
   const outstandingTotal = unpaidRows.reduce(
     (sum, row) => sum + Number(row.charge?.amount || 0),
     0
+  );
+
+  const expenseTotal = expensesResult.rows.reduce(
+    (sum, expense) => sum + Number(expense.amount || 0),
+    0
+  );
+
+  const zelleTotal = zelleResult.rows.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
+  const graphMax = Math.max(
+    billedTotal,
+    paidTotal,
+    outstandingTotal,
+    expenseTotal,
+    zelleTotal,
+    1
   );
 
   return (
@@ -274,6 +368,220 @@ export default async function AccountingPage({
               </p>
             </div>
           </div>
+        </div>
+
+        {query?.accountingError && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
+            {query.accountingError}
+          </div>
+        )}
+
+        {(query?.expenseAdded === "1" || query?.zelleAdded === "1") && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Accounting entry saved.
+          </div>
+        )}
+
+        <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Cash Flow Snapshot</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Billing, collected payments, expenses, and Zelle entries.
+              </p>
+            </div>
+
+            {(expensesResult.error || zelleResult.error) && (
+              <p className="max-w-xl rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+                Supabase setup needed for full accounting:
+                {expensesResult.error ? " accounting_expenses" : ""}
+                {expensesResult.error && zelleResult.error ? " and" : ""}
+                {zelleResult.error ? " zelle_payments" : ""}.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-5">
+            {[
+              ["Billed", billedTotal, "bg-[#1d2940]"],
+              ["Paid", paidTotal, "bg-green-600"],
+              ["Outstanding", outstandingTotal, "bg-[#8b6b2e]"],
+              ["Expenses", expenseTotal, "bg-red-600"],
+              ["Zelle", zelleTotal, "bg-blue-600"],
+            ].map(([label, value, color]) => (
+              <div key={String(label)} className="rounded-2xl bg-[#fbf8f2] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  {label}
+                </p>
+                <p className="mt-2 text-xl font-black">
+                  {formatMoney(Number(value))}
+                </p>
+                <div className="mt-3 h-2 rounded-full bg-slate-200">
+                  <div
+                    className={`h-2 rounded-full ${color}`}
+                    style={{
+                      width: `${Math.max(
+                        4,
+                        (Number(value) / graphMax) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <form
+            action={addExpense}
+            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+          >
+            <h2 className="text-2xl font-bold">Add Expense</h2>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="font-semibold">Vendor</span>
+                <input
+                  name="vendor"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Category</span>
+                <input
+                  name="category"
+                  placeholder="Rent, Kiddush, Utilities..."
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Amount</span>
+                <input
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Date</span>
+                <input
+                  name="expense_date"
+                  type="date"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Receipt URL</span>
+              <input
+                name="receipt_url"
+                placeholder="Paste uploaded receipt link"
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Note</span>
+              <textarea
+                name="note"
+                rows={3}
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-5 rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+            >
+              Save Expense
+            </button>
+          </form>
+
+          <form
+            action={addZellePayment}
+            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+          >
+            <h2 className="text-2xl font-bold">Bring In Zelle Payment</h2>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="font-semibold">Payer Name</span>
+                <input
+                  name="payer_name"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Payer Email</span>
+                <input
+                  name="payer_email"
+                  type="email"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Amount</span>
+                <input
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Received Date</span>
+                <input
+                  name="received_date"
+                  type="date"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Purpose</span>
+              <input
+                name="purpose"
+                placeholder="Dues, donation, Mishaberach..."
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Memo</span>
+              <textarea
+                name="note"
+                rows={3}
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-5 rounded-full bg-[#8b6b2e] px-6 py-3 font-bold text-white"
+            >
+              Save Zelle Payment
+            </button>
+          </form>
         </div>
 
         <form

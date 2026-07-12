@@ -153,22 +153,27 @@ export async function toggleFamilyMemberOnCard(
 
 export async function addCharge(memberId: string, formData: FormData) {
   const amount = getNumber(formData, "amount");
-
-  if (amount <= 0) {
-    throw new Error("Amount must be greater than 0.");
-  }
-
   const dueDate = getString(formData, "due_date");
   const chargeType = getString(formData, "charge_type") || "Other";
   const description = getString(formData, "description") || null;
+  const isOpenAmount =
+    formData.get("open_amount") === "on" ||
+    chargeType.toLowerCase() === "matana";
+
+  if (!isOpenAmount && amount <= 0) {
+    throw new Error("Amount must be greater than 0.");
+  }
 
   const { error } = await supabaseAdmin.from("member_charges").insert({
     member_id: memberId,
     charge_type: chargeType,
     description,
-    amount,
+    amount: isOpenAmount ? 0 : amount,
     status: "unpaid",
     due_date: dueDate || null,
+    payment_note: isOpenAmount
+      ? "Open amount: member chooses amount when paying"
+      : null,
   });
 
   if (error) {
