@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendMishaberachUpdateEmail } from "@/lib/members/sendMishaberachUpdateEmail";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -23,7 +24,7 @@ async function getSignedInMember() {
 
   const { data: member, error: memberError } = await supabaseAdmin
     .from("members")
-    .select("id, portal_status")
+    .select("id, first_name, last_name, email, portal_status")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
@@ -40,6 +41,16 @@ async function getSignedInMember() {
   }
 
   return member;
+}
+
+function getMemberName(member: {
+  first_name?: string | null;
+  last_name?: string | null;
+}) {
+  return [member.first_name, member.last_name]
+    .filter(Boolean)
+    .join(" ")
+    .trim() || "Member";
 }
 
 function refreshMishaberachPages() {
@@ -63,6 +74,14 @@ export async function updateMainMishaberach(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await sendMishaberachUpdateEmail({
+    memberId: member.id,
+    memberName: getMemberName(member),
+    memberEmail: member.email,
+    changeType: "Main card information updated",
+    details: "The member updated their Hebrew name or Kohen / Levi / Yisroel status.",
+  });
 
   refreshMishaberachPages();
 
@@ -94,6 +113,14 @@ export async function addFamilyMember(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await sendMishaberachUpdateEmail({
+    memberId: member.id,
+    memberName: getMemberName(member),
+    memberEmail: member.email,
+    changeType: "Family member added",
+    details: firstName,
+  });
 
   refreshMishaberachPages();
 
@@ -130,6 +157,14 @@ export async function updateFamilyMember(
     throw new Error(error.message);
   }
 
+  await sendMishaberachUpdateEmail({
+    memberId: member.id,
+    memberName: getMemberName(member),
+    memberEmail: member.email,
+    changeType: "Family member updated",
+    details: firstName,
+  });
+
   refreshMishaberachPages();
 
   redirect("/member/mishaberach?familyUpdated=1");
@@ -147,6 +182,13 @@ export async function deleteFamilyMember(familyMemberId: string) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await sendMishaberachUpdateEmail({
+    memberId: member.id,
+    memberName: getMemberName(member),
+    memberEmail: member.email,
+    changeType: "Family member removed",
+  });
 
   refreshMishaberachPages();
 
@@ -170,6 +212,15 @@ export async function toggleFamilyMemberOnCard(
   if (error) {
     throw new Error(error.message);
   }
+
+  await sendMishaberachUpdateEmail({
+    memberId: member.id,
+    memberName: getMemberName(member),
+    memberEmail: member.email,
+    changeType: showOnCard
+      ? "Family member shown on card"
+      : "Family member hidden from card",
+  });
 
   refreshMishaberachPages();
 
