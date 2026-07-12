@@ -30,11 +30,11 @@ declare global {
       canMakePayments?: () => boolean;
     };
     ckApplePay?: {
-      enableApplePay: (params: Record<string, unknown>) => void;
+      enableApplePay: (params: Record<string, unknown>) => unknown;
       updateAmount?: (amount: string) => void;
     };
     ckGooglePay?: {
-      enableGooglePay: (params: Record<string, unknown>) => void;
+      enableGooglePay: (params: Record<string, unknown>) => unknown;
       updateAmount?: (amount: string) => void;
     };
     APButtonColor?: Record<string, string>;
@@ -80,6 +80,10 @@ function isApplePaySupported() {
 }
 
 function isGooglePaySupportedBrowser() {
+  if (window.ApplePaySession) {
+    return false;
+  }
+
   const userAgent = window.navigator.userAgent;
   const vendor = window.navigator.vendor;
   const isSafari =
@@ -88,6 +92,24 @@ function isGooglePaySupportedBrowser() {
     !/Chrome|CriOS|FxiOS|Edg/i.test(userAgent);
 
   return !isSafari;
+}
+
+function isSolaWalletRequestError(reason: unknown) {
+  return String(reason).includes("defPaymentRequest");
+}
+
+function catchSolaWalletPromise(
+  result: unknown,
+  onError: (error: unknown) => void
+) {
+  if (
+    result &&
+    typeof result === "object" &&
+    "then" in result &&
+    typeof (result as Promise<unknown>).then === "function"
+  ) {
+    void (result as Promise<unknown>).catch(onError);
+  }
 }
 
 export default function DonationForm() {
@@ -297,9 +319,14 @@ export default function DonationForm() {
       };
 
       try {
-        window.ckApplePay.enableApplePay({
+        const applePayResult = window.ckApplePay.enableApplePay({
           initFunction: "apRequest.initAP",
           amountField: "amount",
+        });
+
+        catchSolaWalletPromise(applePayResult, (error) => {
+          console.info("APPLE_PAY_NOT_ENABLED_ASYNC", error);
+          setApplePayLoadFailed(true);
         });
 
         window.setTimeout(() => {
@@ -409,6 +436,19 @@ export default function DonationForm() {
   }
 
   useEffect(() => {
+    const handleWalletRejection = (event: PromiseRejectionEvent) => {
+      if (!isSolaWalletRequestError(event.reason)) {
+        return;
+      }
+
+      event.preventDefault();
+      console.info("SOLA_WALLET_REQUEST_NOT_AVAILABLE", event.reason);
+      setGooglePayReady(false);
+      setGooglePaySupported(false);
+    };
+
+    window.addEventListener("unhandledrejection", handleWalletRejection);
+
     fetch("/api/sola/wallet-config", {
       cache: "no-store",
     })
@@ -442,6 +482,10 @@ export default function DonationForm() {
     if (window.setAccount) {
       window.setTimeout(configureIFields, 0);
     }
+
+    return () => {
+      window.removeEventListener("unhandledrejection", handleWalletRejection);
+    };
   }, []);
 
   useEffect(() => {
@@ -457,13 +501,20 @@ export default function DonationForm() {
 
     window.setTimeout(() => {
       try {
-        window.ckGooglePay?.enableGooglePay({
+        const googlePayResult = window.ckGooglePay?.enableGooglePay({
           amountField: "amount",
           iframeField: "igp",
+        });
+
+        catchSolaWalletPromise(googlePayResult, (error) => {
+          console.info("GOOGLE_PAY_NOT_ENABLED_ASYNC", error);
+          setGooglePayReady(false);
+          setGooglePaySupported(false);
         });
       } catch (error) {
         console.info("GOOGLE_PAY_NOT_ENABLED", error);
         setGooglePayReady(false);
+        setGooglePaySupported(false);
       }
     }, 0);
   }, [googlePayReady]);
