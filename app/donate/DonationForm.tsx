@@ -129,6 +129,7 @@ export default function DonationForm() {
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [applePayButtonReady, setApplePayButtonReady] = useState(false);
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
+  const [applePayFailureReason, setApplePayFailureReason] = useState("");
   const [googlePayReady, setGooglePayReady] = useState(false);
   const [googlePaySupported, setGooglePaySupported] = useState(false);
   const [walletConfig, setWalletConfig] =
@@ -228,6 +229,7 @@ export default function DonationForm() {
 
     if (needsApplePay && window.ckApplePay) {
       setApplePayLoadFailed(false);
+      setApplePayFailureReason("");
 
       window.apRequest = {
         buttonOptions: {
@@ -292,9 +294,11 @@ export default function DonationForm() {
             setMessage("");
             setApplePayButtonReady(true);
             setApplePayLoadFailed(false);
+            setApplePayFailureReason("");
           } else if (resp.reason) {
             console.info("APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
             setApplePayLoadFailed(true);
+            setApplePayFailureReason(String(resp.reason));
           }
         },
         initAP() {
@@ -326,18 +330,12 @@ export default function DonationForm() {
         catchSolaWalletPromise(applePayResult, (error) => {
           console.info("APPLE_PAY_NOT_ENABLED_ASYNC", error);
           setApplePayLoadFailed(true);
+          setApplePayFailureReason(String(error));
         });
-
-        window.setTimeout(() => {
-          const container = document.getElementById("ap-container");
-
-          if (!container?.children.length) {
-            setApplePayLoadFailed(true);
-          }
-        }, 2500);
       } catch (error) {
         console.info("APPLE_PAY_NOT_ENABLED", error);
         setApplePayLoadFailed(true);
+        setApplePayFailureReason(String(error));
       }
     }
 
@@ -730,32 +728,33 @@ export default function DonationForm() {
                 <div
                   id="ap-container"
                   className={
-                    applePayAvailable && !applePayLoadFailed
+                    applePayAvailable
                       ? "min-h-[44px]"
                       : "hidden"
                   }
                 />
-                {(!applePayAvailable ||
-                  applePayLoadFailed ||
-                  !applePayButtonReady) && (
+                {!applePayAvailable && (
                   <button
                     type="button"
                     disabled
-                    className={
-                      applePayAvailable &&
-                      !applePayLoadFailed &&
-                      !applePayButtonReady
-                        ? "hidden"
-                        : "w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                    }
-                    title={
-                      applePayLoadFailed
-                        ? "Sola/Cardknox did not load the Apple Pay button. Use card payment while Apple Pay setup is checked."
-                        : "Apple Pay is available only on supported Apple devices."
-                    }
+                    className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
+                    title="Apple Pay is available only on supported Apple devices."
                   >
                     Apple Pay
                   </button>
+                )}
+                {applePayAvailable &&
+                  !applePayButtonReady &&
+                  !applePayLoadFailed && (
+                    <p className="text-xs font-semibold text-slate-500">
+                      Loading Apple Pay through Sola...
+                    </p>
+                  )}
+                {applePayLoadFailed && (
+                  <p className="rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">
+                    Apple Pay unavailable:{" "}
+                    {applePayFailureReason || "Sola did not load the button."}
+                  </p>
                 )}
               </>
             ) : (

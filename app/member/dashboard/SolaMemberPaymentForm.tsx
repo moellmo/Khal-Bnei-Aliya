@@ -143,6 +143,7 @@ export default function SolaCardPaymentForm({
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [applePayButtonReady, setApplePayButtonReady] = useState(false);
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
+  const [applePayFailureReason, setApplePayFailureReason] = useState("");
   const [googlePaySupported, setGooglePaySupported] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
   const [walletConfig, setWalletConfig] =
@@ -241,6 +242,7 @@ export default function SolaCardPaymentForm({
 
     if (needsApplePay && window.ckApplePay) {
       setApplePayLoadFailed(false);
+      setApplePayFailureReason("");
 
       window.memberWalletRequests[requestName] = {
         buttonOptions: {
@@ -304,9 +306,11 @@ export default function SolaCardPaymentForm({
             setMessage("");
             setApplePayButtonReady(true);
             setApplePayLoadFailed(false);
+            setApplePayFailureReason("");
           } else if (resp.reason) {
             console.info("MEMBER_APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
             setApplePayLoadFailed(true);
+            setApplePayFailureReason(String(resp.reason));
           }
         },
         initAP() {
@@ -343,18 +347,12 @@ export default function SolaCardPaymentForm({
         catchSolaWalletPromise(applePayResult, (error) => {
           console.info("MEMBER_APPLE_PAY_NOT_ENABLED_ASYNC", error);
           setApplePayLoadFailed(true);
+          setApplePayFailureReason(String(error));
         });
-
-        window.setTimeout(() => {
-          const container = document.getElementById(applePayContainerId);
-
-          if (!container?.children.length) {
-            setApplePayLoadFailed(true);
-          }
-        }, 2500);
       } catch (error) {
         console.info("MEMBER_APPLE_PAY_NOT_ENABLED", error);
         setApplePayLoadFailed(true);
+        setApplePayFailureReason(String(error));
       }
     }
 
@@ -667,32 +665,34 @@ export default function SolaCardPaymentForm({
                   <div
                     id={applePayContainerId}
                     className={
-                      applePayAvailable && !applePayLoadFailed
+                      applePayAvailable
                         ? "min-h-[40px] min-w-[130px] flex-1"
                         : "hidden"
                     }
                   />
-                  {(!applePayAvailable ||
-                    applePayLoadFailed ||
-                    !applePayButtonReady) && (
+                  {!applePayAvailable && (
                     <button
                       type="button"
                       disabled
-                      className={
-                        applePayAvailable &&
-                        !applePayLoadFailed &&
-                        !applePayButtonReady
-                          ? "hidden"
-                          : "rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
-                      }
-                      title={
-                        applePayLoadFailed
-                          ? "Sola/Cardknox did not load the Apple Pay button. Use card payment while Apple Pay setup is checked."
-                          : "Apple Pay is available only on supported Apple devices."
-                      }
+                      className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
+                      title="Apple Pay is available only on supported Apple devices."
                     >
                       Apple Pay
                     </button>
+                  )}
+                  {applePayAvailable &&
+                    !applePayButtonReady &&
+                    !applePayLoadFailed && (
+                      <p className="text-xs font-semibold text-slate-500">
+                        Loading Apple Pay...
+                      </p>
+                    )}
+                  {applePayLoadFailed && (
+                    <p className="basis-full rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">
+                      Apple Pay unavailable:{" "}
+                      {applePayFailureReason ||
+                        "Sola did not load the button."}
+                    </p>
                   )}
                 </>
               ) : (
