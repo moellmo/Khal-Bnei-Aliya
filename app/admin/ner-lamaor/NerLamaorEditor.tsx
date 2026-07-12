@@ -15,6 +15,10 @@ export default function NerLamaorEditor() {
   const [nameSize, setNameSize] = useState(56);
   const [honorTitleSize, setHonorTitleSize] = useState(24);
   const [honorLineSize, setHonorLineSize] = useState(22);
+  const [monthTop, setMonthTop] = useState(48.6);
+  const [nameTop, setNameTop] = useState(63.55);
+  const [honorTitleTop, setHonorTitleTop] = useState(77.4);
+  const [honorLineTop, setHonorLineTop] = useState(82.2);
   const sizeControls: Array<[
     string,
     number,
@@ -26,6 +30,18 @@ export default function NerLamaorEditor() {
     ["Name Size", nameSize, setNameSize, 24, 76],
     ["Honor Label Size", honorTitleSize, setHonorTitleSize, 14, 34],
     ["Honor Line Size", honorLineSize, setHonorLineSize, 12, 32],
+  ];
+  const positionControls: Array<[
+    string,
+    number,
+    Dispatch<SetStateAction<number>>,
+    number,
+    number,
+  ]> = [
+    ["Month Height", monthTop, setMonthTop, 43, 54],
+    ["Name Height", nameTop, setNameTop, 58, 70],
+    ["Honor Label Height", honorTitleTop, setHonorTitleTop, 72, 82],
+    ["Honor Line Height", honorLineTop, setHonorLineTop, 77, 88],
   ];
 
   useEffect(() => {
@@ -113,6 +129,9 @@ export default function NerLamaorEditor() {
         </label>
 
         <div className="mt-5 grid gap-4">
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">
+            Text Size
+          </p>
           {sizeControls.map(([label, value, setter, min, max]) => (
             <label key={String(label)} className="space-y-2">
               <span className="text-sm font-semibold">
@@ -122,6 +141,30 @@ export default function NerLamaorEditor() {
                 type="range"
                 min={Number(min)}
                 max={Number(max)}
+                value={Number(value)}
+                onChange={(event) =>
+                  setter(Number(event.currentTarget.value))
+                }
+                className="w-full"
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-4 border-t border-[#eadfce] pt-5">
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-500">
+            Text Height
+          </p>
+          {positionControls.map(([label, value, setter, min, max]) => (
+            <label key={String(label)} className="space-y-2">
+              <span className="text-sm font-semibold">
+                {label}: {value.toFixed(1)}%
+              </span>
+              <input
+                type="range"
+                min={Number(min)}
+                max={Number(max)}
+                step="0.1"
                 value={Number(value)}
                 onChange={(event) =>
                   setter(Number(event.currentTarget.value))
@@ -167,8 +210,9 @@ export default function NerLamaorEditor() {
             <>
               <div
                 dir="rtl"
-                className="absolute left-[50%] top-[48.6%] w-[26%] -translate-x-1/2 -translate-y-1/2 text-center font-black leading-none text-black"
+                className="absolute left-[50%] w-[26%] -translate-x-1/2 -translate-y-1/2 text-center font-black leading-none text-black"
                 style={{
+                  top: `${monthTop}%`,
                   fontSize: `${monthSize}px`,
                   textShadow: "0 2px 3px rgba(0,0,0,0.22)",
                 }}
@@ -177,22 +221,28 @@ export default function NerLamaorEditor() {
               </div>
 
               <div
-                className="absolute left-1/2 top-[63.55%] flex h-[11%] w-[56%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden px-[2%] text-center font-black leading-none text-black"
-                style={{ fontSize: `${nameSize}px` }}
+                className="absolute left-1/2 flex h-[11%] w-[56%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden px-[2%] text-center font-black leading-none text-black"
+                style={{ top: `${nameTop}%`, fontSize: `${nameSize}px` }}
               >
                 {name || "Sponsor Name"}
               </div>
 
               <div
-                className="absolute left-1/2 top-[77.4%] w-[62%] -translate-x-1/2 -translate-y-1/2 overflow-hidden text-center font-black leading-tight text-black"
-                style={{ fontSize: `${honorTitleSize}px` }}
+                className="absolute left-1/2 w-[62%] -translate-x-1/2 -translate-y-1/2 overflow-hidden text-center font-black leading-tight text-black"
+                style={{
+                  top: `${honorTitleTop}%`,
+                  fontSize: `${honorTitleSize}px`,
+                }}
               >
                 {honorTitle}
               </div>
 
               <div
-                className="absolute left-1/2 top-[82.2%] w-[66%] -translate-x-1/2 -translate-y-1/2 overflow-hidden text-center font-medium leading-tight text-black"
-                style={{ fontSize: `${honorLineSize}px` }}
+                className="absolute left-1/2 w-[66%] -translate-x-1/2 -translate-y-1/2 overflow-hidden text-center font-medium leading-tight text-black"
+                style={{
+                  top: `${honorLineTop}%`,
+                  fontSize: `${honorLineSize}px`,
+                }}
               >
                 {honorLine || "Dedication line"}
               </div>
