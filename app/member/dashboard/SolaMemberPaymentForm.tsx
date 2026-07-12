@@ -22,6 +22,20 @@ declare global {
     ApplePaySession?: {
       canMakePayments?: () => boolean;
     };
+    ckApplePay?: {
+      enableApplePay: (params: Record<string, unknown>) => void;
+      updateAmount?: (amount: string) => void;
+    };
+    ckGooglePay?: {
+      enableGooglePay: (params: Record<string, unknown>) => void;
+      updateAmount?: (amount: string) => void;
+    };
+    APButtonColor?: Record<string, string>;
+    APButtonType?: Record<string, string>;
+    GPButtonSizeMode?: Record<string, string>;
+    GPBillingAddressFormat?: Record<string, string>;
+    iStatus?: Record<string, string>;
+    memberWalletRequests?: Record<string, Record<string, unknown>>;
   }
 }
 
@@ -33,6 +47,53 @@ type Props = {
   allowOpenAmount?: boolean;
 };
 
+type PaymentResult = {
+  approved?: boolean;
+  receiptGenerated?: boolean;
+  error?: string;
+};
+
+type WalletConfig = {
+  loaded: boolean;
+  applePayEnabled: boolean;
+  applePayMerchantId: string;
+  applePayDebug: boolean;
+  googlePayEnabled: boolean;
+  googlePayMerchantName: string;
+  googlePayEnvironment: string;
+};
+
+const initialWalletConfig: WalletConfig = {
+  loaded: false,
+  applePayEnabled: false,
+  applePayMerchantId: "",
+  applePayDebug: false,
+  googlePayEnabled: false,
+  googlePayMerchantName: "Khal Bnei Aliya",
+  googlePayEnvironment: "PRODUCTION",
+};
+
+function isApplePaySupported() {
+  const applePaySession = window.ApplePaySession;
+
+  return Boolean(
+    applePaySession &&
+      (typeof applePaySession.canMakePayments !== "function" ||
+        applePaySession.canMakePayments())
+  );
+}
+
+function isGooglePaySupportedBrowser() {
+  const userAgent = window.navigator.userAgent;
+  const vendor = window.navigator.vendor;
+  const isSafari =
+    /Safari/i.test(userAgent) &&
+    /Apple Computer/i.test(vendor) &&
+    !/Chrome|CriOS|FxiOS|Edg/i.test(userAgent);
+
+  return !isSafari;
+}
+
 export default function SolaCardPaymentForm({
   chargeId,
   amount,
@@ -43,18 +104,263 @@ export default function SolaCardPaymentForm({
   const router = useRouter();
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const walletsConfiguredRef = useRef(false);
+  const walletKey = chargeId.replace(/[^a-zA-Z0-9]/g, "");
+  const applePayContainerId = `ap-container-${walletKey}`;
+  const googlePayIframeId = `igp-${walletKey}`;
+  const requestName = `charge${walletKey}`;
 
   const [open, setOpen] = useState(false);
   const [scriptReady, setScriptReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [walletSubmitting, setWalletSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
   const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [googlePaySupported, setGooglePaySupported] = useState(false);
+  const [googlePayReady, setGooglePayReady] = useState(false);
+  const [walletConfig, setWalletConfig] =
+    useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
-    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
+    walletConfig.applePayEnabled &&
+    Boolean(walletConfig.applePayMerchantId);
   const googlePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
+    walletConfig.googlePayEnabled && googlePaySupported;
+
+  function getPaymentPayload() {
+    const form = formRef.current;
+    const formData = form ? new FormData(form) : new FormData();
+
+    return {
+      chargeId,
+      amount: allowOpenAmount
+        ? String(formData.get("amount") || "")
+        : undefined,
+      email: String(formData.get("email") || memberEmail || ""),
+    };
+  }
+
+  function getWalletAmount() {
+    const paymentAmount = allowOpenAmount
+      ? Number(getPaymentPayload().amount || 0)
+      : amount;
+
+    return Number.isFinite(paymentAmount) && paymentAmount > 0
+      ? paymentAmount.toFixed(2)
+      : "0.00";
+  }
+
+  async function submitWalletPayment(
+    walletType: "ApplePay" | "GooglePay",
+    payload: unknown
+  ) {
+    setWalletSubmitting(true);
+    setMessage("");
+    setSuccess(false);
+
+    const response = await fetch("/api/sola/payment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...getPaymentPayload(),
+        walletType,
+        payload,
+      }),
+    });
+
+    const text = await response.text();
+    const result = text ? (JSON.parse(text) as PaymentResult) : {};
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "The wallet payment could not be charged."
+      );
+    }
+
+    setSuccess(true);
+    setMessage(
+      result.receiptGenerated
+        ? "Payment approved. Your receipt is ready below and has been emailed."
+        : "Payment approved. Your receipt is still being prepared."
+    );
+    router.refresh();
+
+    return text;
+  }
+
+  function configureWallets() {
+    if (!open || !walletConfig.loaded || walletsConfiguredRef.current) {
+      return;
+    }
+
+    walletsConfiguredRef.current = true;
+
+    window.memberWalletRequests ||= {};
+
+    if (applePayConfigured && window.ckApplePay && isApplePaySupported()) {
+      window.memberWalletRequests[requestName] = {
+        buttonOptions: {
+          buttonContainer: applePayContainerId,
+          buttonColor: window.APButtonColor?.black || "black",
+          buttonType: window.APButtonType?.pay || "pay",
+        },
+        onGetTransactionInfo() {
+          const totalAmount = getWalletAmount();
+
+          return {
+            lineItems: [
+              {
+                label: "Member charge",
+                type: "final",
+                amount: totalAmount,
+              },
+            ],
+            total: {
+              type: "final",
+              label: "Khal Bnei Aliya",
+              amount: totalAmount,
+            },
+          };
+        },
+        onValidateMerchant(validationUrl?: string) {
+          if (!validationUrl) {
+            throw new Error("Apple Pay did not provide a validation URL.");
+          }
+
+          return fetch("https://api.cardknox.com/applepay/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ validationUrl }),
+          }).then(async (response) => {
+            const text = await response.text();
+
+            if (!response.ok) {
+              throw new Error(text || "Apple Pay merchant validation failed.");
+            }
+
+            return text;
+          });
+        },
+        onPaymentAuthorize(applePayload: unknown) {
+          return submitWalletPayment("ApplePay", applePayload).finally(() =>
+            setWalletSubmitting(false)
+          );
+        },
+        onPaymentComplete(paymentComplete: Record<string, unknown>) {
+          if (paymentComplete.response) {
+            setSuccess(true);
+          } else if (paymentComplete.error) {
+            setMessage("Apple Pay could not complete this payment.");
+          }
+        },
+        apButtonLoaded(resp: Record<string, unknown>) {
+          if (!resp) return;
+
+          if (resp.status === window.iStatus?.success) {
+            setMessage("");
+          } else if (resp.reason) {
+            console.info("MEMBER_APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+          }
+        },
+        initAP() {
+          return {
+            buttonOptions: {
+              buttonContainer: applePayContainerId,
+              buttonColor: window.APButtonColor?.black || "black",
+              buttonType: window.APButtonType?.pay || "pay",
+            },
+            merchantIdentifier: walletConfig.applePayMerchantId,
+            requiredBillingContactFields: [
+              "postalAddress",
+              "name",
+              "phone",
+              "email",
+            ],
+            onGetTransactionInfo: `memberWalletRequests.${requestName}.onGetTransactionInfo`,
+            onValidateMerchant: `memberWalletRequests.${requestName}.onValidateMerchant`,
+            onPaymentAuthorize: `memberWalletRequests.${requestName}.onPaymentAuthorize`,
+            onPaymentComplete: `memberWalletRequests.${requestName}.onPaymentComplete`,
+            onAPButtonLoaded: `memberWalletRequests.${requestName}.apButtonLoaded`,
+            isDebug: walletConfig.applePayDebug,
+          };
+        },
+      };
+
+      try {
+        window.ckApplePay.enableApplePay({
+          initFunction: `memberWalletRequests.${requestName}.initAP`,
+          amountField: `amount-${walletKey}`,
+        });
+      } catch (error) {
+        console.info("MEMBER_APPLE_PAY_NOT_ENABLED", error);
+        setApplePayAvailable(false);
+      }
+    }
+
+    if (googlePayConfigured && window.ckGooglePay) {
+      window.memberWalletRequests[requestName] = {
+        ...(window.memberWalletRequests[requestName] || {}),
+        merchantInfo: {
+          merchantName: walletConfig.googlePayMerchantName,
+        },
+        buttonOptions: {
+          buttonSizeMode: window.GPButtonSizeMode?.fill || "fill",
+        },
+        billingParams: {
+          emailRequired: true,
+          billingAddressRequired: true,
+          billingAddressFormat:
+            window.GPBillingAddressFormat?.full || "FULL",
+        },
+        environment: walletConfig.googlePayEnvironment,
+        onGetGoogleTransactionInfo() {
+          const totalPrice = getWalletAmount();
+
+          return {
+            countryCode: "US",
+            currencyCode: "USD",
+            totalPriceStatus: "FINAL",
+            totalPrice,
+            totalPriceLabel: "Khal Bnei Aliya",
+            displayItems: [
+              {
+                label: "Member charge",
+                type: "LINE_ITEM",
+                price: totalPrice,
+                status: "FINAL",
+              },
+            ],
+          };
+        },
+        onProcessPayment(googlePayload: unknown) {
+          return submitWalletPayment("GooglePay", googlePayload).finally(() =>
+            setWalletSubmitting(false)
+          );
+        },
+        gpButtonLoaded(resp: Record<string, unknown>) {
+          if (resp?.reason) {
+            console.info("MEMBER_GOOGLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+          }
+        },
+        initGP() {
+          const request = window.memberWalletRequests?.[requestName] || {};
+
+          return {
+            merchantInfo: request.merchantInfo,
+            buttonOptions: request.buttonOptions,
+            onGetTransactionInfo: `memberWalletRequests.${requestName}.onGetGoogleTransactionInfo`,
+            environment: request.environment,
+            billingParameters: request.billingParams,
+            onProcessPayment: `memberWalletRequests.${requestName}.onProcessPayment`,
+            onGPButtonLoaded: `memberWalletRequests.${requestName}.gpButtonLoaded`,
+          };
+        },
+      };
+
+      setGooglePayReady(true);
+    }
+  }
 
   const configureIFields = () => {
     const key = process.env.NEXT_PUBLIC_SOLA_IFIELDS_KEY;
@@ -82,19 +388,38 @@ export default function SolaCardPaymentForm({
     window.setIfieldStyle?.("cvv", fieldStyle);
     window.enableAutoFormatting?.(" ");
     setScriptReady(true);
+    configureWallets();
   };
 
   useEffect(() => {
-    window.setTimeout(() => {
-      const applePaySession = window.ApplePaySession;
+    fetch("/api/sola/wallet-config", {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load wallet configuration.");
+        }
 
-      setApplePayAvailable(
-        Boolean(
-          applePaySession &&
-            (typeof applePaySession.canMakePayments !== "function" ||
-              applePaySession.canMakePayments())
-        )
-      );
+        return (await response.json()) as Omit<WalletConfig, "loaded">;
+      })
+      .then((config) => {
+        setWalletConfig({
+          ...initialWalletConfig,
+          ...config,
+          loaded: true,
+        });
+      })
+      .catch((error: unknown) => {
+        console.info("MEMBER_WALLET_CONFIG_NOT_LOADED", error);
+        setWalletConfig({
+          ...initialWalletConfig,
+          loaded: true,
+        });
+      });
+
+    window.setTimeout(() => {
+      setApplePayAvailable(isApplePaySupported());
+      setGooglePaySupported(isGooglePaySupportedBrowser());
     }, 0);
   }, []);
 
@@ -103,6 +428,30 @@ export default function SolaCardPaymentForm({
       window.setTimeout(configureIFields, 0);
     }
   }, [open]);
+
+  useEffect(() => {
+    if (open && scriptReady && walletConfig.loaded) {
+      window.setTimeout(configureWallets, 0);
+    }
+  }, [open, scriptReady, walletConfig]);
+
+  useEffect(() => {
+    if (!googlePayReady || !window.ckGooglePay) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      try {
+        window.ckGooglePay?.enableGooglePay({
+          amountField: `amount-${walletKey}`,
+          iframeField: googlePayIframeId,
+        });
+      } catch (error) {
+        console.info("MEMBER_GOOGLE_PAY_NOT_ENABLED", error);
+        setGooglePayReady(false);
+      }
+    }, 0);
+  }, [googlePayReady, googlePayIframeId, walletKey]);
 
   async function submitTokens(form: HTMLFormElement) {
     const formData = new FormData(form);
@@ -191,7 +540,7 @@ export default function SolaCardPaymentForm({
   return (
     <div className="mt-4 rounded-xl border border-blue-100 bg-white p-4">
       <Script
-        id="sola-ifields-script"
+        id={`sola-ifields-script-${walletKey}`}
         src={`${IFIELDS_BASE}/ifields.min.js`}
         strategy="afterInteractive"
         onLoad={configureIFields}
@@ -217,7 +566,7 @@ export default function SolaCardPaymentForm({
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm font-bold text-slate-900">Charge card</p>
@@ -228,28 +577,64 @@ export default function SolaCardPaymentForm({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={!applePayAvailable || !applePayConfigured}
-                className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
-                title={
-                  applePayConfigured
-                    ? "Apple Pay is available on supported Apple devices."
-                    : "Set up Sola/Cardknox Apple Pay merchant credentials before enabling."
-                }
-              >
-                Apple Pay
-              </button>
+            <div className="flex min-w-[220px] flex-wrap items-center gap-2">
+              {applePayConfigured ? (
+                <>
+                  <div
+                    id={applePayContainerId}
+                    className={
+                      applePayAvailable
+                        ? "min-h-[40px] min-w-[130px] flex-1"
+                        : "hidden"
+                    }
+                  />
+                  {!applePayAvailable && (
+                    <button
+                      type="button"
+                      disabled
+                      className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
+                      title="Apple Pay is available only on supported Apple devices."
+                    >
+                      Apple Pay
+                    </button>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-full bg-black px-4 py-2 text-xs font-bold text-white opacity-45"
+                  title="Set up Sola/Cardknox Apple Pay merchant credentials before enabling."
+                >
+                  Apple Pay
+                </button>
+              )}
 
-              <button
-                type="button"
-                disabled={!googlePayConfigured}
-                className="rounded-full bg-[#1a73e8] px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
-                title="Set up Sola/Cardknox Google Pay merchant credentials before enabling."
-              >
-                Google Pay
-              </button>
+              {googlePayConfigured && googlePayReady ? (
+                <iframe
+                  id={googlePayIframeId}
+                  title="Google Pay"
+                  data-ifields-id={googlePayIframeId}
+                  data-ifields-oninit={`memberWalletRequests.${requestName}.initGP`}
+                  src={`${IFIELDS_BASE}/igp.htm`}
+                  allow="payment *"
+                  sandbox="allow-popups allow-modals allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox allow-top-navigation"
+                  className="h-[40px] min-w-[130px] flex-1 border-0"
+                />
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-full bg-[#1a73e8] px-4 py-2 text-xs font-bold text-white opacity-45"
+                  title={
+                    walletConfig.googlePayEnabled && !googlePaySupported
+                      ? "Google Pay is not supported by Sola/Cardknox in this browser. Use Apple Pay or card payment here."
+                      : "Set up Sola/Cardknox Google Pay merchant credentials before enabling."
+                  }
+                >
+                  Google Pay
+                </button>
+              )}
 
               <button
                 type="button"
@@ -265,6 +650,7 @@ export default function SolaCardPaymentForm({
             <label className="block space-y-1 text-xs font-bold text-slate-600">
               Matana Amount
               <input
+                id={`amount-${walletKey}`}
                 name="amount"
                 type="number"
                 min="1"
@@ -274,6 +660,16 @@ export default function SolaCardPaymentForm({
                 placeholder="Enter amount"
               />
             </label>
+          )}
+
+          {!allowOpenAmount && (
+            <input
+              id={`amount-${walletKey}`}
+              name="amount"
+              type="hidden"
+              value={amount.toFixed(2)}
+              readOnly
+            />
           )}
 
           <label className="block space-y-1 text-xs font-bold text-slate-600">
@@ -383,10 +779,10 @@ export default function SolaCardPaymentForm({
 
           <button
             type="submit"
-            disabled={submitting || !scriptReady}
+            disabled={submitting || walletSubmitting || !scriptReady}
             className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {submitting
+            {submitting || walletSubmitting
               ? "Processing…"
               : allowOpenAmount
                 ? "Pay Matana"

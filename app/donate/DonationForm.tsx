@@ -79,6 +79,17 @@ function isApplePaySupported() {
   return Boolean(window.ApplePaySession);
 }
 
+function isGooglePaySupportedBrowser() {
+  const userAgent = window.navigator.userAgent;
+  const vendor = window.navigator.vendor;
+  const isSafari =
+    /Safari/i.test(userAgent) &&
+    /Apple Computer/i.test(vendor) &&
+    !/Chrome|CriOS|FxiOS|Edg/i.test(userAgent);
+
+  return !isSafari;
+}
+
 export default function DonationForm() {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
@@ -94,12 +105,14 @@ export default function DonationForm() {
 
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
+  const [googlePaySupported, setGooglePaySupported] = useState(false);
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
     walletConfig.applePayEnabled &&
     Boolean(walletConfig.applePayMerchantId);
-  const googlePayConfigured = walletConfig.googlePayEnabled;
+  const googlePayConfigured =
+    walletConfig.googlePayEnabled && googlePaySupported;
 
   function getDonationPayload() {
     const form = formRef.current;
@@ -390,6 +403,7 @@ export default function DonationForm() {
 
     window.setTimeout(() => {
       setApplePayAvailable(isApplePaySupported());
+      setGooglePaySupported(isGooglePaySupportedBrowser());
     }, 0);
 
     if (window.setAccount) {
@@ -672,7 +686,11 @@ export default function DonationForm() {
                 type="button"
                 disabled
                 className="w-full rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                title="Set NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED in Vercel."
+                title={
+                  walletConfig.googlePayEnabled && !googlePaySupported
+                    ? "Google Pay is not supported by Sola/Cardknox in this browser. Use Apple Pay or card payment here."
+                    : "Set NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED in Vercel."
+                }
               >
                 Google Pay
               </button>

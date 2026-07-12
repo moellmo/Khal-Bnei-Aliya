@@ -15,6 +15,8 @@ type PaymentRequestBody = {
   billingZip?: string;
   email?: string;
   amount?: string | number;
+  walletType?: string;
+  payload?: unknown;
 };
 
 type GatewayResponse = Record<string, unknown>;
@@ -59,6 +61,66 @@ function getResponseValue(
   }
 
   return "";
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function nestedRecord(
+  record: Record<string, unknown>,
+  key: string
+) {
+  return asRecord(record[key]);
+}
+
+function getBillingContact(
+  walletType: "ApplePay" | "GooglePay",
+  payload: unknown
+) {
+  const root = asRecord(payload);
+
+  if (walletType === "ApplePay") {
+    const payment = nestedRecord(root, "payment");
+    return nestedRecord(payment, "billingContact");
+  }
+
+  const paymentMethodData = nestedRecord(root, "paymentMethodData");
+  const info = nestedRecord(paymentMethodData, "info");
+  return nestedRecord(info, "billingAddress");
+}
+
+function getDigitalWalletToken(
+  walletType: "ApplePay" | "GooglePay",
+  payload: unknown
+) {
+  const root = asRecord(payload);
+
+  if (walletType === "ApplePay") {
+    const payment = nestedRecord(root, "payment");
+    const token = nestedRecord(payment, "token");
+    const paymentData =
+      token.paymentData || root.paymentData || payload;
+
+    return Buffer.from(
+      typeof paymentData === "string"
+        ? paymentData
+        : JSON.stringify(paymentData)
+    ).toString("base64");
+  }
+
+  const paymentMethodData = nestedRecord(root, "paymentMethodData");
+  const tokenizationData = nestedRecord(
+    paymentMethodData,
+    "tokenizationData"
+  );
+  const token = tokenizationData.token || root.token || payload;
+
+  return Buffer.from(
+    typeof token === "string" ? token : JSON.stringify(token)
+  ).toString("base64");
 }
 
 export async function POST(request: NextRequest) {
@@ -151,6 +213,14 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as PaymentRequestBody;
 
     const chargeId = String(body.chargeId || "").trim();
+    const normalizedWalletType =
+      String(body.walletType || "").toLowerCase() === "googlepay"
+        ? "GooglePay"
+        : String(body.walletType || "").toLowerCase() === "applepay"
+          ? "ApplePay"
+          : null;
+    const isWalletPayment = Boolean(normalizedWalletType);
+    const walletPayload = body.payload;
     const cardToken = String(body.cardToken || "").trim();
     const cvvToken = String(body.cvvToken || "").trim();
 
@@ -170,13 +240,35 @@ export async function POST(request: NextRequest) {
 
     const requestedAmount = Number(body.amount || 0);
 
+    if (!chargeId) {
+      return NextResponse.json(
+        {
+          error: "Charge is required.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    if (isWalletPayment && !walletPayload) {
+      return NextResponse.json(
+        {
+          error: "Wallet payment payload is missing.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     if (
-      !chargeId ||
-      !cardToken ||
-      !cvvToken ||
-      expiration.length !== 4 ||
-      !cardholderName ||
-      !billingZip
+      !isWalletPayment &&
+      (!cardToken ||
+        !cvvToken ||
+        expiration.length !== 4 ||
+        !cardholderName ||
+        !billingZip)
     ) {
       return NextResponse.json(
         {
@@ -263,6 +355,35 @@ export async function POST(request: NextRequest) {
      * Process the card payment through Sola/Cardknox.
      */
     const invoice = `KBA-${charge.id}`;
+    const walletToken =
+      isWalletPayment && normalizedWalletType
+        ? getDigitalWalletToken(normalizedWalletType, walletPayload)
+        : "";
+    const billingContact =
+      isWalletPayment && normalizedWalletType
+        ? getBillingContact(normalizedWalletType, walletPayload)
+        : {};
+    const memberFullName = [member.first_name, member.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const paymentMethod =
+      normalizedWalletType || "Card";
+    const paymentDescription =
+      normalizedWalletType
+        ? `Member portal ${normalizedWalletType} payment`
+        : "Member portal card payment";
+
+    if (isWalletPayment && !walletToken) {
+      return NextResponse.json(
+        {
+          error: "Wallet payment token is missing.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
 
     const gatewayResponse = await fetch(
       "https://x1.cardknox.com/gatewayjson",
@@ -278,11 +399,44 @@ export async function POST(request: NextRequest) {
           xSoftwareVersion: softwareVersion,
           xCommand: "cc:Sale",
           xAmount: amount.toFixed(2),
-          xCardNum: cardToken,
-          xCVV: cvvToken,
-          xExp: expiration,
-          xName: cardholderName,
-          xZip: billingZip,
+          xCardNum: walletToken || cardToken,
+          ...(isWalletPayment && normalizedWalletType
+            ? {
+                xDigitalWalletType: normalizedWalletType,
+                xName: memberFullName,
+                xBillFirstName: String(
+                  billingContact.givenName || member.first_name || ""
+                ),
+                xBillLastName: String(
+                  billingContact.familyName || member.last_name || ""
+                ),
+                xBillStreet: String(
+                  billingContact.addressLines ||
+                    billingContact.address1 ||
+                    ""
+                ),
+                xBillCity: String(
+                  billingContact.locality ||
+                    billingContact.city ||
+                    ""
+                ),
+                xBillState: String(
+                  billingContact.administrativeArea ||
+                    billingContact.state ||
+                    ""
+                ),
+                xBillZip: String(
+                  billingContact.postalCode ||
+                    billingContact.postalCodePrefix ||
+                    ""
+                ),
+              }
+            : {
+                xCVV: cvvToken,
+                xExp: expiration,
+                xName: cardholderName,
+                xZip: billingZip,
+              }),
           xInvoice: invoice,
           xEmail: receiptEmail || member.email || "",
           xCustReceipt:
@@ -291,6 +445,9 @@ export async function POST(request: NextRequest) {
             charge.description || charge.charge_type,
           xCustom01: member.id,
           xCustom02: charge.id,
+          xCustom03: isWalletPayment
+            ? `member-charge-${normalizedWalletType}`
+            : "member-charge-card",
         }),
       }
     );
@@ -391,13 +548,13 @@ export async function POST(request: NextRequest) {
           member_id: member.id,
           charge_id: charge.id,
           amount,
-          payment_method: "Card",
+          payment_method: paymentMethod,
           payment_provider: "sola",
           external_payment_id: reference,
           payer_email:
             receiptEmail || member.email || null,
           status: "paid",
-          note: "Member portal card payment",
+          note: paymentDescription,
           paid_at: paidAt,
           receipt_number: receiptNumber,
           raw_provider_response:
@@ -428,14 +585,14 @@ export async function POST(request: NextRequest) {
         .update({
           status: "paid",
           paid_at: paidAt,
-          payment_method: "Card",
+          payment_method: paymentMethod,
           payment_provider: "sola",
           amount,
           paid_amount: amount,
           external_payment_id: reference,
           payment_note: isOpenAmountCharge
             ? "Matana amount chosen at payment"
-            : "Paid through member portal",
+            : paymentDescription,
         })
         .eq("id", charge.id)
         .eq("member_id", member.id)
@@ -507,7 +664,7 @@ export async function POST(request: NextRequest) {
       reference,
       receiptNumber,
       paymentId,
-      paymentMethod: "Card",
+      paymentMethod,
       receiptGenerated,
       receiptError,
     });
