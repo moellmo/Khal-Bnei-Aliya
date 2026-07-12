@@ -134,8 +134,7 @@ export default function DonationForm() {
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
-    walletConfig.applePayEnabled &&
-    Boolean(walletConfig.applePayMerchantId);
+    walletConfig.applePayEnabled;
   const googlePayConfigured =
     walletConfig.googlePayEnabled && googlePaySupported;
 
@@ -306,7 +305,7 @@ export default function DonationForm() {
               buttonType: window.APButtonType?.pay || "pay",
             },
             merchantIdentifier:
-              walletConfig.applePayMerchantId,
+              walletConfig.applePayMerchantId || "merchant.cardknox.com",
             requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
             onGetTransactionInfo: "apRequest.onGetTransactionInfo",
             onValidateMerchant: "apRequest.onValidateMerchant",
@@ -764,7 +763,7 @@ export default function DonationForm() {
                 type="button"
                 disabled
                 className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                title="Set NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED and NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID in Vercel."
+                title="Apple Pay is not enabled by the payment configuration."
               >
                 Apple Pay
               </button>

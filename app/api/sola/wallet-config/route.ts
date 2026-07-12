@@ -18,13 +18,13 @@ export async function GET() {
     process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID ||
       process.env.SOLA_APPLE_PAY_MERCHANT_ID ||
       process.env.SOLA_APPLE_MERCHANT_ID ||
-      ""
+      process.env.APPLE_PAY_MERCHANT_ID ||
+      "merchant.cardknox.com"
   ).trim();
 
   const applePayEnabled =
     getEnvFlag("NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED", true) &&
-    getEnvFlag("SOLA_APPLE_PAY_ENABLED", true) &&
-    Boolean(applePayMerchantId);
+    getEnvFlag("SOLA_APPLE_PAY_ENABLED", true);
 
   const googlePayEnabled =
     getEnvFlag("NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED", true) &&

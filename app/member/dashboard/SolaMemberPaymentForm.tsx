@@ -148,8 +148,7 @@ export default function SolaCardPaymentForm({
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
-    walletConfig.applePayEnabled &&
-    Boolean(walletConfig.applePayMerchantId);
+    walletConfig.applePayEnabled;
   const googlePayConfigured =
     walletConfig.googlePayEnabled && googlePaySupported;
 
@@ -317,7 +316,8 @@ export default function SolaCardPaymentForm({
               buttonColor: window.APButtonColor?.black || "black",
               buttonType: window.APButtonType?.pay || "pay",
             },
-            merchantIdentifier: walletConfig.applePayMerchantId,
+            merchantIdentifier:
+              walletConfig.applePayMerchantId || "merchant.cardknox.com",
             requiredBillingContactFields: [
               "postalAddress",
               "name",
