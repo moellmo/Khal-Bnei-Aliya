@@ -48,6 +48,11 @@ const adminLinks = [
   description: "Manage who can access the admin and accounting dashboards.",
   href: "/admin/admin-users",
 },
+{
+  label: "Email Test",
+  description: "Send a Resend test email using the live receipt sender.",
+  href: "/admin/email-test",
+},
 ];
 
 export default function AdminPage() {
