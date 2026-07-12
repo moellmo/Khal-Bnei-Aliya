@@ -26,7 +26,9 @@ declare global {
     ) => void;
     enableAutoFormatting?: (separator?: string) => void;
     clearIfield?: (field: string) => void;
-    ApplePaySession?: unknown;
+    ApplePaySession?: {
+      canMakePayments?: () => boolean;
+    };
     ckApplePay?: {
       enableApplePay: (params: Record<string, unknown>) => void;
       updateAmount?: (amount: string) => void;
@@ -53,6 +55,16 @@ type DonationResult = {
   error?: string;
 };
 
+function isApplePaySupported() {
+  const applePaySession = window.ApplePaySession;
+
+  return Boolean(
+    applePaySession &&
+      (typeof applePaySession.canMakePayments !== "function" ||
+        applePaySession.canMakePayments())
+  );
+}
+
 export default function DonationForm() {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
@@ -66,11 +78,10 @@ export default function DonationForm() {
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
 
-  const applePayAvailable =
-    typeof window !== "undefined" && Boolean(window.ApplePaySession);
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
   const applePayConfigured =
     process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
-    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID);
+    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
   const googlePayConfigured =
     process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
 
@@ -141,7 +152,7 @@ export default function DonationForm() {
 
     walletsConfiguredRef.current = true;
 
-    if (applePayConfigured && window.ckApplePay) {
+    if (applePayConfigured && window.ckApplePay && isApplePaySupported()) {
       window.apRequest = {
         buttonOptions: {
           buttonContainer: "ap-container",
@@ -167,10 +178,15 @@ export default function DonationForm() {
             },
           };
         },
-        onValidateMerchant() {
+        onValidateMerchant(validationUrl?: string) {
+          if (!validationUrl) {
+            throw new Error("Apple Pay did not provide a validation URL.");
+          }
+
           return fetch("https://api.cardknox.com/applepay/validate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ validationUrl }),
           }).then(async (response) => {
             const text = await response.text();
 
@@ -331,6 +347,10 @@ export default function DonationForm() {
   }
 
   useEffect(() => {
+    window.setTimeout(() => {
+      setApplePayAvailable(isApplePaySupported());
+    }, 0);
+
     if (window.setAccount) {
       window.setTimeout(configureIFields, 0);
     }

@@ -92,7 +92,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
-      <section className="mx-auto max-w-7xl px-6 py-8">
+      <section className="mx-auto max-w-[92rem] px-4 py-6 sm:px-6 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link href="/admin" className="text-sm font-semibold text-[#8b6b2e]">
             ← Back to Admin
@@ -103,7 +103,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
           </Link>
         </div>
 
-        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-8 text-white shadow-sm">
+        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-6 text-white shadow-sm sm:p-8">
           <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#d9bf7a]">
             Admin
           </p>
@@ -120,10 +120,10 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        <div className="mt-8 grid min-w-0 gap-8 xl:grid-cols-[minmax(320px,0.75fr)_minmax(0,2.25fr)]">
+        <div className="mt-8 grid min-w-0 gap-8 xl:grid-cols-[minmax(440px,0.95fr)_minmax(0,1.55fr)]">
           <form
             action={createMember}
-            className="min-w-0 space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            className="min-w-0 space-y-5 rounded-[1.5rem] border border-[#e3d9c7] bg-white p-5 shadow-sm sm:p-6 xl:sticky xl:top-6 xl:self-start"
           >
             <div>
               <h2 className="text-2xl font-bold">Add Member</h2>
@@ -133,7 +133,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
               </p>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 2xl:grid-cols-2">
               <label className="space-y-2">
                 <span className="font-semibold">First Name</span>
                 <input
@@ -206,7 +206,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
               />
             </label>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 2xl:grid-cols-2">
               <label className="space-y-2">
                 <span className="font-semibold">Membership Type</span>
                 <select
@@ -234,7 +234,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
               </label>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 2xl:grid-cols-2">
               <label className="space-y-2">
                 <span className="font-semibold">Status</span>
                 <select
@@ -269,13 +269,13 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
 
             <button
               type="submit"
-              className="rounded-full bg-[#8b6b2e] px-6 py-3 font-semibold text-white"
+              className="w-full rounded-full bg-[#8b6b2e] px-6 py-3.5 font-bold text-white transition hover:bg-[#745822]"
             >
               Add Member
             </button>
           </form>
 
-          <div className="min-w-0 overflow-hidden rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+          <div className="min-w-0 overflow-hidden rounded-[1.5rem] border border-[#e3d9c7] bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-bold">Member List</h2>
@@ -317,14 +317,77 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
 
               <button
                 type="submit"
-                className="self-end rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+                className="self-end rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white transition hover:bg-[#10192b]"
               >
                 Search
               </button>
             </form>
 
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-separate border-spacing-y-3 text-left text-sm">
+            <div className="mt-6 space-y-3 lg:hidden">
+              {members.map((member) => (
+                <article
+                  key={member.id}
+                  className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="break-words text-base font-bold">
+                        {member.first_name} {member.last_name}
+                      </p>
+
+                      {member.hebrew_name && (
+                        <p dir="rtl" className="mt-1 text-right text-sm">
+                          {member.hebrew_name}
+                        </p>
+                      )}
+
+                      <p className="mt-1 text-xs font-bold text-[#8b6b2e]">
+                        {member.membership_type || "Member"} ·{" "}
+                        {member.tribe_status || "Yisroel"}
+                      </p>
+                    </div>
+
+                    <span className="shrink-0 rounded-full bg-white px-3 py-1 text-xs font-bold capitalize text-slate-700">
+                      {member.status || "pending"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 text-sm text-slate-600">
+                    <p className="break-words">{member.email || "No email"}</p>
+                    <p>{member.phone || "No phone"}</p>
+                    <p>Seat: {member.seating_location || "—"}</p>
+                    <p className="font-bold text-slate-900">
+                      Dues: {formatMoney(member.custom_dues_amount)}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    <Link
+                      href={`/admin/members/${member.id}`}
+                      className="rounded-full bg-[#1d2940] px-4 py-2.5 text-center text-xs font-bold text-white transition hover:bg-[#10192b]"
+                    >
+                      View / Edit
+                    </Link>
+
+                    <Link
+                      href={`/admin/members/${member.id}?tab=payments`}
+                      className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 text-center text-xs font-bold text-[#1d2940] transition hover:bg-[#f2eadc]"
+                    >
+                      Request Payment
+                    </Link>
+                  </div>
+                </article>
+              ))}
+
+              {members.length === 0 && (
+                <div className="rounded-2xl bg-[#fbf8f2] px-4 py-10 text-center text-slate-500">
+                  No members added yet.
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 hidden overflow-x-auto lg:block">
+              <table className="w-full min-w-[920px] border-separate border-spacing-y-3 text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-[0.18em] text-slate-500">
                     <th className="px-4">Member</th>

@@ -19,6 +19,9 @@ declare global {
     setIfieldStyle?: (field: string, style: Record<string, string>) => void;
     enableAutoFormatting?: (separator?: string) => void;
     clearIfield?: (field: string) => void;
+    ApplePaySession?: {
+      canMakePayments?: () => boolean;
+    };
   }
 }
 
@@ -46,10 +49,10 @@ export default function SolaCardPaymentForm({
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
-  const applePayAvailable =
-    typeof window !== "undefined" && Boolean(window.ApplePaySession);
+  const [applePayAvailable, setApplePayAvailable] = useState(false);
   const applePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true";
+    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
+    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
   const googlePayConfigured =
     process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
 
@@ -80,6 +83,20 @@ export default function SolaCardPaymentForm({
     window.enableAutoFormatting?.(" ");
     setScriptReady(true);
   };
+
+  useEffect(() => {
+    window.setTimeout(() => {
+      const applePaySession = window.ApplePaySession;
+
+      setApplePayAvailable(
+        Boolean(
+          applePaySession &&
+            (typeof applePaySession.canMakePayments !== "function" ||
+              applePaySession.canMakePayments())
+        )
+      );
+    }, 0);
+  }, []);
 
   useEffect(() => {
     if (open && window.setAccount) {
