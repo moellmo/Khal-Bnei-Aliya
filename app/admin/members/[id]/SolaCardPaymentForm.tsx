@@ -20,7 +20,21 @@ declare global {
     enableAutoFormatting?: (separator?: string) => void;
     clearIfield?: (field: string) => void;
     ApplePaySession?: {
+      new (version: number, request: Record<string, unknown>): {
+        onvalidatemerchant:
+          | ((event: { validationURL: string }) => void)
+          | null;
+        onpaymentauthorized:
+          | ((event: { payment: unknown }) => void)
+          | null;
+        oncancel: (() => void) | null;
+        begin: () => void;
+        completeMerchantValidation: (merchantSession: unknown) => void;
+        completePayment: (status: number) => void;
+      };
       canMakePayments?: () => boolean;
+      STATUS_SUCCESS: number;
+      STATUS_FAILURE: number;
     };
   }
 }

@@ -27,22 +27,28 @@ declare global {
     enableAutoFormatting?: (separator?: string) => void;
     clearIfield?: (field: string) => void;
     ApplePaySession?: {
+      new (version: number, request: Record<string, unknown>): {
+        onvalidatemerchant:
+          | ((event: { validationURL: string }) => void)
+          | null;
+        onpaymentauthorized:
+          | ((event: { payment: unknown }) => void)
+          | null;
+        oncancel: (() => void) | null;
+        begin: () => void;
+        completeMerchantValidation: (merchantSession: unknown) => void;
+        completePayment: (status: number) => void;
+      };
       canMakePayments?: () => boolean;
-    };
-    ckApplePay?: {
-      enableApplePay: (params: Record<string, unknown>) => unknown;
-      updateAmount?: (amount: string) => void;
+      STATUS_SUCCESS: number;
+      STATUS_FAILURE: number;
     };
     ckGooglePay?: {
       enableGooglePay: (params: Record<string, unknown>) => unknown;
       updateAmount?: (amount: string) => void;
     };
-    APButtonColor?: Record<string, string>;
-    APButtonType?: Record<string, string>;
     GPButtonSizeMode?: Record<string, string>;
     GPBillingAddressFormat?: Record<string, string>;
-    iStatus?: Record<string, string>;
-    apRequest?: Record<string, unknown>;
     gpRequest?: Record<string, unknown>;
   }
 }
@@ -94,10 +100,6 @@ function isGooglePaySupportedBrowser() {
   return !isSafari;
 }
 
-function isSolaWalletRequestError(reason: unknown) {
-  return String(reason).includes("defPaymentRequest");
-}
-
 function catchSolaWalletPromise(
   result: unknown,
   onError: (error: unknown) => void
@@ -112,18 +114,10 @@ function catchSolaWalletPromise(
   }
 }
 
-function getApplePayRequestObject() {
-  return window.apRequest as
-    | { initAP?: () => Record<string, unknown> }
-    | undefined;
-}
-
 export default function DonationForm() {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const walletsConfiguredRef = useRef(false);
-  const walletConfigureAttemptsRef = useRef(0);
 
   const [amount, setAmount] = useState("18");
   const [scriptReady, setScriptReady] = useState(false);
@@ -133,7 +127,6 @@ export default function DonationForm() {
   const [success, setSuccess] = useState(false);
 
   const [applePayAvailable, setApplePayAvailable] = useState(false);
-  const [applePayButtonReady, setApplePayButtonReady] = useState(false);
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [applePayFailureReason, setApplePayFailureReason] = useState("");
   const [googlePayReady, setGooglePayReady] = useState(false);
@@ -163,6 +156,26 @@ export default function DonationForm() {
     return Number.isFinite(numericAmount) && numericAmount > 0
       ? numericAmount.toFixed(2)
       : "0.00";
+  }
+
+  async function validateApplePayMerchant(validationUrl: string) {
+    const response = await fetch("https://api.cardknox.com/applepay/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ validationUrl }),
+    });
+
+    const text = await response.text();
+
+    if (!response.ok) {
+      throw new Error(text || "Apple Pay merchant validation failed.");
+    }
+
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
   }
 
   async function submitWalletDonation(
@@ -204,147 +217,103 @@ export default function DonationForm() {
     return text;
   }
 
-  function configureWallets() {
-    if (!walletConfig.loaded) {
+  function startApplePay() {
+    const ApplePaySession = window.ApplePaySession;
+    const form = formRef.current;
+
+    setMessage("");
+    setSuccess(false);
+    setApplePayLoadFailed(false);
+    setApplePayFailureReason("");
+
+    if (!ApplePaySession || !applePayAvailable || !applePayConfigured) {
+      setApplePayLoadFailed(true);
+      setApplePayFailureReason("Apple Pay is not available on this device.");
       return;
     }
 
-    if (walletsConfiguredRef.current) {
+    if (form && !form.reportValidity()) {
       return;
     }
 
-    const needsApplePay = applePayConfigured && isApplePaySupported();
-    const needsGooglePay = googlePayConfigured;
-    const applePayMissing = needsApplePay && !window.ckApplePay;
-    const googlePayMissing = needsGooglePay && !window.ckGooglePay;
+    const totalAmount = getWalletAmount();
 
-    if (applePayMissing || googlePayMissing) {
-      walletConfigureAttemptsRef.current += 1;
-
-      if (walletConfigureAttemptsRef.current <= 30) {
-        window.setTimeout(configureWallets, 150);
-      } else if (applePayMissing) {
-        setApplePayLoadFailed(true);
-      }
-
+    if (Number(totalAmount) <= 0) {
+      setApplePayLoadFailed(true);
+      setApplePayFailureReason("Enter a donation amount greater than $0.");
       return;
     }
 
-    walletsConfiguredRef.current = true;
-
-    if (needsApplePay && window.ckApplePay) {
-      setApplePayLoadFailed(false);
-      setApplePayFailureReason("");
-
-      window.apRequest = {
-        buttonOptions: {
-          buttonContainer: "ap-container",
-          buttonColor: window.APButtonColor?.black || "black",
-          buttonType: window.APButtonType?.pay || "pay",
+    const session = new ApplePaySession(3, {
+      countryCode: "US",
+      currencyCode: "USD",
+      merchantCapabilities: ["supports3DS"],
+      supportedNetworks: ["amex", "discover", "masterCard", "visa"],
+      requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
+      total: {
+        label: "Khal Bnei Aliya",
+        amount: totalAmount,
+        type: "final",
+      },
+      lineItems: [
+        {
+          label: "Donation",
+          amount: totalAmount,
+          type: "final",
         },
-        totalAmount: null,
-        onGetTransactionInfo() {
-          const totalAmount = getWalletAmount();
+      ],
+    });
 
-          return {
-            lineItems: [
-              {
-                label: "Donation",
-                type: "final",
-                amount: totalAmount,
-              },
-            ],
-            total: {
-              type: "final",
-              label: "Khal Bnei Aliya",
-              amount: totalAmount,
-            },
-          };
-        },
-        onValidateMerchant(validationUrl?: string) {
-          if (!validationUrl) {
-            throw new Error("Apple Pay did not provide a validation URL.");
-          }
-
-          return fetch("https://api.cardknox.com/applepay/validate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ validationUrl }),
-          }).then(async (response) => {
-            const text = await response.text();
-
-            if (!response.ok) {
-              throw new Error(text || "Apple Pay merchant validation failed.");
-            }
-
-            return text;
-          });
-        },
-        onPaymentAuthorize(applePayload: unknown) {
-          return submitWalletDonation("ApplePay", applePayload).finally(() =>
-            setWalletSubmitting(false)
-          );
-        },
-        onPaymentComplete(paymentComplete: Record<string, unknown>) {
-          if (paymentComplete.response) {
-            setSuccess(true);
-          } else if (paymentComplete.error) {
-            setMessage("Apple Pay could not complete this donation.");
-          }
-        },
-        apButtonLoaded(resp: Record<string, unknown>) {
-          if (!resp) return;
-
-          if (resp.status === window.iStatus?.success) {
-            setMessage("");
-            setApplePayButtonReady(true);
-            setApplePayLoadFailed(false);
-            setApplePayFailureReason("");
-          } else if (resp.reason) {
-            console.info("APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
-            setApplePayLoadFailed(true);
-            setApplePayFailureReason(String(resp.reason));
-          }
-        },
-        initAP() {
-          return {
-            buttonOptions: {
-              buttonContainer: "ap-container",
-              buttonColor: window.APButtonColor?.black || "black",
-              buttonType: window.APButtonType?.pay || "pay",
-            },
-            merchantIdentifier:
-              walletConfig.applePayMerchantId || "merchant.cardknox.com",
-            requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
-            requiredShippingContactFields: ["postalAddress", "name", "phone", "email"],
-            onGetTransactionInfo: "apRequest.onGetTransactionInfo",
-            onValidateMerchant: "apRequest.onValidateMerchant",
-            onPaymentAuthorize: "apRequest.onPaymentAuthorize",
-            onPaymentComplete: "apRequest.onPaymentComplete",
-            onAPButtonLoaded: "apRequest.apButtonLoaded",
-            isDebug: walletConfig.applePayDebug,
-          };
-        },
-      };
-
-      try {
-        const applePayResult = window.ckApplePay.enableApplePay({
-          initFunction: () => getApplePayRequestObject()?.initAP?.(),
-          amountField: "amount",
-        });
-
-        catchSolaWalletPromise(applePayResult, (error) => {
-          console.info("APPLE_PAY_NOT_ENABLED_ASYNC", error);
+    session.onvalidatemerchant = (event) => {
+      validateApplePayMerchant(event.validationURL)
+        .then((merchantSession) => {
+          session.completeMerchantValidation(merchantSession);
+        })
+        .catch((error: unknown) => {
+          console.info("APPLE_PAY_MERCHANT_VALIDATION_FAILED", error);
           setApplePayLoadFailed(true);
-          setApplePayFailureReason(String(error));
+          setApplePayFailureReason(
+            error instanceof Error
+              ? error.message
+              : "Apple Pay merchant validation failed."
+          );
+          session.completePayment(ApplePaySession.STATUS_FAILURE);
         });
-      } catch (error) {
-        console.info("APPLE_PAY_NOT_ENABLED", error);
-        setApplePayLoadFailed(true);
-        setApplePayFailureReason(String(error));
-      }
-    }
+    };
 
+    session.onpaymentauthorized = (event) => {
+      submitWalletDonation("ApplePay", { payment: event.payment })
+        .then(() => {
+          session.completePayment(ApplePaySession.STATUS_SUCCESS);
+        })
+        .catch((error: unknown) => {
+          console.info("APPLE_PAY_PAYMENT_FAILED", error);
+          setApplePayLoadFailed(true);
+          setApplePayFailureReason(
+            error instanceof Error
+              ? error.message
+              : "Apple Pay payment failed."
+          );
+          session.completePayment(ApplePaySession.STATUS_FAILURE);
+        })
+        .finally(() => setWalletSubmitting(false));
+    };
+
+    session.oncancel = () => {
+      setWalletSubmitting(false);
+    };
+
+    try {
+      session.begin();
+    } catch (error) {
+      setApplePayLoadFailed(true);
+      setApplePayFailureReason(
+        error instanceof Error ? error.message : "Apple Pay could not start."
+      );
+    }
+  }
+
+  function configureWallets() {
     if (googlePayConfigured && window.ckGooglePay) {
       window.gpRequest = {
         merchantInfo: {
@@ -435,23 +404,9 @@ export default function DonationForm() {
     window.setIfieldStyle?.("cvv", fieldStyle);
     window.enableAutoFormatting?.(" ");
     setScriptReady(true);
-    configureWallets();
   }
 
   useEffect(() => {
-    const handleWalletRejection = (event: PromiseRejectionEvent) => {
-      if (!isSolaWalletRequestError(event.reason)) {
-        return;
-      }
-
-      event.preventDefault();
-      console.info("SOLA_WALLET_REQUEST_NOT_AVAILABLE", event.reason);
-      setGooglePayReady(false);
-      setGooglePaySupported(false);
-    };
-
-    window.addEventListener("unhandledrejection", handleWalletRejection);
-
     fetch("/api/sola/wallet-config", {
       cache: "no-store",
     })
@@ -485,10 +440,6 @@ export default function DonationForm() {
     if (window.setAccount) {
       window.setTimeout(configureIFields, 0);
     }
-
-    return () => {
-      window.removeEventListener("unhandledrejection", handleWalletRejection);
-    };
   }, []);
 
   useEffect(() => {
@@ -731,31 +682,19 @@ export default function DonationForm() {
           <div className="min-w-[220px] space-y-2">
             {applePayConfigured ? (
               <>
-                <div
-                  id="ap-container"
-                  className={
+                <button
+                  type="button"
+                  disabled={!applePayAvailable || walletSubmitting}
+                  onClick={startApplePay}
+                  className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
+                  title={
                     applePayAvailable
-                      ? "min-h-[44px]"
-                      : "hidden"
+                      ? "Pay securely with Apple Pay."
+                      : "Apple Pay is available only on supported Apple devices."
                   }
-                />
-                {!applePayAvailable && (
-                  <button
-                    type="button"
-                    disabled
-                    className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                    title="Apple Pay is available only on supported Apple devices."
-                  >
-                    Apple Pay
-                  </button>
-                )}
-                {applePayAvailable &&
-                  !applePayButtonReady &&
-                  !applePayLoadFailed && (
-                    <p className="text-xs font-semibold text-slate-500">
-                      Loading Apple Pay through Sola...
-                    </p>
-                  )}
+                >
+                  {walletSubmitting ? "Processing..." : "Apple Pay"}
+                </button>
                 {applePayLoadFailed && (
                   <p className="rounded-lg bg-amber-50 p-2 text-xs font-semibold text-amber-900">
                     Apple Pay unavailable:{" "}
