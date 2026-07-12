@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 
+const defaultTemplateUrl = "/admin-assets/ner-lamaor-blank-template.png";
+
 export default function NerLamaorEditor() {
-  const [templateUrl, setTemplateUrl] = useState("");
+  const [templateUrl, setTemplateUrl] = useState(defaultTemplateUrl);
   const [month, setMonth] = useState("לחודש תמוז");
   const [name, setName] = useState("");
   const [honorTitle, setHonorTitle] = useState("In Honor Of:");
@@ -66,8 +68,8 @@ export default function NerLamaorEditor() {
         </label>
 
         <p className="mt-2 text-xs leading-5 text-slate-500">
-          Upload the blank Ner Lamaor artwork with no donor/month text baked
-          in. PNG or JPG works best.
+          The blank Tamuz artwork is loaded by default. Upload a PNG or JPG
+          here only when you want to override it for one print.
         </p>
 
         <label className="mt-5 block space-y-2">
@@ -152,11 +154,10 @@ export default function NerLamaorEditor() {
             <div className="absolute inset-0 flex items-center justify-center bg-[#fbf8f2] p-8 text-center text-slate-500">
               <div>
                 <p className="text-xl font-black text-slate-900">
-                  Upload the blank sign image
+                  Blank template unavailable
                 </p>
                 <p className="mt-2 max-w-md text-sm leading-6">
-                  The old baked-text templates were removed so the printout
-                  does not stack new text over old text.
+                  Refresh the page or upload a replacement image.
                 </p>
               </div>
             </div>

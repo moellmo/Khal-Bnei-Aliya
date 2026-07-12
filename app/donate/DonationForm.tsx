@@ -56,13 +56,7 @@ type DonationResult = {
 };
 
 function isApplePaySupported() {
-  const applePaySession = window.ApplePaySession;
-
-  return Boolean(
-    applePaySession &&
-      (typeof applePaySession.canMakePayments !== "function" ||
-        applePaySession.canMakePayments())
-  );
+  return Boolean(window.ApplePaySession);
 }
 
 export default function DonationForm() {
@@ -83,7 +77,7 @@ export default function DonationForm() {
     process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
     Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
   const googlePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
+    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED !== "false";
 
   function getDonationPayload() {
     const form = formRef.current;
