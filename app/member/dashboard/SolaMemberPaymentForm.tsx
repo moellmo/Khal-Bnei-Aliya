@@ -234,7 +234,6 @@ export default function SolaCardPaymentForm({
 
   function startApplePay() {
     const ApplePaySession = window.ApplePaySession;
-    const form = formRef.current;
 
     setMessage("");
     setSuccess(false);
@@ -244,10 +243,6 @@ export default function SolaCardPaymentForm({
     if (!ApplePaySession || !applePayAvailable || !applePayConfigured) {
       setApplePayLoadFailed(true);
       setApplePayFailureReason("Apple Pay is not available on this device.");
-      return;
-    }
-
-    if (form && !form.reportValidity()) {
       return;
     }
 

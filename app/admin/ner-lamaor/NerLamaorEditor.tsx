@@ -177,7 +177,7 @@ export default function NerLamaorEditor() {
               </div>
 
               <div
-                className="absolute left-1/2 top-[63.4%] w-[57%] -translate-x-1/2 -translate-y-1/2 overflow-hidden text-center font-black leading-tight text-black"
+                className="absolute left-1/2 top-[63.55%] flex h-[11%] w-[56%] -translate-x-1/2 -translate-y-1/2 items-center justify-center overflow-hidden px-[2%] text-center font-black leading-none text-black"
                 style={{ fontSize: `${nameSize}px` }}
               >
                 {name || "Sponsor Name"}
