@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { addExpense, addZellePayment } from "./actions";
+import {
+  addExpense,
+  addPresetExpense,
+  addZellePayment,
+  importAccountingCsv,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +65,14 @@ type ZellePayment = {
   purpose: string | null;
   status: string | null;
 };
+
+const monthlyExpensePresets = [
+  { vendor: "Rent", category: "Rent", amount: 0 },
+  { vendor: "Rabbi", category: "Payroll", amount: 0 },
+  { vendor: "Utilities", category: "Utilities", amount: 0 },
+  { vendor: "Cleaning", category: "Maintenance", amount: 0 },
+  { vendor: "Kiddush", category: "Kiddush", amount: 0 },
+];
 
 function formatMoney(amount: number | null | undefined) {
   return new Intl.NumberFormat("en-US", {
@@ -430,6 +443,123 @@ export default async function AccountingPage({
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold">Monthly Expense Quick List</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Enter this month&apos;s amount and add common expenses without
+              retyping the vendor and category.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              {monthlyExpensePresets.map((preset) => (
+                <form
+                  key={`${preset.vendor}-${preset.category}`}
+                  action={addPresetExpense}
+                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-[1fr_150px_150px_auto]"
+                >
+                  <div>
+                    <p className="font-bold">{preset.vendor}</p>
+                    <p className="text-sm text-slate-500">
+                      {preset.category}
+                    </p>
+                  </div>
+
+                  <input
+                    type="hidden"
+                    name="vendor"
+                    value={preset.vendor}
+                  />
+                  <input
+                    type="hidden"
+                    name="category"
+                    value={preset.category}
+                  />
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Amount
+                    </span>
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      placeholder="0.00"
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Date
+                    </span>
+                    <input
+                      name="expense_date"
+                      type="date"
+                      defaultValue={new Date().toISOString().slice(0, 10)}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                  >
+                    Add
+                  </button>
+                </form>
+              ))}
+            </div>
+          </div>
+
+          <form
+            action={importAccountingCsv}
+            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+          >
+            <h2 className="text-2xl font-bold">Upload CSV</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Import expenses or Zelle payments from a bank export.
+            </p>
+
+            <label className="mt-5 block space-y-2">
+              <span className="font-semibold">Import Type</span>
+              <select
+                name="import_type"
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                defaultValue="expenses"
+              >
+                <option value="expenses">Expenses</option>
+                <option value="zelle">Zelle Payments</option>
+              </select>
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">CSV File</span>
+              <input
+                name="csv_file"
+                type="file"
+                accept=".csv,text/csv"
+                required
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+              />
+            </label>
+
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Expenses: vendor, category, amount, date. Zelle: payer_name,
+              payer_email, amount, received_date, purpose.
+            </p>
+
+            <button
+              type="submit"
+              className="mt-5 rounded-full bg-[#8b6b2e] px-6 py-3 font-bold text-white"
+            >
+              Import CSV
+            </button>
+          </form>
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">

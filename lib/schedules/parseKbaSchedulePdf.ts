@@ -166,6 +166,43 @@ function parseFriday(text: string): ParsedScheduleDay | null {
   };
 }
 
+function parseSunday(text: string): ParsedScheduleDay | null {
+  const section = sectionBetween(
+    text,
+    /\bSUNDAY\s*\([^)]+\)/i,
+    /\b(?:MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SHABBOS|ANNOUNCEMENTS?)\b/i
+  );
+
+  if (!section) return null;
+
+  const shacharis =
+    firstMatch(section, /(\d{1,2}:\d{2})\s+SHACHARIS/i) ||
+    firstMatch(section, /SHACHARIS\s+(\d{1,2}:\d{2})/i);
+
+  const mincha =
+    firstMatch(section, /(\d{1,2}:\d{2})\s+MINCHA\b/i) ||
+    firstMatch(section, /MINCHA\s+(\d{1,2}:\d{2})/i);
+
+  const maariv =
+    firstMatch(section, /(\d{1,2}:\d{2})\s+MAARIV\b/i) ||
+    firstMatch(section, /MAARIV\s+(\d{1,2}:\d{2})/i);
+
+  const entries = removeEmptyEntries([
+    createEntry("Shacharis", shacharis),
+    createEntry("Mincha", mincha),
+    createEntry("Maariv", maariv),
+  ]);
+
+  if (!entries.length) return null;
+
+  return {
+    dayTitle: "Sunday",
+    dayDate: "",
+    hebrewDayTitle: "",
+    entries,
+  };
+}
+
 function parseShabbos(text: string): ParsedScheduleDay | null {
   const section = sectionBetween(
     text,
@@ -409,6 +446,7 @@ export async function parseKbaSchedulePdf(
   }
 
   const days = [
+    parseSunday(extractedText),
     parseFriday(extractedText),
     parseShabbos(extractedText),
   ].filter(

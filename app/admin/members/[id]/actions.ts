@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
+import { sendPaymentRequestEmail } from "@/lib/payments/sendPaymentRequestEmail";
 import { headers } from "next/headers";
 
 function getString(formData: FormData, key: string) {
@@ -164,20 +165,57 @@ export async function addCharge(memberId: string, formData: FormData) {
     throw new Error("Amount must be greater than 0.");
   }
 
-  const { error } = await supabaseAdmin.from("member_charges").insert({
-    member_id: memberId,
-    charge_type: chargeType,
-    description,
-    amount: isOpenAmount ? 0 : amount,
-    status: "unpaid",
-    due_date: dueDate || null,
-    payment_note: isOpenAmount
-      ? "Open amount: member chooses amount when paying"
-      : null,
-  });
+  const { data: charge, error } = await supabaseAdmin
+    .from("member_charges")
+    .insert({
+      member_id: memberId,
+      charge_type: chargeType,
+      description,
+      amount: isOpenAmount ? 0 : amount,
+      status: "unpaid",
+      due_date: dueDate || null,
+      payment_note: isOpenAmount
+        ? "Open amount: member chooses amount when paying"
+        : null,
+    })
+    .select("id")
+    .single();
 
-  if (error) {
-    throw new Error(error.message);
+  if (error || !charge) {
+    throw new Error(error?.message || "Unable to save charge.");
+  }
+
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from("members")
+    .select("first_name, email")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (memberError) {
+    console.error("PAYMENT_REQUEST_MEMBER_LOOKUP_ERROR", {
+      memberId,
+      error: memberError.message,
+    });
+  }
+
+  if (member?.email) {
+    try {
+      await sendPaymentRequestEmail({
+        recipient: member.email,
+        memberFirstName: member.first_name || "Member",
+        amount,
+        chargeType,
+        description,
+        chargeId: charge.id,
+        isOpenAmount,
+      });
+    } catch (emailError) {
+      console.error("PAYMENT_REQUEST_EMAIL_ERROR", {
+        memberId,
+        chargeId: charge.id,
+        error: emailError,
+      });
+    }
   }
 
   refreshMemberPages(memberId);

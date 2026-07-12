@@ -6,8 +6,7 @@ import PrintButton from "./PrintButton";
 
 export const dynamic = "force-dynamic";
 
-const logoUrl =
-  "https://lh3.googleusercontent.com/sitesv/AA5AbUBOBiJ3ZyHEQsgQeS5AnlHZG6UC7SiEm3dlp3kYOvxEZ3N7_OGZCzaoVfDUtrPonoq7ZPnpK_8vDrkXESrXi5HPm_reVBRY_l0PYxLMrYoa-uFOb3fsypEma8Eo8ubrpN3MFfSSMBs1sifxdtfHZlnin6ql7pTbsF35QCxICEtSUYKxxUqPYGzhqoN2hZb-27RwliyE1vTUbDSQ1b0dGM61Yg6mZUcFp-utkHUH=w1280";
+const logoUrl = "/kba-logo.png";
 
 type Member = {
   id: string;

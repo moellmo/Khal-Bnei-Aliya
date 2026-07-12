@@ -224,7 +224,7 @@ portal_role
     .order("created_at", {
       ascending: false,
     })
-    .limit(10);
+    .limit(5);
 
   if (paymentError) {
     console.error("Unable to load member payments:", paymentError.message);
@@ -661,6 +661,13 @@ const latestFailedAttempt =
                 View completed payments and download receipts.
               </p>
             </div>
+
+            <Link
+              href="/member/payments"
+              className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold text-[#1d2940]"
+            >
+              View All Payments
+            </Link>
           </div>
 
           <div className="mt-6 overflow-x-auto">

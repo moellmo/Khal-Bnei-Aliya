@@ -24,16 +24,45 @@ type Member = {
 type PageProps = {
   searchParams?: Promise<{
     created?: string;
+    q?: string;
+    status?: string;
   }>;
 };
 
-async function getMembers(): Promise<Member[]> {
-  const { data, error } = await supabaseAdmin
+async function getMembers({
+  query,
+  status,
+}: {
+  query: string;
+  status: string;
+}): Promise<Member[]> {
+  let request = supabaseAdmin
     .from("members")
     .select(
       "id, first_name, last_name, hebrew_name, tribe_status, email, phone, address, membership_type, custom_dues_amount, status, seating_location, notes, created_at"
-    )
-    .order("created_at", { ascending: false });
+    );
+
+  if (query) {
+    const escapedQuery = query.replaceAll(",", " ");
+    request = request.or(
+      [
+        `first_name.ilike.%${escapedQuery}%`,
+        `last_name.ilike.%${escapedQuery}%`,
+        `hebrew_name.ilike.%${escapedQuery}%`,
+        `email.ilike.%${escapedQuery}%`,
+        `phone.ilike.%${escapedQuery}%`,
+        `seating_location.ilike.%${escapedQuery}%`,
+      ].join(",")
+    );
+  }
+
+  if (status && status !== "all") {
+    request = request.eq("status", status);
+  }
+
+  const { data, error } = await request.order("last_name", {
+    ascending: true,
+  });
 
   if (error) {
     console.error("Error loading members:", error.message);
@@ -54,7 +83,12 @@ function formatMoney(amount: number | null) {
 
 export default async function AdminMembersPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const members = await getMembers();
+  const query = String(params?.q || "").trim();
+  const selectedStatus = String(params?.status || "all").trim();
+  const members = await getMembers({
+    query,
+    status: selectedStatus,
+  });
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -241,21 +275,53 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
             </button>
           </form>
 
-          <div className="mt-6 overflow-x-auto">
-
-
           <div className="min-w-0 overflow-hidden rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-bold">Member List</h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  {members.length} member{members.length === 1 ? "" : "s"}{" "}
-                  currently in the system.
+                  Showing {members.length} member{members.length === 1 ? "" : "s"}.
                 </p>
               </div>
             </div>
 
-            </div>
+            <form method="GET" className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_auto]">
+              <label className="space-y-2">
+                <span className="text-sm font-bold text-slate-600">
+                  Search
+                </span>
+                <input
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Name, email, phone, Hebrew name, seat..."
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="text-sm font-bold text-slate-600">
+                  Status
+                </span>
+                <select
+                  name="status"
+                  defaultValue={selectedStatus}
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                >
+                  <option value="all">All</option>
+                  <option value="active">Active</option>
+                  <option value="pending">Pending</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="donor">Donor</option>
+                </select>
+              </label>
+
+              <button
+                type="submit"
+                className="self-end rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+              >
+                Search
+              </button>
+            </form>
 
             <div className="mt-6 overflow-x-auto">
               <table className="w-full min-w-[1050px] border-separate border-spacing-y-3 text-left text-sm">
