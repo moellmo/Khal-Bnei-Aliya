@@ -40,6 +40,7 @@ type PageProps = {
   searchParams?: Promise<{
     month?: string;
     year?: string;
+    view?: string;
   status?: string;
     accountingError?: string;
     expenseAdded?: string;
@@ -103,6 +104,18 @@ function getMonthName(month: number) {
   }).format(new Date(2026, month - 1, 1));
 }
 
+function dateRange(month: number | null, year: number) {
+  const start = month
+    ? `${year}-${String(month).padStart(2, "0")}-01`
+    : `${year}-01-01`;
+  const end =
+    month && month < 12
+      ? `${year}-${String(month + 1).padStart(2, "0")}-01`
+      : `${year + 1}-01-01`;
+
+  return { start, end };
+}
+
 async function getAccountingRows(
   month: number,
   year: number
@@ -154,15 +167,21 @@ async function getAccountingRows(
   }));
 }
 
-async function getExpenses(): Promise<{
+async function getExpenses(
+  month: number | null,
+  year: number
+): Promise<{
   rows: Expense[];
   error: string | null;
 }> {
+  const range = dateRange(month, year);
   const { data, error } = await supabaseAdmin
     .from("accounting_expenses")
     .select("id, vendor, category, amount, expense_date, receipt_url")
+    .gte("expense_date", range.start)
+    .lt("expense_date", range.end)
     .order("expense_date", { ascending: false })
-    .limit(10);
+    .limit(200);
 
   if (error) {
     return {
@@ -177,17 +196,23 @@ async function getExpenses(): Promise<{
   };
 }
 
-async function getZellePayments(): Promise<{
+async function getZellePayments(
+  month: number | null,
+  year: number
+): Promise<{
   rows: ZellePayment[];
   error: string | null;
 }> {
+  const range = dateRange(month, year);
   const { data, error } = await supabaseAdmin
     .from("zelle_payments")
     .select(
       "id, payer_name, payer_email, amount, received_date, purpose, status"
     )
+    .gte("received_date", range.start)
+    .lt("received_date", range.end)
     .order("received_date", { ascending: false })
-    .limit(10);
+    .limit(200);
 
   if (error) {
     return {
@@ -224,11 +249,14 @@ export default async function AccountingPage({
       : now.getFullYear();
 
   const selectedStatus = query?.status || "all";
+  const activeView = query?.view || "monthly";
 
-  const [rows, expensesResult, zelleResult] = await Promise.all([
+  const [rows, expensesResult, zelleResult, yearlyExpenses, yearlyZelle] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
-    getExpenses(),
-    getZellePayments(),
+    getExpenses(selectedMonth, selectedYear),
+    getZellePayments(selectedMonth, selectedYear),
+    getExpenses(null, selectedYear),
+    getZellePayments(null, selectedYear),
   ]);
 
   const billedRows = rows.filter((row) => Boolean(row.charge));
@@ -294,6 +322,16 @@ export default async function AccountingPage({
     0
   );
 
+  const yearlyExpenseTotal = yearlyExpenses.rows.reduce(
+    (sum, expense) => sum + Number(expense.amount || 0),
+    0
+  );
+
+  const yearlyZelleTotal = yearlyZelle.rows.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
   const graphMax = Math.max(
     billedTotal,
     paidTotal,
@@ -340,12 +378,7 @@ export default async function AccountingPage({
             {getMonthName(selectedMonth)} {selectedYear}
           </h1>
 
-          <div
-            className="mt-6 grid gap-5"
-            style={{
-              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-            }}
-          >
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
             <div>
               <p className="text-sm text-slate-400">Members Billed</p>
               <p className="mt-1 text-2xl font-bold">
@@ -394,6 +427,27 @@ export default async function AccountingPage({
             Accounting entry saved.
           </div>
         )}
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          {[
+            ["monthly", "Monthly"],
+            ["yearly", "Yearly"],
+            ["uploads", "Uploads"],
+            ["receipts", "Receipts"],
+          ].map(([view, label]) => (
+            <Link
+              key={view}
+              href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=${view}`}
+              className={
+                activeView === view
+                  ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                  : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+              }
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
 
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -444,6 +498,44 @@ export default async function AccountingPage({
             ))}
           </div>
         </div>
+
+        {activeView === "yearly" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold">{selectedYear} Year Summary</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Expense and Zelle totals across the selected calendar year.
+            </p>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Year Expenses
+                </p>
+                <p className="mt-2 text-2xl font-black text-red-700">
+                  {formatMoney(yearlyExpenseTotal)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Year Zelle
+                </p>
+                <p className="mt-2 text-2xl font-black text-blue-700">
+                  {formatMoney(yearlyZelleTotal)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Net Zelle Less Expenses
+                </p>
+                <p className="mt-2 text-2xl font-black">
+                  {formatMoney(yearlyZelleTotal - yearlyExpenseTotal)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
           <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
@@ -553,6 +645,22 @@ export default async function AccountingPage({
               payer_email, amount, received_date, purpose.
             </p>
 
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a
+                href="/api/accounting/templates/expenses"
+                className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold"
+              >
+                Expense CSV Template
+              </a>
+
+              <a
+                href="/api/accounting/templates/zelle"
+                className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold"
+              >
+                Zelle CSV Template
+              </a>
+            </div>
+
             <button
               type="submit"
               className="mt-5 rounded-full bg-[#8b6b2e] px-6 py-3 font-bold text-white"
@@ -561,6 +669,43 @@ export default async function AccountingPage({
             </button>
           </form>
         </div>
+
+        {activeView === "receipts" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <h2 className="text-2xl font-bold">Receipt Links</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Add receipts by pasting a receipt URL on an expense. Entries with
+              receipts appear here.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              {expensesResult.rows
+                .filter((expense) => Boolean(expense.receipt_url))
+                .map((expense) => (
+                  <a
+                    key={expense.id}
+                    href={expense.receipt_url || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-2xl bg-[#fbf8f2] p-4 transition hover:shadow-md"
+                  >
+                    <p className="font-bold">{expense.vendor}</p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {formatDate(expense.expense_date)} ·{" "}
+                      {formatMoney(expense.amount)}
+                    </p>
+                  </a>
+                ))}
+
+              {expensesResult.rows.filter((expense) => expense.receipt_url)
+                .length === 0 && (
+                <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                  No receipt links for this month yet.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <form
@@ -718,12 +863,7 @@ export default async function AccountingPage({
           method="GET"
           className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
         >
-          <div
-            className="grid gap-4"
-            style={{
-              gridTemplateColumns: "1fr 1fr 1fr auto",
-            }}
-          >
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="space-y-2">
               <span className="font-semibold">Month</span>
 

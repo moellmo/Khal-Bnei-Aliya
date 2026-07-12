@@ -193,8 +193,8 @@ function TabLink({
       href={href}
       className={
         active
-          ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
-          : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+          ? "min-w-0 rounded-full bg-[#1d2940] px-4 py-3 text-center text-sm font-bold text-white shadow-sm sm:px-5"
+          : "min-w-0 rounded-full bg-white px-4 py-3 text-center text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2] sm:px-5"
       }
     >
       {children}
@@ -258,10 +258,7 @@ function ChargeCard({ charge, member }: { charge: Charge; member: Member }) {
             action={markChargePaid.bind(null, member.id, charge.id)}
             className="mt-4"
           >
-            <div
-              className="grid gap-3"
-              style={{ gridTemplateColumns: "1fr 1fr" }}
-            >
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-xs font-bold text-slate-600">
                 Amount Paid
                 <input
@@ -393,7 +390,7 @@ export default async function MemberDetailPage({
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
-      <section className="mx-auto max-w-7xl px-6 py-8">
+      <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <Link
             href="/admin/members"
@@ -407,12 +404,12 @@ export default async function MemberDetailPage({
           </Link>
         </div>
 
-        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-8 text-white shadow-sm">
+        <div className="mt-8 rounded-[2rem] bg-[#1d2940] p-6 text-white shadow-sm sm:p-8">
           <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#d9bf7a]">
             Member File
           </p>
 
-          <h1 className="mt-3 text-4xl font-bold">
+          <h1 className="mt-3 break-words text-3xl font-bold sm:text-4xl">
             {member.first_name} {member.last_name}
           </h1>
 
@@ -422,10 +419,7 @@ export default async function MemberDetailPage({
             </p>
           )}
 
-          <div
-            className="mt-5 grid gap-3 text-sm text-slate-200"
-            style={{ gridTemplateColumns: "repeat(5, minmax(0, 1fr))" }}
-          >
+          <div className="mt-5 grid gap-3 text-sm text-slate-200 sm:grid-cols-2 lg:grid-cols-5">
             <div>
               <p className="text-slate-400">Kohen / Levi / Yisroel</p>
               <p className="font-bold">{displayTribe(member.tribe_status)}</p>
@@ -433,7 +427,7 @@ export default async function MemberDetailPage({
 
             <div>
               <p className="text-slate-400">Email</p>
-              <p className="font-bold">{member.email || "—"}</p>
+              <p className="break-words font-bold">{member.email || "—"}</p>
             </div>
 
             <div>
@@ -457,7 +451,7 @@ export default async function MemberDetailPage({
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+        <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-5 shadow-sm sm:p-6">
   <div className="flex flex-wrap items-start justify-between gap-4">
     <div>
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#8b6b2e]">
@@ -543,7 +537,7 @@ export default async function MemberDetailPage({
           </div>
         )}
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
           <TabLink
             href={`/admin/members/${id}?tab=overview`}
             active={activeTab === "overview"}
@@ -577,10 +571,7 @@ export default async function MemberDetailPage({
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <h2 className="text-2xl font-bold">Member Details</h2>
 
-            <div
-              className="mt-5 grid gap-5 text-sm"
-              style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
-            >
+            <div className="mt-5 grid gap-5 text-sm sm:grid-cols-2">
               <div>
                 <p className="font-semibold text-slate-500">Family Name</p>
                 <p className="font-bold">{member.last_name}</p>
@@ -634,10 +625,7 @@ export default async function MemberDetailPage({
             >
               <h3 className="text-xl font-bold">Edit Member Details</h3>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">First Name</span>
                   <input
@@ -669,10 +657,7 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">Kohen / Levi / Yisroel</span>
                   <select
@@ -700,10 +685,7 @@ export default async function MemberDetailPage({
                 </label>
               </div>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">Email</span>
                   <input
@@ -733,10 +715,7 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">Membership Type</span>
                   <select
@@ -789,10 +768,7 @@ export default async function MemberDetailPage({
     Enter the existing Sola recurring schedule information for this member.
   </p>
 
-  <div
-    className="mt-5 grid gap-4"
-    style={{ gridTemplateColumns: "1fr 1fr" }}
-  >
+  <div className="mt-5 grid gap-4 sm:grid-cols-2">
     <label className="space-y-2">
       <span className="font-semibold">Sola Customer ID</span>
       <input
@@ -813,10 +789,7 @@ export default async function MemberDetailPage({
     </label>
   </div>
 
-  <div
-    className="mt-4 grid gap-4"
-    style={{ gridTemplateColumns: "1fr 1fr 1fr" }}
-  >
+  <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     <label className="space-y-2">
       <span className="font-semibold">Recurring Amount</span>
       <input
@@ -872,12 +845,7 @@ export default async function MemberDetailPage({
         )}
 
         {activeTab === "mishaberach" && (
-          <div
-            className="mt-8 grid gap-8"
-            style={{
-              gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
-            }}
-          >
+          <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
             <form
               action={addFamilyMemberAction}
               className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -890,10 +858,7 @@ export default async function MemberDetailPage({
                 </p>
               </div>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">English First Name</span>
                   <input
@@ -925,10 +890,7 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block space-y-2">
                   <span className="font-semibold">Relationship / Section</span>
                   <select
@@ -982,21 +944,21 @@ export default async function MemberDetailPage({
                 {familyMembers.map((person) => (
                   <div
                     key={person.id}
-                    className="rounded-2xl bg-[#fbf8f2] p-4"
+                    className="min-w-0 overflow-hidden rounded-2xl bg-[#fbf8f2] p-4"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8b6b2e]">
                           {person.relationship || "Other"} ·{" "}
                           {displayTribe(person.tribe_status)}
                         </p>
 
-                        <p className="mt-1 font-bold">
+                        <p className="mt-1 break-words font-bold">
                           {person.first_name} {person.last_name || ""}
                         </p>
 
                         {person.hebrew_name && (
-                          <p dir="rtl" className="mt-1 text-right text-lg">
+                          <p dir="rtl" className="mt-1 break-words text-right text-lg">
                             {person.hebrew_name}
                           </p>
                         )}
@@ -1075,12 +1037,7 @@ export default async function MemberDetailPage({
         )}
 
         {activeTab === "payments" && (
-          <div
-            className="mt-8 grid gap-8"
-            style={{
-              gridTemplateColumns: "minmax(0, 0.9fr) minmax(0, 1.1fr)",
-            }}
-          >
+          <div className="mt-8 grid gap-8 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
             <form
               action={addChargeAction}
               className="space-y-5 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -1119,10 +1076,7 @@ export default async function MemberDetailPage({
                 />
               </label>
 
-              <div
-                className="grid gap-4"
-                style={{ gridTemplateColumns: "1fr 1fr" }}
-              >
+              <div className="grid gap-4 sm:grid-cols-2">
                 <label className="space-y-2">
                   <span className="font-semibold">Amount</span>
                   <input
@@ -1162,6 +1116,34 @@ export default async function MemberDetailPage({
                   </span>
                 </span>
               </label>
+
+              <div className="rounded-2xl bg-[#fbf8f2] p-4">
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    name="guest_of_member"
+                    type="checkbox"
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-bold">
+                      Guest of this member
+                    </span>
+                    <span className="text-slate-500">
+                      Adds the charge to this member and labels who the guest
+                      was.
+                    </span>
+                  </span>
+                </label>
+
+                <label className="mt-4 block space-y-2">
+                  <span className="font-semibold">Guest Name</span>
+                  <input
+                    name="guest_name"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                    placeholder="Parent, guest, or sponsor"
+                  />
+                </label>
+              </div>
 
               <button
                 type="submit"

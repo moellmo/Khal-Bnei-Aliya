@@ -402,7 +402,25 @@ export default async function Home() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <details className="mt-5 rounded-2xl bg-[#fbf8f2] p-4 sm:hidden">
+              <summary className="cursor-pointer text-sm font-black text-[#1d2940]">
+                More account links
+              </summary>
+
+              <div className="mt-4 grid gap-3">
+                {quickLinks.map((item) => (
+                  <Link
+                    key={`${item.label}-${item.href}-mobile`}
+                    href={item.href}
+                    className="rounded-2xl bg-white p-4 text-sm font-bold shadow-sm"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            </details>
+
+            <div className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2">
               {quickLinks.map((item) => (
                 <Link
                   key={`${item.label}-${item.href}`}
@@ -469,7 +487,7 @@ export default async function Home() {
                     <div className="relative overflow-hidden bg-white">
                       <iframe
                         src={`${weeklyPdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
-                        className="pointer-events-none h-[520px] w-full bg-white"
+                        className="pointer-events-none h-[460px] w-full bg-white"
                         title="Khal Bnei Aliya Weekly Schedule Mobile Preview"
                       />
 

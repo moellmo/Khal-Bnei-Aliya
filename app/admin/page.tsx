@@ -145,8 +145,8 @@ export default async function AdminPage({ searchParams }: PageProps) {
               </p>
 
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                Create a Mishaberach, pledge, aliyah, or sponsorship charge and
-                send the member a payment request.
+                Create a Mishaberach, pledge, aliyah, Matana, sponsorship, or
+                guest charge and send a payment request.
               </p>
             </div>
 
@@ -170,88 +170,163 @@ export default async function AdminPage({ searchParams }: PageProps) {
           ) : (
             <form
               action={createQuickCharge}
-              className="mt-5 grid gap-4 lg:grid-cols-[1.4fr_0.9fr_0.7fr_1.5fr_0.8fr_auto]"
+              className="mt-5 space-y-5"
             >
-              <label className="space-y-2 text-sm font-bold text-slate-700">
-                Member
-                <select
-                  name="member_id"
-                  required
-                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
-                  defaultValue=""
-                >
-                  <option value="" disabled>
-                    Select member
-                  </option>
-                  {memberOptions.map((member) => {
-                    const name = [member.first_name, member.last_name]
-                      .filter(Boolean)
-                      .join(" ")
-                      .trim();
+              <datalist id="quick-charge-members">
+                {memberOptions.map((member) => {
+                  const name = [member.first_name, member.last_name]
+                    .filter(Boolean)
+                    .join(" ")
+                    .trim();
 
-                    return (
-                      <option key={member.id} value={member.id}>
-                        {name || member.email || "Unnamed member"}
-                        {member.email ? ` - ${member.email}` : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </label>
+                  return (
+                    <option
+                      key={member.id}
+                      value={`${name || member.email || "Unnamed member"}${
+                        member.email ? ` - ${member.email}` : ""
+                      } | ${member.id}`}
+                    />
+                  );
+                })}
+              </datalist>
 
-              <label className="space-y-2 text-sm font-bold text-slate-700">
-                Type
-                <select
-                  name="charge_type"
-                  defaultValue="Mishaberach"
-                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
-                >
-                  <option>Mishaberach</option>
-                  <option>Pledge</option>
-                  <option>Aliyah Pledge</option>
-                  <option>Sponsorship</option>
-                  <option>Donation</option>
-                  <option>Other</option>
-                </select>
-              </label>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(160px,0.7fr)_minmax(140px,0.45fr)]">
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Member Search
+                  <input
+                    name="member_search"
+                    list="quick-charge-members"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
+                    placeholder="Start typing a name or email"
+                  />
+                </label>
 
-              <label className="space-y-2 text-sm font-bold text-slate-700">
-                Amount
-                <input
-                  name="amount"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  required
-                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
-                  placeholder="18"
-                />
-              </label>
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Type
+                  <select
+                    name="charge_type"
+                    defaultValue="Mishaberach"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
+                  >
+                    <option>Mishaberach</option>
+                    <option>Matana</option>
+                    <option>Pledge</option>
+                    <option>Aliyah Pledge</option>
+                    <option>Sponsorship</option>
+                    <option>Donation</option>
+                    <option>Other</option>
+                  </select>
+                </label>
 
-              <label className="space-y-2 text-sm font-bold text-slate-700">
-                Description
-                <input
-                  name="description"
-                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
-                  placeholder="Refuah sheleimah, pledge note..."
-                />
-              </label>
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Amount
+                  <input
+                    name="amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                    placeholder="18"
+                  />
+                </label>
+              </div>
 
-              <label className="space-y-2 text-sm font-bold text-slate-700">
-                Due Date
-                <input
-                  name="due_date"
-                  type="date"
-                  defaultValue={today}
-                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
-                />
-              </label>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(180px,0.5fr)]">
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Description
+                  <input
+                    name="description"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                    placeholder="Refuah sheleimah, pledge note..."
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Due Date
+                  <input
+                    name="due_date"
+                    type="date"
+                    defaultValue={today}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 text-sm text-slate-700 lg:grid-cols-3">
+                <label className="flex items-start gap-3 font-semibold">
+                  <input name="open_amount" type="checkbox" className="mt-1" />
+                  <span>
+                    <span className="block text-slate-900">
+                      Matana / open amount
+                    </span>
+                    Payer chooses the amount.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 font-semibold">
+                  <input
+                    name="guest_of_member"
+                    type="checkbox"
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block text-slate-900">
+                      Guest of selected member
+                    </span>
+                    Shows on that member&apos;s page.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 font-semibold">
+                  <input
+                    name="guest_charge"
+                    type="checkbox"
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block text-slate-900">
+                      Charge guest directly
+                    </span>
+                    Creates a guest account if needed.
+                  </span>
+                </label>
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-3">
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Guest Name
+                  <input
+                    name="guest_name"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                    placeholder="Parent, guest, or sponsor"
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Guest Email
+                  <input
+                    name="guest_email"
+                    type="email"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                    placeholder="For guest-direct payment request"
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Guest Phone
+                  <input
+                    name="guest_phone"
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
+                    placeholder="Optional"
+                  />
+                </label>
+              </div>
 
               <button
                 type="submit"
-                className="self-end rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+                className="w-full rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white sm:w-auto"
               >
-                Create
+                Create Charge
               </button>
             </form>
           )}

@@ -20,6 +20,13 @@ function getPaymentProvider(paymentMethod: string) {
   return paymentMethod.toLowerCase() === "sola" ? "sola" : "manual";
 }
 
+function memberDisplayName(member: {
+  first_name: string | null;
+  last_name: string | null;
+}) {
+  return [member.first_name, member.last_name].filter(Boolean).join(" ").trim();
+}
+
 function refreshMemberPages(memberId: string) {
   revalidatePath(`/admin/members/${memberId}`);
   revalidatePath(`/admin/members/${memberId}/payments`);
@@ -156,7 +163,9 @@ export async function addCharge(memberId: string, formData: FormData) {
   const amount = getNumber(formData, "amount");
   const dueDate = getString(formData, "due_date");
   const chargeType = getString(formData, "charge_type") || "Other";
-  const description = getString(formData, "description") || null;
+  const rawDescription = getString(formData, "description") || null;
+  const guestName = getString(formData, "guest_name");
+  const guestOfMember = formData.get("guest_of_member") === "on";
   const isOpenAmount =
     formData.get("open_amount") === "on" ||
     chargeType.toLowerCase() === "matana";
@@ -164,6 +173,27 @@ export async function addCharge(memberId: string, formData: FormData) {
   if (!isOpenAmount && amount <= 0) {
     throw new Error("Amount must be greater than 0.");
   }
+
+  const { data: member, error: memberError } = await supabaseAdmin
+    .from("members")
+    .select("first_name, last_name, email")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  if (memberError) {
+    console.error("PAYMENT_REQUEST_MEMBER_LOOKUP_ERROR", {
+      memberId,
+      error: memberError.message,
+    });
+  }
+
+  const hostName = member ? memberDisplayName(member) : "this member";
+  const description =
+    guestOfMember && guestName
+      ? rawDescription
+        ? `${rawDescription} (Guest of ${hostName}: ${guestName})`
+        : `Guest of ${hostName}: ${guestName}`
+      : rawDescription;
 
   const { data: charge, error } = await supabaseAdmin
     .from("member_charges")
@@ -176,6 +206,8 @@ export async function addCharge(memberId: string, formData: FormData) {
       due_date: dueDate || null,
       payment_note: isOpenAmount
         ? "Open amount: member chooses amount when paying"
+        : guestOfMember && guestName
+        ? `Guest charge: ${guestName}`
         : null,
     })
     .select("id")
@@ -183,19 +215,6 @@ export async function addCharge(memberId: string, formData: FormData) {
 
   if (error || !charge) {
     throw new Error(error?.message || "Unable to save charge.");
-  }
-
-  const { data: member, error: memberError } = await supabaseAdmin
-    .from("members")
-    .select("first_name, email")
-    .eq("id", memberId)
-    .maybeSingle();
-
-  if (memberError) {
-    console.error("PAYMENT_REQUEST_MEMBER_LOOKUP_ERROR", {
-      memberId,
-      error: memberError.message,
-    });
   }
 
   if (member?.email) {
