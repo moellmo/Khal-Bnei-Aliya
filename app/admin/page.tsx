@@ -196,14 +196,40 @@ export default async function AdminPage({ searchParams }: PageProps) {
                 })}
               </datalist>
 
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(160px,0.7fr)_minmax(140px,0.45fr)]">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)_minmax(140px,0.45fr)]">
                 <label className="space-y-2 text-sm font-bold text-slate-700">
-                  Member Search
+                  Select Member
+                  <select
+                    name="member_id"
+                    defaultValue=""
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
+                  >
+                    <option value="">
+                      Choose member unless charging guest directly
+                    </option>
+                    {memberOptions.map((member) => {
+                      const name = [member.first_name, member.last_name]
+                        .filter(Boolean)
+                        .join(" ")
+                        .trim();
+
+                      return (
+                        <option key={member.id} value={member.id}>
+                          {name || member.email || "Unnamed member"}
+                          {member.email ? ` - ${member.email}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Search Fallback
                   <input
                     name="member_search"
                     list="quick-charge-members"
                     className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
-                    placeholder="Start typing a name or email"
+                    placeholder="Optional: type name/email"
                   />
                 </label>
 

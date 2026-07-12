@@ -459,6 +459,7 @@ export default async function AccountingPage({
           ))}
         </div>
 
+        {(activeView === "monthly" || activeView === "yearly") && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -508,6 +509,7 @@ export default async function AccountingPage({
             ))}
           </div>
         </div>
+        )}
 
         {activeView === "yearly" && (
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
@@ -547,6 +549,7 @@ export default async function AccountingPage({
           </div>
         )}
 
+        {activeView === "monthly" && (
         <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
           <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <h2 className="text-2xl font-bold">Monthly Expense Quick List</h2>
@@ -617,10 +620,13 @@ export default async function AccountingPage({
               ))}
             </div>
           </div>
+        </div>
+        )}
 
+        {activeView === "uploads" && (
           <form
             action={importAccountingCsv}
-            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
           >
             <h2 className="text-2xl font-bold">Upload CSV</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -678,7 +684,7 @@ export default async function AccountingPage({
               Import CSV
             </button>
           </form>
-        </div>
+        )}
 
         {activeView === "receipts" && (
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
@@ -760,6 +766,7 @@ export default async function AccountingPage({
           </div>
         )}
 
+        {activeView === "monthly" && (
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <form
             action={addExpense}
@@ -921,11 +928,14 @@ export default async function AccountingPage({
             </button>
           </form>
         </div>
+        )}
 
+        {activeView === "monthly" && (
         <form
           method="GET"
           className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
         >
+          <input type="hidden" name="view" value="monthly" />
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
             <label className="space-y-2">
               <span className="font-semibold">Month</span>
@@ -986,7 +996,9 @@ export default async function AccountingPage({
             </button>
           </div>
         </form>
+        )}
 
+        {activeView === "monthly" && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -1116,6 +1128,7 @@ export default async function AccountingPage({
             </table>
           </div>
         </div>
+        )}
       </section>
     </main>
   );
