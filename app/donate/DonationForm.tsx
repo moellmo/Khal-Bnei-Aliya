@@ -114,12 +114,28 @@ function catchSolaWalletPromise(
   }
 }
 
-export default function DonationForm() {
+type DonationFormProps = {
+  initialAmount?: string;
+  initialPurpose?: string;
+  initialNote?: string;
+  initialName?: string;
+  initialEmail?: string;
+  initialPhone?: string;
+};
+
+export default function DonationForm({
+  initialAmount = "18",
+  initialPurpose = "General Donation",
+  initialNote = "",
+  initialName = "",
+  initialEmail = "",
+  initialPhone = "",
+}: DonationFormProps) {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const [amount, setAmount] = useState("18");
+  const [amount, setAmount] = useState(initialAmount || "18");
   const [scriptReady, setScriptReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [walletSubmitting, setWalletSubmitting] = useState(false);
@@ -579,6 +595,7 @@ export default function DonationForm() {
           <input
             name="donorName"
             required
+            defaultValue={initialName}
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
           />
         </label>
@@ -589,6 +606,7 @@ export default function DonationForm() {
             name="email"
             type="email"
             required
+            defaultValue={initialEmail}
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
           />
         </label>
@@ -599,6 +617,7 @@ export default function DonationForm() {
             name="phone"
             type="tel"
             required
+            defaultValue={initialPhone}
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
           />
         </label>
@@ -607,7 +626,7 @@ export default function DonationForm() {
           Purpose
           <select
             name="purpose"
-            defaultValue="General Donation"
+            defaultValue={initialPurpose}
             className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
           >
             <option>General Donation</option>
@@ -615,6 +634,7 @@ export default function DonationForm() {
             <option>Mishaberach</option>
             <option>Matana</option>
             <option>Aliyah Pledge</option>
+            <option>Yamim Noraim Seats</option>
             <option>Building Fund</option>
             <option>Other</option>
           </select>
@@ -662,6 +682,7 @@ export default function DonationForm() {
           name="note"
           rows={3}
           placeholder="Optional dedication, name, or payment note"
+          defaultValue={initialNote}
           className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
         />
       </label>

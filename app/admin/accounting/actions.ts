@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+const ACCOUNTING_RECEIPTS_BUCKET = "accounting-receipts";
+
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
@@ -13,17 +15,82 @@ function getNumber(formData: FormData, key: string) {
   return Number.isFinite(value) ? value : 0;
 }
 
+function safeStorageName(fileName: string) {
+  return fileName
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/-+/g, "-");
+}
+
+async function uploadAccountingReceipt(file: File | null) {
+  if (!file || file.size === 0) {
+    return null;
+  }
+
+  const allowedTypes = new Set([
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/heic",
+    "image/heif",
+    "image/webp",
+  ]);
+
+  if (
+    file.type &&
+    !allowedTypes.has(file.type) &&
+    !/\.(pdf|jpe?g|png|heic|heif|webp)$/i.test(file.name)
+  ) {
+    throw new Error("Receipt must be a PDF or image file.");
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Receipt file must be 8MB or smaller.");
+  }
+
+  const safeName = safeStorageName(file.name || "receipt");
+  const storagePath = `accounting/${Date.now()}-${safeName}`;
+  const fileBytes = await file.arrayBuffer();
+
+  const { error } = await supabaseAdmin.storage
+    .from(ACCOUNTING_RECEIPTS_BUCKET)
+    .upload(storagePath, fileBytes, {
+      contentType: file.type || "application/octet-stream",
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return storagePath;
+}
+
 export async function addExpense(formData: FormData) {
   const amount = getNumber(formData, "amount");
   const vendor = getString(formData, "vendor");
   const category = getString(formData, "category") || "General";
   const expenseDate = getString(formData, "expense_date");
   const note = getString(formData, "note") || null;
-  const receiptUrl = getString(formData, "receipt_url") || null;
+  let receiptUrl = getString(formData, "receipt_url") || null;
+  const receiptEntry = formData.get("receipt_file");
+  const receiptFile = receiptEntry instanceof File ? receiptEntry : null;
 
   if (amount <= 0 || !vendor || !expenseDate) {
     redirect(
       "/admin/accounting?accountingError=Expense%20requires%20vendor%2C%20date%2C%20and%20amount."
+    );
+  }
+
+  try {
+    const uploadedReceipt = await uploadAccountingReceipt(receiptFile);
+    receiptUrl = uploadedReceipt || receiptUrl;
+  } catch (uploadError) {
+    redirect(
+      `/admin/accounting?view=receipts&accountingError=${encodeURIComponent(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload receipt."
+      )}`
     );
   }
 
@@ -48,7 +115,52 @@ export async function addExpense(formData: FormData) {
   }
 
   revalidatePath("/admin/accounting");
-  redirect("/admin/accounting?expenseAdded=1");
+  redirect("/admin/accounting?view=receipts&expenseAdded=1");
+}
+
+export async function uploadExpenseReceipt(formData: FormData) {
+  const expenseId = getString(formData, "expense_id");
+  const receiptEntry = formData.get("receipt_file");
+  const receiptFile = receiptEntry instanceof File ? receiptEntry : null;
+
+  if (!expenseId || !receiptFile || receiptFile.size === 0) {
+    redirect(
+      "/admin/accounting?view=receipts&accountingError=Choose%20an%20expense%20and%20receipt%20file."
+    );
+  }
+
+  let storagePath: string | null = null;
+
+  try {
+    storagePath = await uploadAccountingReceipt(receiptFile);
+  } catch (uploadError) {
+    redirect(
+      `/admin/accounting?view=receipts&accountingError=${encodeURIComponent(
+        uploadError instanceof Error
+          ? uploadError.message
+          : "Unable to upload receipt."
+      )}`
+    );
+  }
+
+  const { error } = await supabaseAdmin
+    .from("accounting_expenses")
+    .update({
+      receipt_url: storagePath,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expenseId);
+
+  if (error) {
+    redirect(
+      `/admin/accounting?view=receipts&accountingError=${encodeURIComponent(
+        error.message
+      )}`
+    );
+  }
+
+  revalidatePath("/admin/accounting");
+  redirect("/admin/accounting?view=receipts&expenseAdded=1");
 }
 
 export async function addPresetExpense(formData: FormData) {

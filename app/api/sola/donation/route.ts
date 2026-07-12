@@ -27,6 +27,7 @@ const allowedPurposes = new Set([
   "Mishaberach",
   "Matana",
   "Aliyah Pledge",
+  "Yamim Noraim Seats",
   "Building Fund",
   "Other",
 ]);
@@ -54,6 +55,45 @@ function sanitizeGatewayResponse(response: GatewayResponse) {
   }
 
   return sanitized;
+}
+
+function reservationIdFromNote(note: string) {
+  const match = note.match(
+    /Reservation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+  );
+
+  return match?.[1] || null;
+}
+
+async function markReservationPaidFromDonation({
+  purpose,
+  note,
+  reference,
+}: {
+  purpose: string;
+  note: string;
+  reference: string;
+}) {
+  if (purpose !== "Yamim Noraim Seats") return;
+
+  const reservationId = reservationIdFromNote(note);
+  if (!reservationId) return;
+
+  const { error } = await supabaseAdmin
+    .from("yamim_noraim_reservations")
+    .update({
+      payment_status: "paid",
+      payment_reference: reference,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reservationId);
+
+  if (error) {
+    console.error("YAMIM_NORAIM_PAYMENT_LINK_ERROR", {
+      reservationId,
+      error: error.message,
+    });
+  }
 }
 
 function getResponseValue(
@@ -368,6 +408,12 @@ export async function POST(request: NextRequest) {
     if (chargeUpdateError) {
       throw new Error(chargeUpdateError.message);
     }
+
+    await markReservationPaidFromDonation({
+      purpose,
+      note,
+      reference,
+    });
 
     let receiptGenerated = false;
     let receiptError: string | null = null;

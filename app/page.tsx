@@ -29,6 +29,11 @@ type SeasonalPdf = {
   pdf_url: string;
 };
 
+type YamimNoraimSettings = {
+  enabled: boolean;
+  active_year: number;
+};
+
 async function getCurrentWeeklyPdf(): Promise<WeeklyPdf | null> {
   const { data, error } = await supabaseAdmin
     .from("weekly_schedules")
@@ -112,6 +117,21 @@ async function getSeasonalPdfs(): Promise<
   return (data || []) as SeasonalPdf[];
 }
 
+async function getYamimNoraimSettings(): Promise<YamimNoraimSettings | null> {
+  const { data, error } = await supabaseAdmin
+    .from("yamim_noraim_settings")
+    .select("enabled, active_year")
+    .eq("id", "default")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Unable to load Yamim Noraim settings:", error.message);
+    return null;
+  }
+
+  return data as YamimNoraimSettings | null;
+}
+
 export default async function Home() {
   const authSupabase = await createClient();
 
@@ -145,11 +165,15 @@ export default async function Home() {
     weeklyPdf,
     legacyWeeklyPdf,
     seasonalPdfs,
+    yamimNoraimSettings,
   ] = await Promise.all([
     getCurrentWeeklyPdf(),
     getLegacyWeeklyPdf(),
     getSeasonalPdfs(),
+    getYamimNoraimSettings(),
   ]);
+
+  const showYamimNoraimButton = Boolean(yamimNoraimSettings?.enabled);
 
   const weeklyPdfUrl =
     weeklyPdf?.source_pdf_url ||
@@ -333,6 +357,15 @@ export default async function Home() {
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
+              {showYamimNoraimButton && (
+                <Link
+                  href="/yamim-noraim"
+                  className="rounded-full bg-[#1d2940] px-5 py-3 text-center font-bold text-white transition hover:bg-[#10192b] sm:px-6"
+                >
+                  Yamim Noraim Seats
+                </Link>
+              )}
+
               <Link
                 href="/membership"
                 className="rounded-full bg-[#8b6b2e] px-5 py-3 text-center font-bold text-white transition hover:bg-[#745822] sm:px-6"

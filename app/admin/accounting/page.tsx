@@ -5,6 +5,7 @@ import {
   addPresetExpense,
   addZellePayment,
   importAccountingCsv,
+  uploadExpenseReceipt,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,15 @@ function formatDate(value: string | null | undefined) {
     day: "numeric",
     year: "numeric",
   });
+}
+
+function receiptHref(expense: Expense) {
+  if (!expense.receipt_url) return "#";
+  if (/^https?:\/\//i.test(expense.receipt_url)) {
+    return expense.receipt_url;
+  }
+
+  return `/api/accounting/receipts/${expense.id}`;
 }
 
 function getMonthName(month: number) {
@@ -674,9 +684,52 @@ export default async function AccountingPage({
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <h2 className="text-2xl font-bold">Receipt Links</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Add receipts by pasting a receipt URL on an expense. Entries with
-              receipts appear here.
+              Upload receipt PDFs or images into the private Supabase storage
+              bucket. Receipt links below are signed for admin access.
             </p>
+
+            <form
+              action={uploadExpenseReceipt}
+              className="mt-5 grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <label className="space-y-2">
+                <span className="font-semibold">Expense</span>
+                <select
+                  name="expense_id"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  defaultValue=""
+                >
+                  <option value="" disabled>
+                    Select expense
+                  </option>
+                  {expensesResult.rows.map((expense) => (
+                    <option key={expense.id} value={expense.id}>
+                      {formatDate(expense.expense_date)} - {expense.vendor} -{" "}
+                      {formatMoney(expense.amount)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Receipt File</span>
+                <input
+                  name="receipt_file"
+                  type="file"
+                  accept="application/pdf,image/*"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="self-end rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+              >
+                Upload Receipt
+              </button>
+            </form>
 
             <div className="mt-5 space-y-3">
               {expensesResult.rows
@@ -684,7 +737,7 @@ export default async function AccountingPage({
                 .map((expense) => (
                   <a
                     key={expense.id}
-                    href={expense.receipt_url || "#"}
+                    href={receiptHref(expense)}
                     target="_blank"
                     rel="noreferrer"
                     className="block rounded-2xl bg-[#fbf8f2] p-4 transition hover:shadow-md"
@@ -761,8 +814,18 @@ export default async function AccountingPage({
               <span className="font-semibold">Receipt URL</span>
               <input
                 name="receipt_url"
-                placeholder="Paste uploaded receipt link"
+                placeholder="Optional external receipt link"
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Receipt File</span>
+              <input
+                name="receipt_file"
+                type="file"
+                accept="application/pdf,image/*"
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
               />
             </label>
 

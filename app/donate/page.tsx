@@ -1,7 +1,20 @@
 import Link from "next/link";
 import DonationForm from "./DonationForm";
 
-export default function DonatePage() {
+type DonatePageProps = {
+  searchParams?: Promise<{
+    amount?: string;
+    purpose?: string;
+    note?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  }>;
+};
+
+export default async function DonatePage({ searchParams }: DonatePageProps) {
+  const params = await searchParams;
+
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
       <section className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
@@ -49,7 +62,14 @@ export default function DonatePage() {
           </div>
 
           <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
-            <DonationForm />
+            <DonationForm
+              initialAmount={params?.amount}
+              initialPurpose={params?.purpose}
+              initialNote={params?.note}
+              initialName={params?.name}
+              initialEmail={params?.email}
+              initialPhone={params?.phone}
+            />
           </div>
         </div>
       </section>

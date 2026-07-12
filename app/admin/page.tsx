@@ -60,6 +60,12 @@ const adminLinks = [
   href: "/admin/recurring-schedules",
 },
 {
+  label: "Yamim Noraim Seats",
+  description:
+    "Open reservations, set prices, and review men and women seat counts.",
+  href: "/admin/yamim-noraim",
+},
+{
   label: "Admin Users",
   description: "Manage who can access the admin and accounting dashboards.",
   href: "/admin/admin-users",
@@ -308,7 +314,7 @@ export default async function AdminPage({ searchParams }: PageProps) {
                     name="guest_email"
                     type="email"
                     className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-sm text-slate-900"
-                    placeholder="For guest-direct payment request"
+                    placeholder="Optional payment request email"
                   />
                 </label>
 
