@@ -322,6 +322,16 @@ export default async function Home() {
               building a strong community together.
             </p>
 
+            <div className="mt-6 rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+                Mara D&apos;Asra
+              </p>
+              <p className="mt-2 text-xl font-black">
+                Rav Avigdor Gutnicki -{" "}
+                <span dir="rtl">מרא דאתרא</span>
+              </p>
+            </div>
+
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/membership"
@@ -542,6 +552,43 @@ export default async function Home() {
             </div>
           </section>
         )}
+
+        <section className="pb-12">
+          <div className="grid gap-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] md:grid-cols-[0.9fr_1.1fr] md:p-8">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#8b6b2e]">
+                Visit &amp; Contact
+              </p>
+
+              <h2 className="mt-3 text-2xl font-black sm:text-3xl">
+                Khal Bnei Aliya
+              </h2>
+
+              <address className="mt-4 not-italic text-lg leading-8 text-slate-700">
+                <strong>215 Main Ave</strong>
+                <br />
+                Passaic, New Jersey, 07055
+              </address>
+
+              <a
+                href="mailto:khalbneialiyah@gmail.com"
+                className="mt-6 inline-flex rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#10192b]"
+              >
+                Contact Us
+              </a>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-[#e3d9c7] bg-[#f8f4eb]">
+              <iframe
+                title="Map to Khal Bnei Aliya"
+                src="https://www.google.com/maps?q=215%20Main%20Ave%2C%20Passaic%2C%20NJ%2007055&output=embed"
+                className="h-[320px] w-full border-0"
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </div>
+        </section>
       </section>
     </main>
   );

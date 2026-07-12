@@ -1101,6 +1101,7 @@ export default async function MemberDetailPage({
                   defaultValue="Mishaberach"
                 >
                   <option value="Membership Dues">Membership Dues</option>
+                  <option value="Weekly Dues">Weekly Dues</option>
                   <option value="Mishaberach">Mishaberach</option>
                   <option value="Matana">Matana - member chooses amount</option>
                   <option value="Aliyah">Aliyah</option>

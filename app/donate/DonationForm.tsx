@@ -27,6 +27,21 @@ declare global {
     enableAutoFormatting?: (separator?: string) => void;
     clearIfield?: (field: string) => void;
     ApplePaySession?: unknown;
+    ckApplePay?: {
+      enableApplePay: (params: Record<string, unknown>) => void;
+      updateAmount?: (amount: string) => void;
+    };
+    ckGooglePay?: {
+      enableGooglePay: (params: Record<string, unknown>) => void;
+      updateAmount?: (amount: string) => void;
+    };
+    APButtonColor?: Record<string, string>;
+    APButtonType?: Record<string, string>;
+    GPButtonSizeMode?: Record<string, string>;
+    GPBillingAddressFormat?: Record<string, string>;
+    iStatus?: Record<string, string>;
+    apRequest?: Record<string, unknown>;
+    gpRequest?: Record<string, unknown>;
   }
 }
 
@@ -42,19 +57,249 @@ export default function DonationForm() {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const walletsConfiguredRef = useRef(false);
 
-  const [amount, setAmount] = useState("100");
+  const [amount, setAmount] = useState("18");
   const [scriptReady, setScriptReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [walletSubmitting, setWalletSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
 
   const applePayAvailable =
     typeof window !== "undefined" && Boolean(window.ApplePaySession);
   const applePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true";
+    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
+    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID);
   const googlePayConfigured =
     process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
+
+  function getDonationPayload() {
+    const form = formRef.current;
+    const formData = form ? new FormData(form) : new FormData();
+
+    return {
+      donorName: String(formData.get("donorName") || ""),
+      email: String(formData.get("email") || ""),
+      phone: String(formData.get("phone") || ""),
+      amount: String(formData.get("amount") || amount || ""),
+      purpose: String(formData.get("purpose") || ""),
+      note: String(formData.get("note") || ""),
+    };
+  }
+
+  function getWalletAmount() {
+    const numericAmount = Number(getDonationPayload().amount || 0);
+    return Number.isFinite(numericAmount) && numericAmount > 0
+      ? numericAmount.toFixed(2)
+      : "0.00";
+  }
+
+  async function submitWalletDonation(
+    walletType: "ApplePay" | "GooglePay",
+    payload: unknown
+  ) {
+    setWalletSubmitting(true);
+    setMessage("");
+    setSuccess(false);
+
+    const response = await fetch("/api/sola/donation/wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...getDonationPayload(),
+        walletType,
+        payload,
+      }),
+    });
+
+    const text = await response.text();
+    const result = text ? (JSON.parse(text) as DonationResult) : {};
+
+    if (!response.ok) {
+      throw new Error(
+        result.error || "The wallet payment could not be charged."
+      );
+    }
+
+    setSuccess(true);
+    setMessage(
+      result.receiptGenerated
+        ? "Donation approved. A receipt has been emailed."
+        : "Donation approved. The receipt was saved and email is still being prepared."
+    );
+    formRef.current?.reset();
+    setAmount("18");
+
+    return text;
+  }
+
+  function configureWallets() {
+    if (walletsConfiguredRef.current) {
+      return;
+    }
+
+    walletsConfiguredRef.current = true;
+
+    if (applePayConfigured && window.ckApplePay) {
+      window.apRequest = {
+        buttonOptions: {
+          buttonContainer: "ap-container",
+          buttonColor: window.APButtonColor?.black || "black",
+          buttonType: window.APButtonType?.pay || "pay",
+        },
+        totalAmount: null,
+        onGetTransactionInfo() {
+          const totalAmount = getWalletAmount();
+
+          return {
+            lineItems: [
+              {
+                label: "Donation",
+                type: "final",
+                amount: totalAmount,
+              },
+            ],
+            total: {
+              type: "final",
+              label: "Khal Bnei Aliya",
+              amount: totalAmount,
+            },
+          };
+        },
+        onValidateMerchant() {
+          return fetch("https://api.cardknox.com/applepay/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+          }).then(async (response) => {
+            const text = await response.text();
+
+            if (!response.ok) {
+              throw new Error(text || "Apple Pay merchant validation failed.");
+            }
+
+            return text;
+          });
+        },
+        onPaymentAuthorize(applePayload: unknown) {
+          return submitWalletDonation("ApplePay", applePayload).finally(() =>
+            setWalletSubmitting(false)
+          );
+        },
+        onPaymentComplete(paymentComplete: Record<string, unknown>) {
+          if (paymentComplete.response) {
+            setSuccess(true);
+          } else if (paymentComplete.error) {
+            setMessage("Apple Pay could not complete this donation.");
+          }
+        },
+        apButtonLoaded(resp: Record<string, unknown>) {
+          if (!resp) return;
+
+          if (resp.status === window.iStatus?.success) {
+            setMessage("");
+          } else if (resp.reason) {
+            console.info("APPLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+          }
+        },
+        initAP() {
+          return {
+            buttonOptions: {
+              buttonContainer: "ap-container",
+              buttonColor: window.APButtonColor?.black || "black",
+              buttonType: window.APButtonType?.pay || "pay",
+            },
+            merchantIdentifier:
+              process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID,
+            requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
+            onGetTransactionInfo: "apRequest.onGetTransactionInfo",
+            onValidateMerchant: "apRequest.onValidateMerchant",
+            onPaymentAuthorize: "apRequest.onPaymentAuthorize",
+            onPaymentComplete: "apRequest.onPaymentComplete",
+            onAPButtonLoaded: "apRequest.apButtonLoaded",
+            isDebug:
+              process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_DEBUG === "true",
+          };
+        },
+      };
+
+      window.ckApplePay.enableApplePay({
+        initFunction: "apRequest.initAP",
+        amountField: "amount",
+      });
+    }
+
+    if (googlePayConfigured && window.ckGooglePay) {
+      window.gpRequest = {
+        merchantInfo: {
+          merchantName:
+            process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_MERCHANT_NAME ||
+            "Khal Bnei Aliya",
+        },
+        buttonOptions: {
+          buttonSizeMode: window.GPButtonSizeMode?.fill || "fill",
+        },
+        billingParams: {
+          emailRequired: true,
+          billingAddressRequired: true,
+          billingAddressFormat:
+            window.GPBillingAddressFormat?.full || "FULL",
+        },
+        environment:
+          process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENVIRONMENT ||
+          "PRODUCTION",
+        onGetTransactionInfo() {
+          const totalPrice = getWalletAmount();
+
+          return {
+            countryCode: "US",
+            currencyCode: "USD",
+            totalPriceStatus: "FINAL",
+            totalPrice,
+            totalPriceLabel: "Khal Bnei Aliya",
+            displayItems: [
+              {
+                label: "Donation",
+                type: "LINE_ITEM",
+                price: totalPrice,
+                status: "FINAL",
+              },
+            ],
+          };
+        },
+        onProcessPayment(googlePayload: unknown) {
+          return submitWalletDonation("GooglePay", googlePayload).finally(() =>
+            setWalletSubmitting(false)
+          );
+        },
+        gpButtonLoaded(resp: Record<string, unknown>) {
+          if (resp?.reason) {
+            console.info("GOOGLE_PAY_BUTTON_NOT_LOADED", resp.reason);
+          }
+        },
+        initGP() {
+          const request = window.gpRequest as Record<string, unknown>;
+
+          return {
+            merchantInfo: request.merchantInfo,
+            buttonOptions: request.buttonOptions,
+            onGetTransactionInfo: "gpRequest.onGetTransactionInfo",
+            environment: request.environment,
+            billingParameters: request.billingParams,
+            onProcessPayment: "gpRequest.onProcessPayment",
+            onGPButtonLoaded: "gpRequest.gpButtonLoaded",
+          };
+        },
+      };
+
+      window.setTimeout(() => {
+        window.ckGooglePay?.enableGooglePay({
+          amountField: "amount",
+          iframeField: "igp",
+        });
+      }, 0);
+    }
+  }
 
   function configureIFields() {
     const key = process.env.NEXT_PUBLIC_SOLA_IFIELDS_KEY;
@@ -82,6 +327,7 @@ export default function DonationForm() {
     window.setIfieldStyle?.("cvv", fieldStyle);
     window.enableAutoFormatting?.(" ");
     setScriptReady(true);
+    configureWallets();
   }
 
   useEffect(() => {
@@ -89,6 +335,11 @@ export default function DonationForm() {
       window.setTimeout(configureIFields, 0);
     }
   }, []);
+
+  useEffect(() => {
+    window.ckApplePay?.updateAmount?.(Number(amount || 0).toFixed(2));
+    window.ckGooglePay?.updateAmount?.(Number(amount || 0).toFixed(2));
+  }, [amount]);
 
   async function submitTokens(form: HTMLFormElement) {
     const formData = new FormData(form);
@@ -134,7 +385,7 @@ export default function DonationForm() {
     window.clearIfield?.("card-number");
     window.clearIfield?.("cvv");
     form.reset();
-    setAmount("100");
+    setAmount("18");
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -219,6 +470,7 @@ export default function DonationForm() {
           <input
             name="phone"
             type="tel"
+            required
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
           />
         </label>
@@ -264,6 +516,7 @@ export default function DonationForm() {
           Custom Amount
           <input
             name="amount"
+            id="amount"
             type="number"
             min="1"
             step="0.01"
@@ -294,28 +547,45 @@ export default function DonationForm() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={!applePayAvailable || !applePayConfigured}
-              className="rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
-              title={
-                applePayConfigured
-                  ? "Apple Pay is available on supported Apple devices."
-                  : "Set up Sola/Cardknox Apple Pay merchant credentials before enabling."
-              }
-            >
-              Apple Pay
-            </button>
+          <div className="min-w-[220px] space-y-2">
+            {applePayConfigured && applePayAvailable ? (
+              <div id="ap-container" className="min-h-[44px]" />
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
+                title={
+                  applePayConfigured
+                    ? "Apple Pay is available only on supported Apple devices."
+                    : "Set NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED and NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID in Vercel."
+                }
+              >
+                Apple Pay
+              </button>
+            )}
 
-            <button
-              type="button"
-              disabled={!googlePayConfigured}
-              className="rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-45"
-              title="Set up Sola/Cardknox Google Pay merchant credentials before enabling."
-            >
-              Google Pay
-            </button>
+            {googlePayConfigured ? (
+              <iframe
+                id="igp"
+                title="Google Pay"
+                data-ifields-id="igp"
+                data-ifields-oninit="gpRequest.initGP"
+                src={`${IFIELDS_BASE}/igp.htm`}
+                allow="payment *"
+                sandbox="allow-popups allow-modals allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox allow-top-navigation"
+                className="h-[44px] w-full border-0"
+              />
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="w-full rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white opacity-45"
+                title="Set NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED in Vercel."
+              >
+                Google Pay
+              </button>
+            )}
           </div>
         </div>
 
@@ -415,10 +685,12 @@ export default function DonationForm() {
 
       <button
         type="submit"
-        disabled={submitting || !scriptReady}
+        disabled={submitting || walletSubmitting || !scriptReady}
         className="w-full rounded-full bg-[#8b6b2e] px-6 py-4 text-base font-black text-white disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {submitting ? "Processing..." : `Donate $${Number(amount || 0).toFixed(2)}`}
+        {submitting || walletSubmitting
+          ? "Processing..."
+          : `Donate $${Number(amount || 0).toFixed(2)}`}
       </button>
     </form>
   );

@@ -363,12 +363,21 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                       </td>
 
                       <td className="px-4 py-4">
-                        <Link
-                          href={`/admin/members/${member.id}`}
-                          className="inline-flex rounded-full bg-[#1d2940] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#10192b]"
-                        >
-                          View / Edit
-                        </Link>
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            href={`/admin/members/${member.id}`}
+                            className="inline-flex rounded-full bg-[#1d2940] px-4 py-2 text-xs font-bold text-white transition hover:bg-[#10192b]"
+                          >
+                            View / Edit
+                          </Link>
+
+                          <Link
+                            href={`/admin/members/${member.id}?tab=payments`}
+                            className="inline-flex rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold text-[#1d2940] transition hover:bg-[#f2eadc]"
+                          >
+                            Request Payment
+                          </Link>
+                        </div>
                       </td>
 
                       <td className="px-4 py-4">
