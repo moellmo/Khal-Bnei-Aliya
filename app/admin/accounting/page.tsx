@@ -32,6 +32,13 @@ type Charge = {
   description: string | null;
 };
 
+type YearlyDuesCharge = {
+  amount: number;
+  status: string | null;
+  paid_amount: number | null;
+  billing_month: number | null;
+};
+
 type AccountingRow = {
   member: Member;
   charge: Charge | null;
@@ -114,6 +121,22 @@ function getMonthName(month: number) {
   }).format(new Date(2026, month - 1, 1));
 }
 
+function getDateMonth(value: string | null | undefined) {
+  if (!value) return null;
+
+  const dateOnlyMatch = value.match(/^\d{4}-(\d{2})-/);
+  if (dateOnlyMatch) {
+    return Number(dateOnlyMatch[1]);
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.getMonth() + 1;
+}
+
 function dateRange(month: number | null, year: number) {
   const start = month
     ? `${year}-${String(month).padStart(2, "0")}-01`
@@ -175,6 +198,21 @@ async function getAccountingRows(
     member,
     charge: chargeMap.get(member.id) || null,
   }));
+}
+
+async function getYearlyDuesCharges(year: number): Promise<YearlyDuesCharge[]> {
+  const { data, error } = await supabaseAdmin
+    .from("member_charges")
+    .select("amount, status, paid_amount, billing_month")
+    .eq("charge_type", "Membership Dues")
+    .eq("billing_year", year);
+
+  if (error) {
+    console.error("Unable to load yearly dues charges:", error.message);
+    return [];
+  }
+
+  return (data || []) as YearlyDuesCharge[];
 }
 
 async function getExpenses(
@@ -261,12 +299,20 @@ export default async function AccountingPage({
   const selectedStatus = query?.status || "all";
   const activeView = query?.view || "monthly";
 
-  const [rows, expensesResult, zelleResult, yearlyExpenses, yearlyZelle] = await Promise.all([
+  const [
+    rows,
+    expensesResult,
+    zelleResult,
+    yearlyExpenses,
+    yearlyZelle,
+    yearlyDuesCharges,
+  ] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
     getExpenses(selectedMonth, selectedYear),
     getZellePayments(selectedMonth, selectedYear),
     getExpenses(null, selectedYear),
     getZellePayments(null, selectedYear),
+    getYearlyDuesCharges(selectedYear),
   ]);
 
   const billedRows = rows.filter((row) => Boolean(row.charge));
@@ -341,6 +387,64 @@ export default async function AccountingPage({
     (sum, payment) => sum + Number(payment.amount || 0),
     0
   );
+
+  const yearlyDuesBilledTotal = yearlyDuesCharges.reduce(
+    (sum, charge) => sum + Number(charge.amount || 0),
+    0
+  );
+
+  const yearlyDuesPaidTotal = yearlyDuesCharges.reduce(
+    (sum, charge) =>
+      charge.status === "paid"
+        ? sum + Number(charge.paid_amount || charge.amount || 0)
+        : sum,
+    0
+  );
+
+  const yearlyDuesOutstandingTotal = yearlyDuesCharges.reduce(
+    (sum, charge) =>
+      charge.status === "paid" ? sum : sum + Number(charge.amount || 0),
+    0
+  );
+
+  const yearlyMonthOverview = Array.from({ length: 12 }, (_, index) => {
+    const month = index + 1;
+    const monthDues = yearlyDuesCharges.filter(
+      (charge) => Number(charge.billing_month) === month
+    );
+    const duesBilled = monthDues.reduce(
+      (sum, charge) => sum + Number(charge.amount || 0),
+      0
+    );
+    const duesPaid = monthDues.reduce(
+      (sum, charge) =>
+        charge.status === "paid"
+          ? sum + Number(charge.paid_amount || charge.amount || 0)
+          : sum,
+      0
+    );
+    const duesOutstanding = monthDues.reduce(
+      (sum, charge) =>
+        charge.status === "paid" ? sum : sum + Number(charge.amount || 0),
+      0
+    );
+    const expenses = yearlyExpenses.rows
+      .filter((expense) => getDateMonth(expense.expense_date) === month)
+      .reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+    const zelle = yearlyZelle.rows
+      .filter((payment) => getDateMonth(payment.received_date) === month)
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+    return {
+      month,
+      duesBilled,
+      duesPaid,
+      duesOutstanding,
+      expenses,
+      zelle,
+      net: duesPaid + zelle - expenses,
+    };
+  });
 
   const graphMax = Math.max(
     billedTotal,
@@ -513,12 +617,63 @@ export default async function AccountingPage({
 
         {activeView === "yearly" && (
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-bold">{selectedYear} Year Summary</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Expense and Zelle totals across the selected calendar year.
-            </p>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  {selectedYear} Year Summary
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Dues, Zelle, expenses, and net totals across the selected
+                  calendar year.
+                </p>
+              </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <form method="GET" className="flex flex-wrap items-end gap-2">
+                <input type="hidden" name="view" value="yearly" />
+                <label className="block text-sm font-bold text-slate-700">
+                  Year
+                  <input
+                    type="number"
+                    name="year"
+                    min="2026"
+                    defaultValue={selectedYear}
+                    className="mt-1 w-28 rounded-2xl border border-[#d9cfbd] bg-white px-4 py-2 text-sm font-semibold"
+                  />
+                </label>
+                <button className="rounded-full bg-[#1f2a44] px-5 py-2.5 text-sm font-bold text-white">
+                  View Year
+                </button>
+              </form>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Dues Billed
+                </p>
+                <p className="mt-2 text-2xl font-black text-[#8b6b2e]">
+                  {formatMoney(yearlyDuesBilledTotal)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Dues Paid
+                </p>
+                <p className="mt-2 text-2xl font-black text-green-700">
+                  {formatMoney(yearlyDuesPaidTotal)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-[#fbf8f2] p-5">
+                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
+                  Dues Open
+                </p>
+                <p className="mt-2 text-2xl font-black text-red-700">
+                  {formatMoney(yearlyDuesOutstandingTotal)}
+                </p>
+              </div>
+
               <div className="rounded-2xl bg-[#fbf8f2] p-5">
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
                   Year Expenses
@@ -537,13 +692,77 @@ export default async function AccountingPage({
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-[#fbf8f2] p-5">
-                <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
-                  Net Zelle Less Expenses
+            </div>
+
+            <div className="mt-8">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-black">
+                    Month-by-Month Overview
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Open any previous month to review the full accounting rows,
+                    expenses, Zelle entries, receipts, and uploads.
+                  </p>
+                </div>
+                <p className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                  Year net:{" "}
+                  {formatMoney(
+                    yearlyDuesPaidTotal + yearlyZelleTotal - yearlyExpenseTotal
+                  )}
                 </p>
-                <p className="mt-2 text-2xl font-black">
-                  {formatMoney(yearlyZelleTotal - yearlyExpenseTotal)}
-                </p>
+              </div>
+
+              <div className="mt-4 overflow-x-auto rounded-3xl border border-[#e3d9c7]">
+                <table className="min-w-[980px] w-full text-left text-sm">
+                  <thead className="bg-[#fbf8f2] text-xs uppercase tracking-[0.14em] text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Month</th>
+                      <th className="px-4 py-3">Dues Billed</th>
+                      <th className="px-4 py-3">Dues Paid</th>
+                      <th className="px-4 py-3">Dues Open</th>
+                      <th className="px-4 py-3">Zelle</th>
+                      <th className="px-4 py-3">Expenses</th>
+                      <th className="px-4 py-3">Net</th>
+                      <th className="px-4 py-3 text-right">Review</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#eee5d8] bg-white">
+                    {yearlyMonthOverview.map((month) => (
+                      <tr key={month.month}>
+                        <td className="px-4 py-3 font-bold">
+                          {getMonthName(month.month)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {formatMoney(month.duesBilled)}
+                        </td>
+                        <td className="px-4 py-3 text-green-700">
+                          {formatMoney(month.duesPaid)}
+                        </td>
+                        <td className="px-4 py-3 text-red-700">
+                          {formatMoney(month.duesOutstanding)}
+                        </td>
+                        <td className="px-4 py-3 text-blue-700">
+                          {formatMoney(month.zelle)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {formatMoney(month.expenses)}
+                        </td>
+                        <td className="px-4 py-3 font-bold">
+                          {formatMoney(month.net)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Link
+                            href={`/admin/accounting?month=${month.month}&year=${selectedYear}&view=monthly`}
+                            className="inline-flex rounded-full border border-[#d9cfbd] px-4 py-2 text-xs font-bold text-[#1f2a44] hover:bg-[#fbf8f2]"
+                          >
+                            Open Month
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
