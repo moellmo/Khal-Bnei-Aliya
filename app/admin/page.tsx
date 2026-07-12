@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createQuickCharge } from "./actions";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { QuickChargeMemberPicker } from "./QuickChargeMemberPicker";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -178,60 +179,8 @@ export default async function AdminPage({ searchParams }: PageProps) {
               action={createQuickCharge}
               className="mt-5 space-y-5"
             >
-              <datalist id="quick-charge-members">
-                {memberOptions.map((member) => {
-                  const name = [member.first_name, member.last_name]
-                    .filter(Boolean)
-                    .join(" ")
-                    .trim();
-
-                  return (
-                    <option
-                      key={member.id}
-                      value={`${name || member.email || "Unnamed member"}${
-                        member.email ? ` - ${member.email}` : ""
-                      } | ${member.id}`}
-                    />
-                  );
-                })}
-              </datalist>
-
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)_minmax(140px,0.45fr)]">
-                <label className="space-y-2 text-sm font-bold text-slate-700">
-                  Select Member
-                  <select
-                    name="member_id"
-                    defaultValue=""
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
-                  >
-                    <option value="">
-                      Choose member unless charging guest directly
-                    </option>
-                    {memberOptions.map((member) => {
-                      const name = [member.first_name, member.last_name]
-                        .filter(Boolean)
-                        .join(" ")
-                        .trim();
-
-                      return (
-                        <option key={member.id} value={member.id}>
-                          {name || member.email || "Unnamed member"}
-                          {member.email ? ` - ${member.email}` : ""}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-
-                <label className="space-y-2 text-sm font-bold text-slate-700">
-                  Search Fallback
-                  <input
-                    name="member_search"
-                    list="quick-charge-members"
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-3 text-sm text-slate-900"
-                    placeholder="Optional: type name/email"
-                  />
-                </label>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(160px,0.7fr)_minmax(140px,0.45fr)]">
+                <QuickChargeMemberPicker members={memberOptions} />
 
                 <label className="space-y-2 text-sm font-bold text-slate-700">
                   Type
