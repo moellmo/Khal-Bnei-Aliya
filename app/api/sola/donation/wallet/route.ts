@@ -134,11 +134,15 @@ function getPayloadPhone(payload: unknown) {
   const root = asRecord(payload);
   const payment = nestedRecord(root, "payment");
   const billingContact = nestedRecord(payment, "billingContact");
+  const paymentMethodData = nestedRecord(root, "paymentMethodData");
+  const info = nestedRecord(paymentMethodData, "info");
+  const billingAddress = nestedRecord(info, "billingAddress");
 
   return String(
     root.phoneNumber ||
       root.phone ||
       billingContact.phoneNumber ||
+      billingAddress.phoneNumber ||
       ""
   ).trim();
 }
@@ -147,11 +151,20 @@ function getPayloadName(payload: unknown) {
   const root = asRecord(payload);
   const payment = nestedRecord(root, "payment");
   const billingContact = nestedRecord(payment, "billingContact");
+  const paymentMethodData = nestedRecord(root, "paymentMethodData");
+  const info = nestedRecord(paymentMethodData, "info");
+  const billingAddress = nestedRecord(info, "billingAddress");
 
   const fullName = String(root.name || "").trim();
 
   if (fullName) {
     return fullName;
+  }
+
+  const googlePayName = String(billingAddress.name || "").trim();
+
+  if (googlePayName) {
+    return googlePayName;
   }
 
   return [

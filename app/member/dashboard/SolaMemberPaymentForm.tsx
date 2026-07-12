@@ -149,7 +149,7 @@ export default function SolaCardPaymentForm({
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
     walletConfig.applePayEnabled;
-  const googlePayConfigured = false;
+  const googlePayConfigured = walletConfig.googlePayEnabled;
 
   function getPaymentPayload() {
     const form = formRef.current;
@@ -338,6 +338,7 @@ export default function SolaCardPaymentForm({
         billingParams: {
           emailRequired: true,
           billingAddressRequired: true,
+          phoneNumberRequired: true,
           billingAddressFormat:
             window.GPBillingAddressFormat?.full || "FULL",
         },
