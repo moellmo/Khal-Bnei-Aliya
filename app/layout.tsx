@@ -8,6 +8,26 @@ export const metadata: Metadata = {
   },
   description:
     "Khal Bnei Aliya member portal, davening times, donations, and community updates.",
+  icons: {
+    icon: [
+      {
+        url: "/favicon.ico",
+        sizes: "any",
+      },
+      {
+        url: "/icon.png",
+        type: "image/png",
+        sizes: "512x512",
+      },
+    ],
+    apple: [
+      {
+        url: "/apple-icon.png",
+        type: "image/png",
+        sizes: "180x180",
+      },
+    ],
+  },
   openGraph: {
     title: "Khal Bnei Aliya",
     description:
