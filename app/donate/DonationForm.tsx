@@ -55,6 +55,26 @@ type DonationResult = {
   error?: string;
 };
 
+type WalletConfig = {
+  loaded: boolean;
+  applePayEnabled: boolean;
+  applePayMerchantId: string;
+  applePayDebug: boolean;
+  googlePayEnabled: boolean;
+  googlePayMerchantName: string;
+  googlePayEnvironment: string;
+};
+
+const initialWalletConfig: WalletConfig = {
+  loaded: false,
+  applePayEnabled: false,
+  applePayMerchantId: "",
+  applePayDebug: false,
+  googlePayEnabled: false,
+  googlePayMerchantName: "Khal Bnei Aliya",
+  googlePayEnvironment: "PRODUCTION",
+};
+
 function isApplePaySupported() {
   return Boolean(window.ApplePaySession);
 }
@@ -74,11 +94,12 @@ export default function DonationForm() {
 
   const [applePayAvailable, setApplePayAvailable] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
+  const [walletConfig, setWalletConfig] =
+    useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
-    Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
-  const googlePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
+    walletConfig.applePayEnabled &&
+    Boolean(walletConfig.applePayMerchantId);
+  const googlePayConfigured = walletConfig.googlePayEnabled;
 
   function getDonationPayload() {
     const form = formRef.current;
@@ -141,6 +162,10 @@ export default function DonationForm() {
   }
 
   function configureWallets() {
+    if (!walletConfig.loaded) {
+      return;
+    }
+
     if (walletsConfiguredRef.current) {
       return;
     }
@@ -221,15 +246,14 @@ export default function DonationForm() {
               buttonType: window.APButtonType?.pay || "pay",
             },
             merchantIdentifier:
-              process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID,
+              walletConfig.applePayMerchantId,
             requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
             onGetTransactionInfo: "apRequest.onGetTransactionInfo",
             onValidateMerchant: "apRequest.onValidateMerchant",
             onPaymentAuthorize: "apRequest.onPaymentAuthorize",
             onPaymentComplete: "apRequest.onPaymentComplete",
             onAPButtonLoaded: "apRequest.apButtonLoaded",
-            isDebug:
-              process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_DEBUG === "true",
+            isDebug: walletConfig.applePayDebug,
           };
         },
       };
@@ -248,9 +272,7 @@ export default function DonationForm() {
     if (googlePayConfigured && window.ckGooglePay) {
       window.gpRequest = {
         merchantInfo: {
-          merchantName:
-            process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_MERCHANT_NAME ||
-            "Khal Bnei Aliya",
+          merchantName: walletConfig.googlePayMerchantName,
         },
         buttonOptions: {
           buttonSizeMode: window.GPButtonSizeMode?.fill || "fill",
@@ -262,8 +284,7 @@ export default function DonationForm() {
             window.GPBillingAddressFormat?.full || "FULL",
         },
         environment:
-          process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENVIRONMENT ||
-          "PRODUCTION",
+          walletConfig.googlePayEnvironment,
         onGetTransactionInfo() {
           const totalPrice = getWalletAmount();
 
@@ -342,6 +363,31 @@ export default function DonationForm() {
   }
 
   useEffect(() => {
+    fetch("/api/sola/wallet-config", {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load wallet configuration.");
+        }
+
+        return (await response.json()) as Omit<WalletConfig, "loaded">;
+      })
+      .then((config) => {
+        setWalletConfig({
+          ...initialWalletConfig,
+          ...config,
+          loaded: true,
+        });
+      })
+      .catch((error: unknown) => {
+        console.info("WALLET_CONFIG_NOT_LOADED", error);
+        setWalletConfig({
+          ...initialWalletConfig,
+          loaded: true,
+        });
+      });
+
     window.setTimeout(() => {
       setApplePayAvailable(isApplePaySupported());
     }, 0);
@@ -350,6 +396,12 @@ export default function DonationForm() {
       window.setTimeout(configureIFields, 0);
     }
   }, []);
+
+  useEffect(() => {
+    if (scriptReady && walletConfig.loaded) {
+      window.setTimeout(configureWallets, 0);
+    }
+  }, [scriptReady, walletConfig]);
 
   useEffect(() => {
     if (!googlePayReady || !window.ckGooglePay) {
