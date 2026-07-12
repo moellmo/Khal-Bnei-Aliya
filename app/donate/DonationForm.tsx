@@ -131,13 +131,12 @@ export default function DonationForm() {
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [applePayFailureReason, setApplePayFailureReason] = useState("");
   const [googlePayReady, setGooglePayReady] = useState(false);
-  const [googlePaySupported, setGooglePaySupported] = useState(false);
+  const [, setGooglePaySupported] = useState(false);
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
     walletConfig.applePayEnabled;
-  const googlePayConfigured =
-    walletConfig.googlePayEnabled && googlePaySupported;
+  const googlePayConfigured = false;
 
   function getDonationPayload() {
     const form = formRef.current;
@@ -779,20 +778,7 @@ export default function DonationForm() {
                 sandbox="allow-popups allow-modals allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox allow-top-navigation"
                 className="h-[44px] w-full border-0"
               />
-            ) : (
-              <button
-                type="button"
-                disabled
-                className="w-full rounded-full bg-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                title={
-                  walletConfig.googlePayEnabled && !googlePaySupported
-                    ? "Google Pay is not supported by Sola/Cardknox in this browser. Use Apple Pay or card payment here."
-                    : "Set NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED in Vercel."
-                }
-              >
-                Google Pay
-              </button>
-            )}
+            ) : null}
           </div>
         </div>
 

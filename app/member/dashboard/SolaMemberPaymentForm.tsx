@@ -144,14 +144,13 @@ export default function SolaCardPaymentForm({
   const [applePayButtonReady, setApplePayButtonReady] = useState(false);
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [applePayFailureReason, setApplePayFailureReason] = useState("");
-  const [googlePaySupported, setGooglePaySupported] = useState(false);
+  const [, setGooglePaySupported] = useState(false);
   const [googlePayReady, setGooglePayReady] = useState(false);
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
     walletConfig.applePayEnabled;
-  const googlePayConfigured =
-    walletConfig.googlePayEnabled && googlePaySupported;
+  const googlePayConfigured = false;
 
   function getPaymentPayload() {
     const form = formRef.current;
@@ -717,20 +716,7 @@ export default function SolaCardPaymentForm({
                   sandbox="allow-popups allow-modals allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox allow-top-navigation"
                   className="h-[40px] min-w-[130px] flex-1 border-0"
                 />
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="rounded-full bg-[#1a73e8] px-4 py-2 text-xs font-bold text-white opacity-45"
-                  title={
-                    walletConfig.googlePayEnabled && !googlePaySupported
-                      ? "Google Pay is not supported by Sola/Cardknox in this browser. Use Apple Pay or card payment here."
-                      : "Set up Sola/Cardknox Google Pay merchant credentials before enabling."
-                  }
-                >
-                  Google Pay
-                </button>
-              )}
+              ) : null}
 
               <button
                 type="button"

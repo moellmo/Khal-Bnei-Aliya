@@ -26,9 +26,7 @@ export async function GET() {
     getEnvFlag("NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED", true) &&
     getEnvFlag("SOLA_APPLE_PAY_ENABLED", true);
 
-  const googlePayEnabled =
-    getEnvFlag("NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED", true) &&
-    getEnvFlag("SOLA_GOOGLE_PAY_ENABLED", true);
+  const googlePayEnabled = false;
 
   return NextResponse.json({
     applePayEnabled,
