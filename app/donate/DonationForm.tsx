@@ -112,6 +112,12 @@ function catchSolaWalletPromise(
   }
 }
 
+function getApplePayRequestObject() {
+  return window.apRequest as
+    | { initAP?: () => Record<string, unknown> }
+    | undefined;
+}
+
 export default function DonationForm() {
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
@@ -310,6 +316,7 @@ export default function DonationForm() {
             merchantIdentifier:
               walletConfig.applePayMerchantId || "merchant.cardknox.com",
             requiredBillingContactFields: ["postalAddress", "name", "phone", "email"],
+            requiredShippingContactFields: ["postalAddress", "name", "phone", "email"],
             onGetTransactionInfo: "apRequest.onGetTransactionInfo",
             onValidateMerchant: "apRequest.onValidateMerchant",
             onPaymentAuthorize: "apRequest.onPaymentAuthorize",
@@ -322,7 +329,7 @@ export default function DonationForm() {
 
       try {
         const applePayResult = window.ckApplePay.enableApplePay({
-          initFunction: "apRequest.initAP",
+          initFunction: () => getApplePayRequestObject()?.initAP?.(),
           amountField: "amount",
         });
 

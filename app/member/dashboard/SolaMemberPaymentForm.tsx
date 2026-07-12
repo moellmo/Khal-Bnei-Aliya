@@ -116,6 +116,12 @@ function catchSolaWalletPromise(
   }
 }
 
+function getMemberApplePayRequestObject(requestName: string) {
+  return window.memberWalletRequests?.[requestName] as
+    | { initAP?: () => Record<string, unknown> }
+    | undefined;
+}
+
 export default function SolaCardPaymentForm({
   chargeId,
   amount,
@@ -327,6 +333,12 @@ export default function SolaCardPaymentForm({
               "phone",
               "email",
             ],
+            requiredShippingContactFields: [
+              "postalAddress",
+              "name",
+              "phone",
+              "email",
+            ],
             onGetTransactionInfo: `memberWalletRequests.${requestName}.onGetTransactionInfo`,
             onValidateMerchant: `memberWalletRequests.${requestName}.onValidateMerchant`,
             onPaymentAuthorize: `memberWalletRequests.${requestName}.onPaymentAuthorize`,
@@ -339,7 +351,8 @@ export default function SolaCardPaymentForm({
 
       try {
         const applePayResult = window.ckApplePay.enableApplePay({
-          initFunction: `memberWalletRequests.${requestName}.initAP`,
+          initFunction: () =>
+            getMemberApplePayRequestObject(requestName)?.initAP?.(),
           amountField: `amount-${walletKey}`,
         });
 
