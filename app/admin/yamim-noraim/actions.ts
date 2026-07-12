@@ -83,7 +83,7 @@ export async function updateYamimNoraimSettings(formData: FormData) {
   }
 
   refresh(activeYear);
-  redirect(`/admin/yamim-noraim?year=${activeYear}&settingsSaved=1`);
+  redirect(`/admin/yamim-noraim?year=${activeYear}&tab=controls&settingsSaved=1`);
 }
 
 export async function markReservationPaid(
@@ -113,7 +113,7 @@ export async function markReservationPaid(
   }
 
   refresh(year);
-  redirect(`/admin/yamim-noraim?year=${year}&reservationUpdated=1`);
+  redirect(`/admin/yamim-noraim?year=${year}&tab=results&reservationUpdated=1`);
 }
 
 export async function clearReservationsForYear(formData: FormData) {
@@ -124,7 +124,7 @@ export async function clearReservationsForYear(formData: FormData) {
 
   if (confirmation !== `CLEAR ${year}`) {
     redirect(
-      `/admin/yamim-noraim?year=${year}&error=${encodeURIComponent(
+      `/admin/yamim-noraim?year=${year}&tab=controls&error=${encodeURIComponent(
         `Type CLEAR ${year} to clear that year's responses.`
       )}`
     );
@@ -144,5 +144,5 @@ export async function clearReservationsForYear(formData: FormData) {
   }
 
   refresh(year);
-  redirect(`/admin/yamim-noraim?year=${year}&cleared=1`);
+  redirect(`/admin/yamim-noraim?year=${year}&tab=controls&cleared=1`);
 }

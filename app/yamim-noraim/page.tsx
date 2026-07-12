@@ -170,26 +170,58 @@ export default async function YamimNoraimPage({ searchParams }: PageProps) {
                   </label>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <h3 className="text-lg font-black">Rosh Hashana</h3>
+                  </div>
+
                   <label className="space-y-2 text-sm font-bold text-slate-700">
                     Men’s Seats
                     <input
-                      name="men_seats"
+                      name="rosh_hashana_men_seats"
                       type="number"
                       min="0"
                       defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
                     />
                   </label>
 
                   <label className="space-y-2 text-sm font-bold text-slate-700">
                     Women’s Seats
                     <input
-                      name="women_seats"
+                      name="rosh_hashana_women_seats"
                       type="number"
                       min="0"
                       defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <h3 className="text-lg font-black">Yom Kippur</h3>
+                  </div>
+
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Men’s Seats
+                    <input
+                      name="yom_kippur_men_seats"
+                      type="number"
+                      min="0"
+                      defaultValue="0"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Women’s Seats
+                    <input
+                      name="yom_kippur_women_seats"
+                      type="number"
+                      min="0"
+                      defaultValue="0"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
                     />
                   </label>
                 </div>

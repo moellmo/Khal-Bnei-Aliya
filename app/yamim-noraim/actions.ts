@@ -18,11 +18,24 @@ export async function submitYamimNoraimReservation(formData: FormData) {
   const phone = getString(formData, "phone") || null;
   const memberName = getString(formData, "member_name") || null;
   const notes = getString(formData, "notes") || null;
-  const menSeats = Math.max(0, Math.floor(getNumber(formData, "men_seats")));
-  const womenSeats = Math.max(
+  const roshHashanaMenSeats = Math.max(
     0,
-    Math.floor(getNumber(formData, "women_seats"))
+    Math.floor(getNumber(formData, "rosh_hashana_men_seats"))
   );
+  const roshHashanaWomenSeats = Math.max(
+    0,
+    Math.floor(getNumber(formData, "rosh_hashana_women_seats"))
+  );
+  const yomKippurMenSeats = Math.max(
+    0,
+    Math.floor(getNumber(formData, "yom_kippur_men_seats"))
+  );
+  const yomKippurWomenSeats = Math.max(
+    0,
+    Math.floor(getNumber(formData, "yom_kippur_women_seats"))
+  );
+  const menSeats = roshHashanaMenSeats + yomKippurMenSeats;
+  const womenSeats = roshHashanaWomenSeats + yomKippurWomenSeats;
 
   if (!fullName) {
     redirect(
@@ -63,6 +76,10 @@ export async function submitYamimNoraimReservation(formData: FormData) {
       email,
       phone,
       member_name: memberName,
+      rosh_hashana_men_seats: roshHashanaMenSeats,
+      rosh_hashana_women_seats: roshHashanaWomenSeats,
+      yom_kippur_men_seats: yomKippurMenSeats,
+      yom_kippur_women_seats: yomKippurWomenSeats,
       men_seats: menSeats,
       women_seats: womenSeats,
       men_seat_price: menSeatPrice,
@@ -88,8 +105,8 @@ export async function submitYamimNoraimReservation(formData: FormData) {
 
   const note = [
     `Yamim Noraim ${settings.active_year} seats`,
-    `${menSeats} men`,
-    `${womenSeats} women`,
+    `RH ${roshHashanaMenSeats} men/${roshHashanaWomenSeats} women`,
+    `YK ${yomKippurMenSeats} men/${yomKippurWomenSeats} women`,
     `Reservation ${reservation.id}`,
   ].join(" - ");
 

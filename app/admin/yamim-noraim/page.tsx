@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 type PageProps = {
   searchParams?: Promise<{
     year?: string;
+    tab?: string;
     error?: string;
     settingsSaved?: string;
     reservationUpdated?: string;
@@ -36,6 +37,10 @@ type Reservation = {
   member_name: string | null;
   men_seats: number;
   women_seats: number;
+  rosh_hashana_men_seats: number;
+  rosh_hashana_women_seats: number;
+  yom_kippur_men_seats: number;
+  yom_kippur_women_seats: number;
   total_amount: number;
   notes: string | null;
   payment_status: string | null;
@@ -82,7 +87,7 @@ async function getReservations(year: number) {
   const { data, error } = await supabaseAdmin
     .from("yamim_noraim_reservations")
     .select(
-      "id, reservation_year, full_name, email, phone, member_name, men_seats, women_seats, total_amount, notes, payment_status, payment_reference, created_at"
+      "id, reservation_year, full_name, email, phone, member_name, men_seats, women_seats, rosh_hashana_men_seats, rosh_hashana_women_seats, yom_kippur_men_seats, yom_kippur_women_seats, total_amount, notes, payment_status, payment_reference, created_at"
     )
     .eq("reservation_year", year)
     .order("created_at", { ascending: false });
@@ -101,6 +106,7 @@ export default async function AdminYamimNoraimPage({
   searchParams,
 }: PageProps) {
   const params = await searchParams;
+  const activeTab = params?.tab || "controls";
   const { settings, error: settingsError } = await getSettings();
   const selectedYear = Number(params?.year || settings?.active_year || new Date().getFullYear());
   const year = Number.isFinite(selectedYear) ? selectedYear : new Date().getFullYear();
@@ -121,6 +127,26 @@ export default async function AdminYamimNoraimPage({
   const paidTotal = reservations
     .filter((reservation) => reservation.payment_status === "paid")
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
+  const roshHashanaMenTotal = reservations.reduce(
+    (sum, reservation) =>
+      sum + Number(reservation.rosh_hashana_men_seats || 0),
+    0
+  );
+  const roshHashanaWomenTotal = reservations.reduce(
+    (sum, reservation) =>
+      sum + Number(reservation.rosh_hashana_women_seats || 0),
+    0
+  );
+  const yomKippurMenTotal = reservations.reduce(
+    (sum, reservation) =>
+      sum + Number(reservation.yom_kippur_men_seats || 0),
+    0
+  );
+  const yomKippurWomenTotal = reservations.reduce(
+    (sum, reservation) =>
+      sum + Number(reservation.yom_kippur_women_seats || 0),
+    0
+  );
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -166,6 +192,31 @@ export default async function AdminYamimNoraimPage({
           </div>
         )}
 
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Link
+            href={`/admin/yamim-noraim?year=${year}&tab=controls`}
+            className={
+              activeTab === "controls"
+                ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+            }
+          >
+            Controls
+          </Link>
+
+          <Link
+            href={`/admin/yamim-noraim?year=${year}&tab=results`}
+            className={
+              activeTab === "results"
+                ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+            }
+          >
+            Results
+          </Link>
+        </div>
+
+        {activeTab === "controls" && (
         <div className="mt-8 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <form
             action={updateYamimNoraimSettings}
@@ -304,6 +355,26 @@ export default async function AdminYamimNoraimPage({
               </div>
             </div>
 
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[#e3d9c7] p-4">
+                <p className="text-sm font-bold text-slate-500">
+                  Rosh Hashana
+                </p>
+                <p className="mt-2 text-lg font-black">
+                  Men {roshHashanaMenTotal} · Women {roshHashanaWomenTotal}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-[#e3d9c7] p-4">
+                <p className="text-sm font-bold text-slate-500">
+                  Yom Kippur
+                </p>
+                <p className="mt-2 text-lg font-black">
+                  Men {yomKippurMenTotal} · Women {yomKippurWomenTotal}
+                </p>
+              </div>
+            </div>
+
             <form
               action={clearReservationsForYear}
               className="mt-5 rounded-2xl border border-red-100 bg-red-50 p-4"
@@ -328,17 +399,75 @@ export default async function AdminYamimNoraimPage({
             </form>
           </div>
         </div>
+        )}
 
+        {activeTab === "results" && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-          <h2 className="text-2xl font-bold">Responses</h2>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Results</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Separate Rosh Hashana and Yom Kippur totals for {year}.
+              </p>
+            </div>
+
+            <form method="GET" className="flex gap-2">
+              <input type="hidden" name="tab" value="results" />
+              <input
+                name="year"
+                type="number"
+                min="2026"
+                defaultValue={year}
+                className="w-28 rounded-xl border border-[#d8cdb7] px-3 py-2"
+              />
+              <button className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
+                View
+              </button>
+            </form>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-[#fbf8f2] p-5">
+              <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#8b6b2e]">
+                Rosh Hashana
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-sm text-slate-500">Men</p>
+                  <p className="text-3xl font-black">{roshHashanaMenTotal}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Women</p>
+                  <p className="text-3xl font-black">{roshHashanaWomenTotal}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-[#fbf8f2] p-5">
+              <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#8b6b2e]">
+                Yom Kippur
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-sm text-slate-500">Men</p>
+                  <p className="text-3xl font-black">{yomKippurMenTotal}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Women</p>
+                  <p className="text-3xl font-black">{yomKippurWomenTotal}</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[900px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[1040px] border-separate border-spacing-y-2 text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Contact</th>
-                  <th className="px-3 py-2">Seats</th>
+                  <th className="px-3 py-2">Rosh Hashana</th>
+                  <th className="px-3 py-2">Yom Kippur</th>
                   <th className="px-3 py-2">Total</th>
                   <th className="px-3 py-2">Payment</th>
                   <th className="px-3 py-2">Notes</th>
@@ -361,8 +490,12 @@ export default async function AdminYamimNoraimPage({
                       <p>{reservation.phone || "—"}</p>
                     </td>
                     <td className="px-3 py-3">
-                      <p>Men: {reservation.men_seats}</p>
-                      <p>Women: {reservation.women_seats}</p>
+                      <p>Men: {reservation.rosh_hashana_men_seats}</p>
+                      <p>Women: {reservation.rosh_hashana_women_seats}</p>
+                    </td>
+                    <td className="px-3 py-3">
+                      <p>Men: {reservation.yom_kippur_men_seats}</p>
+                      <p>Women: {reservation.yom_kippur_women_seats}</p>
                     </td>
                     <td className="px-3 py-3 font-bold">
                       {formatMoney(reservation.total_amount)}
@@ -414,6 +547,7 @@ export default async function AdminYamimNoraimPage({
             </div>
           ) : null}
         </div>
+        )}
       </section>
     </main>
   );
