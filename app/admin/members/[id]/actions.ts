@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
 import { sendPaymentRequestEmail } from "@/lib/payments/sendPaymentRequestEmail";
 import { headers } from "next/headers";
+import { sendPortalInvitationEmail } from "@/lib/members/sendPortalInvitationEmail";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -402,44 +403,26 @@ export async function inviteMemberToPortal(memberId: string) {
   }
 
   const headerStore = await headers();
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    headerStore.get("origin") ||
-    "http://localhost:3000";
+  const inviteResult = await sendPortalInvitationEmail({
+    memberId,
+    email,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    requestOrigin: headerStore.get("origin"),
+  });
 
-  const redirectTo =
-  `${origin}/auth/confirm?next=${encodeURIComponent(
-    "/member/set-password"
-  )}`;
-
-  const { data: invitedUser, error: inviteError } =
-    await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-      redirectTo,
-      data: {
-        member_id: memberId,
-        first_name: member.first_name,
-        last_name: member.last_name,
-      },
-    });
-
-  if (inviteError) {
+  if (!inviteResult.sent || !inviteResult.userId) {
     redirect(
       `/admin/members/${memberId}?tab=overview&portalError=${encodeURIComponent(
-        inviteError.message
+        inviteResult.error || "Unable to send portal invitation."
       )}`
     );
-  }
-
-  const authUserId = invitedUser.user?.id;
-
-  if (!authUserId) {
-    throw new Error("Supabase did not return an invited user ID.");
   }
 
   const { error: updateError } = await supabaseAdmin
     .from("members")
     .update({
-      auth_user_id: authUserId,
+      auth_user_id: inviteResult.userId,
       portal_status: "invited",
       portal_invited_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),

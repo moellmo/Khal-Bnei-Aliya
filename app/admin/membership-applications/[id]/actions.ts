@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendPortalInvitationEmail } from "@/lib/members/sendPortalInvitationEmail";
 
 type FamilyMemberInput = {
   first_name?: string;
@@ -121,37 +122,16 @@ export async function approveMembershipApplication(
 
   const headerStore = await headers();
 
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    headerStore.get("origin") ||
-    "http://localhost:3000";
+  const inviteResult = await sendPortalInvitationEmail({
+    memberId,
+    email: application.email,
+    firstName: application.first_name,
+    lastName: application.last_name,
+    requestOrigin: headerStore.get("origin"),
+  });
 
-  const redirectTo =
-    `${origin}/auth/confirm?next=${encodeURIComponent(
-      "/member/set-password"
-    )}`;
-
-  const { data: invitedUser, error: inviteError } =
-    await supabaseAdmin.auth.admin.inviteUserByEmail(
-      application.email,
-      {
-        redirectTo,
-        data: {
-          member_id: memberId,
-          first_name: application.first_name,
-          last_name: application.last_name,
-        },
-      }
-    );
-
-  if (inviteError) {
-    throw new Error(inviteError.message);
-  }
-
-  const authUserId = invitedUser.user?.id;
-
-  if (!authUserId) {
-    throw new Error("Supabase did not return an invited user ID.");
+  if (!inviteResult.sent || !inviteResult.userId) {
+    throw new Error(inviteResult.error || "Unable to send portal invitation.");
   }
 
   const now = new Date().toISOString();
@@ -159,7 +139,7 @@ export async function approveMembershipApplication(
   const { error: memberLinkError } = await supabaseAdmin
     .from("members")
     .update({
-      auth_user_id: authUserId,
+      auth_user_id: inviteResult.userId,
       portal_status: "invited",
       portal_invited_at: now,
       updated_at: now,
