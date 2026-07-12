@@ -169,7 +169,7 @@ export default async function MembershipPage({
                   name="hebrew_name"
                   dir="rtl"
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
-                  placeholder="משה בן ..."
+                  placeholder="ראובן בן ..."
                 />
               </label>
 
@@ -310,7 +310,7 @@ export default async function MembershipPage({
                 name="family_members"
                 rows={7}
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                placeholder={`Enter one person per line using:\nFirst Name | Last Name | Hebrew Name | Relationship\n\nExample:\nEliana | Moeller | אליאנה בת משה | Child`}
+                placeholder={`Enter one person per line using:\nFirst Name | Last Name | Hebrew Name | Relationship\n\nExample:\nSarah | Cohen | שרה בת ראובן | Child`}
               />
 
               <span className="block text-xs leading-5 text-slate-500">

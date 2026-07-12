@@ -140,7 +140,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                   name="first_name"
                   required
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  placeholder="Moshe"
+                  placeholder="Reuven"
                 />
               </label>
 
@@ -150,7 +150,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                   name="last_name"
                   required
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                  placeholder="Moeller"
+                  placeholder="Cohen"
                 />
               </label>
             </div>
@@ -161,7 +161,7 @@ export default async function AdminMembersPage({ searchParams }: PageProps) {
                 name="hebrew_name"
                 dir="rtl"
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
-                placeholder="משה בן ..."
+                placeholder="ראובן בן ..."
               />
             </label>
 

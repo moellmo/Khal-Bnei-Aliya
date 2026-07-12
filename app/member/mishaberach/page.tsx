@@ -158,7 +158,7 @@ export default async function MemberMishaberachPage({
                   dir="rtl"
                   defaultValue={typedMember.hebrew_name || ""}
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
-                  placeholder="משה בן ..."
+                  placeholder="ראובן בן ..."
                 />
               </label>
 
