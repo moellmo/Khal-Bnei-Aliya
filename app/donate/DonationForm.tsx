@@ -73,11 +73,12 @@ export default function DonationForm() {
   const [success, setSuccess] = useState(false);
 
   const [applePayAvailable, setApplePayAvailable] = useState(false);
+  const [googlePayReady, setGooglePayReady] = useState(false);
   const applePayConfigured =
     process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED === "true" &&
     Boolean(process.env.NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID?.trim());
   const googlePayConfigured =
-    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED !== "false";
+    process.env.NEXT_PUBLIC_SOLA_GOOGLE_PAY_ENABLED === "true";
 
   function getDonationPayload() {
     const form = formRef.current;
@@ -233,10 +234,15 @@ export default function DonationForm() {
         },
       };
 
-      window.ckApplePay.enableApplePay({
-        initFunction: "apRequest.initAP",
-        amountField: "amount",
-      });
+      try {
+        window.ckApplePay.enableApplePay({
+          initFunction: "apRequest.initAP",
+          amountField: "amount",
+        });
+      } catch (error) {
+        console.info("APPLE_PAY_NOT_ENABLED", error);
+        setApplePayAvailable(false);
+      }
     }
 
     if (googlePayConfigured && window.ckGooglePay) {
@@ -302,12 +308,7 @@ export default function DonationForm() {
         },
       };
 
-      window.setTimeout(() => {
-        window.ckGooglePay?.enableGooglePay({
-          amountField: "amount",
-          iframeField: "igp",
-        });
-      }, 0);
+      setGooglePayReady(true);
     }
   }
 
@@ -351,9 +352,22 @@ export default function DonationForm() {
   }, []);
 
   useEffect(() => {
-    window.ckApplePay?.updateAmount?.(Number(amount || 0).toFixed(2));
-    window.ckGooglePay?.updateAmount?.(Number(amount || 0).toFixed(2));
-  }, [amount]);
+    if (!googlePayReady || !window.ckGooglePay) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      try {
+        window.ckGooglePay?.enableGooglePay({
+          amountField: "amount",
+          iframeField: "igp",
+        });
+      } catch (error) {
+        console.info("GOOGLE_PAY_NOT_ENABLED", error);
+        setGooglePayReady(false);
+      }
+    }, 0);
+  }, [googlePayReady]);
 
   async function submitTokens(form: HTMLFormElement) {
     const formData = new FormData(form);
@@ -562,24 +576,35 @@ export default function DonationForm() {
           </div>
 
           <div className="min-w-[220px] space-y-2">
-            {applePayConfigured && applePayAvailable ? (
-              <div id="ap-container" className="min-h-[44px]" />
+            {applePayConfigured ? (
+              <>
+                <div
+                  id="ap-container"
+                  className={applePayAvailable ? "min-h-[44px]" : "hidden"}
+                />
+                {!applePayAvailable && (
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
+                    title="Apple Pay is available only on supported Apple devices."
+                  >
+                    Apple Pay
+                  </button>
+                )}
+              </>
             ) : (
               <button
                 type="button"
                 disabled
                 className="w-full rounded-full bg-black px-5 py-2.5 text-sm font-bold text-white opacity-45"
-                title={
-                  applePayConfigured
-                    ? "Apple Pay is available only on supported Apple devices."
-                    : "Set NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED and NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID in Vercel."
-                }
+                title="Set NEXT_PUBLIC_SOLA_APPLE_PAY_ENABLED and NEXT_PUBLIC_SOLA_APPLE_PAY_MERCHANT_ID in Vercel."
               >
                 Apple Pay
               </button>
             )}
 
-            {googlePayConfigured ? (
+            {googlePayConfigured && googlePayReady ? (
               <iframe
                 id="igp"
                 title="Google Pay"
