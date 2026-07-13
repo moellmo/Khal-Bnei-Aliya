@@ -4,6 +4,7 @@ import {
   addExpense,
   addPresetExpense,
   addZellePayment,
+  approveZellePayment,
   importAccountingCsv,
   uploadExpenseReceipt,
 } from "./actions";
@@ -72,6 +73,7 @@ type ZellePayment = {
   amount: number;
   received_date: string | null;
   purpose: string | null;
+  note: string | null;
   status: string | null;
 };
 
@@ -255,7 +257,7 @@ async function getZellePayments(
   const { data, error } = await supabaseAdmin
     .from("zelle_payments")
     .select(
-      "id, payer_name, payer_email, amount, received_date, purpose, status"
+      "id, payer_name, payer_email, amount, received_date, purpose, note, status"
     )
     .gte("received_date", range.start)
     .lt("received_date", range.end)
@@ -377,6 +379,13 @@ export default async function AccountingPage({
     (sum, payment) => sum + Number(payment.amount || 0),
     0
   );
+
+  const openChargeOptions = rows
+    .filter((row) => row.charge && row.charge.status !== "paid")
+    .map((row) => ({
+      charge: row.charge as Charge,
+      member: row.member,
+    }));
 
   const yearlyExpenseTotal = yearlyExpenses.rows.reduce(
     (sum, expense) => sum + Number(expense.amount || 0),
@@ -1147,6 +1156,108 @@ export default async function AccountingPage({
             </button>
           </form>
         </div>
+        )}
+
+        {activeView === "monthly" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">Zelle Matching</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Review member-reported Zelle payments and imported Zelle rows,
+                  then attach them to an open charge.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                {zelleResult.rows.length} Zelle rows
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {zelleResult.rows.map((payment) => (
+                <form
+                  key={payment.id}
+                  action={approveZellePayment}
+                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)_auto]"
+                >
+                  <input type="hidden" name="zelle_id" value={payment.id} />
+                  <input type="hidden" name="month" value={selectedMonth} />
+                  <input type="hidden" name="year" value={selectedYear} />
+
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold">{payment.payer_name}</p>
+                      <span
+                        className={
+                          payment.status === "matched"
+                            ? "rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800"
+                            : payment.status === "pending_review"
+                            ? "rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800"
+                            : "rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
+                        }
+                      >
+                        {payment.status || "unmatched"}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-sm text-slate-600">
+                      {formatMoney(payment.amount)} ·{" "}
+                      {formatDate(payment.received_date)}
+                      {payment.payer_email ? ` · ${payment.payer_email}` : ""}
+                    </p>
+
+                    <p className="mt-1 text-sm text-slate-500">
+                      {payment.purpose || "Zelle Payment"}
+                    </p>
+
+                    {payment.note ? (
+                      <p className="mt-1 text-xs text-slate-500">
+                        {payment.note}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Match to open charge
+                    </span>
+                    <select
+                      name="charge_id"
+                      disabled={payment.status === "matched"}
+                      required={payment.status !== "matched"}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>
+                        Select charge
+                      </option>
+                      {openChargeOptions.map(({ member, charge }) => (
+                        <option key={charge.id} value={charge.id}>
+                          {member.last_name}, {member.first_name} -{" "}
+                          {formatMoney(charge.amount)} -{" "}
+                          {charge.description || "Open charge"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button
+                    type="submit"
+                    disabled={payment.status === "matched"}
+                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Approve
+                  </button>
+                </form>
+              ))}
+
+              {zelleResult.rows.length === 0 ? (
+                <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                  No Zelle rows for this month yet.
+                </div>
+              ) : null}
+            </div>
+          </div>
         )}
 
         {activeView === "monthly" && (

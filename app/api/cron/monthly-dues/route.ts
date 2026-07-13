@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { generateMonthlyDuesCharges } from "@/lib/billing/monthlyDues";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     }
 
     const defaultAmount = Number(
-      process.env.MONTHLY_DUES_DEFAULT_AMOUNT || 0
+      process.env.MONTHLY_DUES_DEFAULT_AMOUNT || 75
     );
 
     if (!Number.isFinite(defaultAmount) || defaultAmount <= 0) {
@@ -47,103 +47,23 @@ export async function GET(request: NextRequest) {
 
     const dueDate = getDueDate(billingYear, billingMonth);
 
-    const { data: members, error: membersError } =
-      await supabaseAdmin
-        .from("members")
-        .select(
-          "id, first_name, last_name, recurring_amount, autopay_active"
-        )
-        .eq("status", "active");
-
-    if (membersError) {
-      throw new Error(membersError.message);
-    }
-
-    let createdCount = 0;
-    let skippedCount = 0;
-    const errors: string[] = [];
-
-    for (const member of members || []) {
-      try {
-        const recurringAmount = Number(
-          member.recurring_amount || 0
-        );
-
-        const amount =
-          recurringAmount > 0
-            ? recurringAmount
-            : defaultAmount;
-
-        const { data: existingCharge, error: existingError } =
-          await supabaseAdmin
-            .from("member_charges")
-            .select("id")
-            .eq("member_id", member.id)
-            .eq("charge_type", "Membership Dues")
-            .eq("billing_month", billingMonth)
-            .eq("billing_year", billingYear)
-            .maybeSingle();
-
-        if (existingError) {
-          throw new Error(existingError.message);
-        }
-
-        if (existingCharge) {
-          skippedCount += 1;
-          continue;
-        }
-
-        const monthName = new Intl.DateTimeFormat("en-US", {
-          month: "long",
-          timeZone: "UTC",
-        }).format(
-          new Date(
-            Date.UTC(billingYear, billingMonth - 1, 1)
-          )
-        );
-
-        const description = member.autopay_active
-          ? `${monthName} ${billingYear} membership dues — awaiting automatic payment`
-          : `${monthName} ${billingYear} membership dues`;
-
-        const { error: insertError } =
-          await supabaseAdmin
-            .from("member_charges")
-            .insert({
-              member_id: member.id,
-              charge_type: "Membership Dues",
-              description,
-              amount,
-              status: "unpaid",
-              due_date: dueDate,
-              billing_month: billingMonth,
-              billing_year: billingYear,
-            });
-
-        if (insertError) {
-          throw new Error(insertError.message);
-        }
-
-        createdCount += 1;
-      } catch (memberError) {
-        const message =
-          memberError instanceof Error
-            ? memberError.message
-            : "Unknown error";
-
-        errors.push(
-          `${member.first_name} ${member.last_name}: ${message}`
-        );
-      }
-    }
+    const result = await generateMonthlyDuesCharges({
+      billingMonth,
+      billingYear,
+      defaultAmount,
+      dueDate,
+      sendEmails: true,
+    });
 
     console.log("MONTHLY_DUES_CRON_COMPLETE", {
       billingMonth,
       billingYear,
-      createdCount,
-      skippedCount,
-      errorCount: errors.length,
-      errors,
+      createdCount: result.createdCount,
+      skippedCount: result.skippedCount,
+      emailSentCount: result.emailSentCount,
+      emailSkippedCount: result.emailSkippedCount,
+      errorCount: result.errors.length,
+      errors: result.errors,
     });
 
     return NextResponse.json({
@@ -151,9 +71,7 @@ export async function GET(request: NextRequest) {
       billingMonth,
       billingYear,
       dueDate,
-      createdCount,
-      skippedCount,
-      errors,
+      ...result,
     });
   } catch (error) {
     console.error("MONTHLY_DUES_CRON_ERROR", error);

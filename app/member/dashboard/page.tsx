@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { signOut } from "../actions";
 import SolaMemberPaymentForm from "./SolaMemberPaymentForm";
 import GenerateReceiptButton from "./GenerateReceiptButton";
+import { submitZellePaymentClaim } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,12 @@ type Payment = {
   receipt_pdf_url: string | null;
 };
 
+type PageProps = {
+  searchParams?: Promise<{
+    zelleSubmitted?: string;
+  }>;
+};
+
 function formatMoney(amount: number | null | undefined) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -103,7 +110,54 @@ function getPaymentMethod(payment: Payment) {
   return payment.payment_method || "Payment";
 }
 
-export default async function MemberDashboardPage() {
+function ZelleClaimForm({ charge }: { charge: Charge }) {
+  const openAmount = isOpenAmountCharge(charge);
+  const amount = Number(charge.amount || 0);
+
+  return (
+    <form
+      action={submitZellePaymentClaim}
+      className="mt-3 space-y-3 rounded-xl bg-[#fbf8f2] p-3"
+    >
+      <input type="hidden" name="charge_id" value={charge.id} />
+
+      <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+        Zelle Amount Sent
+        <input
+          name="amount"
+          type="number"
+          min="0.01"
+          step="0.01"
+          required
+          readOnly={!openAmount}
+          defaultValue={openAmount ? "" : amount.toFixed(2)}
+          className="mt-1 w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm text-slate-900"
+        />
+      </label>
+
+      <label className="block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+        Optional memo
+        <input
+          name="note"
+          className="mt-1 w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm text-slate-900"
+          placeholder="Confirmation note or sender name"
+        />
+      </label>
+
+      <button
+        type="submit"
+        className="rounded-full bg-[#1d2940] px-4 py-2 text-xs font-bold text-white"
+      >
+        I Paid by Zelle
+      </button>
+    </form>
+  );
+}
+
+export default async function MemberDashboardPage({
+  searchParams,
+}: PageProps) {
+  const query = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -281,7 +335,7 @@ const latestFailedAttempt =
   return (
     <main className="min-h-screen bg-[#f7f3ea] px-5 py-8 text-slate-900">
       <div className="mx-auto max-w-6xl">
-        <header className="rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
+<header className="rounded-[2rem] bg-white p-6 shadow-sm sm:p-8">
   <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
     <div>
       <Link
@@ -349,6 +403,12 @@ const latestFailedAttempt =
     </div>
   </div>
 </header>
+{query?.zelleSubmitted === "1" ? (
+  <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-800">
+    Your Zelle payment was submitted for review. It will show as paid after
+    admin confirms it.
+  </div>
+) : null}
 {latestFailedAttempt ? (
   <section className="mt-6 rounded-[1.5rem] border border-red-200 bg-red-50 p-6 shadow-sm">
     <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
@@ -564,8 +624,9 @@ const latestFailedAttempt =
                         {isOpenAmountCharge(charge)
                           ? "Matana"
                           : formatMoney(charge.amount)}
-                      </p>
-                    </div>
+                        </p>
+                      </div>
+                      <ZelleClaimForm charge={charge} />
                   </details>
                 </div>
               </div>
@@ -637,8 +698,9 @@ const latestFailedAttempt =
                         {isOpenAmountCharge(charge)
                           ? "Matana"
                           : formatMoney(charge.amount)}
-                      </p>
-                    </div>
+                        </p>
+                      </div>
+                      <ZelleClaimForm charge={charge} />
                   </details>
                 </div>
               </div>

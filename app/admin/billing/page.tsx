@@ -9,6 +9,7 @@ type PageProps = {
     generated?: string;
     created?: string;
     skipped?: string;
+    emailed?: string;
   }>;
 };
 
@@ -149,7 +150,8 @@ export default async function BillingPage({ searchParams }: PageProps) {
         {query?.generated === "1" && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Created {query.created || "0"} monthly dues charges. Skipped{" "}
-            {query.skipped || "0"} existing charges.
+            {query.skipped || "0"} existing charges. Sent{" "}
+            {query.emailed || "0"} email reminders.
           </div>
         )}
 
@@ -160,8 +162,8 @@ export default async function BillingPage({ searchParams }: PageProps) {
           <h2 className="text-2xl font-bold">Generate Monthly Dues</h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Active members with a recurring amount use that amount. Everyone
-            else uses the default monthly amount below.
+            Active members use their recurring amount first, then their member
+            dues amount, then the default monthly amount below.
           </p>
 
           <div
