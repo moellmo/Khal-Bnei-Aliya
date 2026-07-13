@@ -9,6 +9,8 @@ type BillingMember = {
   custom_dues_amount: number | null;
   recurring_amount: number | null;
   autopay_active: boolean | null;
+  sola_recurring_id: string | null;
+  recurring_status: string | null;
 };
 
 type GenerateMonthlyDuesOptions = {
@@ -28,15 +30,27 @@ function monthName(billingMonth: number, billingYear: number) {
 }
 
 export function memberDuesAmount(
-  member: Pick<BillingMember, "recurring_amount" | "custom_dues_amount">,
+  member: Pick<BillingMember, "custom_dues_amount">,
   defaultAmount: number
 ) {
-  const recurringAmount = Number(member.recurring_amount || 0);
   const customAmount = Number(member.custom_dues_amount || 0);
 
-  if (recurringAmount > 0) return recurringAmount;
   if (customAmount > 0) return customAmount;
   return defaultAmount;
+}
+
+function memberHasRecurringSchedule(
+  member: Pick<
+    BillingMember,
+    "autopay_active" | "sola_recurring_id" | "recurring_status"
+  >
+) {
+  const recurringStatus = member.recurring_status?.trim().toLowerCase();
+
+  if (member.autopay_active) return true;
+  if (!member.sola_recurring_id) return false;
+
+  return recurringStatus !== "cancelled" && recurringStatus !== "unlinked";
 }
 
 export async function generateMonthlyDuesCharges({
@@ -50,7 +64,7 @@ export async function generateMonthlyDuesCharges({
   let membersQuery = supabaseAdmin
     .from("members")
     .select(
-      "id, first_name, last_name, email, custom_dues_amount, recurring_amount, autopay_active"
+      "id, first_name, last_name, email, custom_dues_amount, recurring_amount, autopay_active, sola_recurring_id, recurring_status"
     )
     .eq("status", "active");
 
@@ -80,6 +94,11 @@ export async function generateMonthlyDuesCharges({
 
   for (const member of members as BillingMember[]) {
     try {
+      if (memberHasRecurringSchedule(member)) {
+        skippedCount += 1;
+        continue;
+      }
+
       const amount = memberDuesAmount(member, defaultAmount);
 
       if (!Number.isFinite(amount) || amount <= 0) {
@@ -107,9 +126,7 @@ export async function generateMonthlyDuesCharges({
       }
 
       const month = monthName(billingMonth, billingYear);
-      const description = member.autopay_active
-        ? `${month} ${billingYear} membership dues - awaiting automatic payment`
-        : `${month} ${billingYear} membership dues`;
+      const description = `${month} ${billingYear} membership dues`;
 
       const { data: charge, error: insertError } = await supabaseAdmin
         .from("member_charges")

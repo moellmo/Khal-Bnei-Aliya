@@ -17,7 +17,7 @@ async function getActiveMembers() {
   const { data, error } = await supabaseAdmin
     .from("members")
     .select(
-      "id, first_name, last_name, recurring_amount, custom_dues_amount, autopay_active"
+      "id, first_name, last_name, recurring_amount, custom_dues_amount, autopay_active, sola_recurring_id, recurring_status"
     )
     .eq("status", "active")
     .order("last_name", { ascending: true });
@@ -86,23 +86,34 @@ function getMemberName(member: {
 function getBillingPreview(member: {
   recurring_amount?: number | string | null;
   custom_dues_amount?: number | string | null;
+  autopay_active?: boolean | null;
+  sola_recurring_id?: string | null;
+  recurring_status?: string | null;
 }) {
-  const recurringAmount = Number(member.recurring_amount || 0);
-  const customDuesAmount = Number(member.custom_dues_amount || 0);
+  const recurringStatus = member.recurring_status?.trim().toLowerCase();
+  const hasRecurringSchedule =
+    Boolean(member.autopay_active) ||
+    (Boolean(member.sola_recurring_id) &&
+      recurringStatus !== "cancelled" &&
+      recurringStatus !== "unlinked");
 
-  if (recurringAmount > 0) {
+  if (hasRecurringSchedule) {
     return {
-      amount: formatMoney(recurringAmount),
-      source: "Recurring amount",
+      amount: "Skipped",
+      source: "Recurring autopay",
       usesDefault: false,
+      isSkipped: true,
     };
   }
+
+  const customDuesAmount = Number(member.custom_dues_amount || 0);
 
   if (customDuesAmount > 0) {
     return {
       amount: formatMoney(customDuesAmount),
       source: "Member dues amount",
       usesDefault: false,
+      isSkipped: false,
     };
   }
 
@@ -110,6 +121,7 @@ function getBillingPreview(member: {
     amount: "Default below",
     source: "No member amount set",
     usesDefault: true,
+    isSkipped: false,
   };
 }
 
@@ -198,9 +210,9 @@ export default async function BillingPage({ searchParams }: PageProps) {
           <h2 className="text-2xl font-bold">Generate Monthly Dues</h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Each active member is charged their recurring amount first, then
-            their member dues amount. The default below is only used when a
-            member has no amount set.
+            Members on recurring autopay are skipped. Everyone else is charged
+            their member dues amount, with the default below used only when no
+            amount is set.
           </p>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -221,7 +233,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
                     <option key={member.id} value={member.id}>
                       {member.last_name}, {member.first_name} -{" "}
                       {billingPreview.amount}
-                      {member.autopay_active ? " - Auto-Pay" : ""}
+                      {billingPreview.isSkipped ? " - Recurring" : ""}
                     </option>
                   );
                 })}
@@ -280,7 +292,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
               />
               <p className="text-xs text-slate-500">
-                Used only for members without a recurring amount or member dues
+                Used only for non-recurring members without a member dues
                 amount.
               </p>
             </label>
@@ -303,7 +315,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
                 <h3 className="text-lg font-bold">Member Amount Preview</h3>
                 <p className="mt-1 text-sm text-slate-500">
                   This is what the monthly batch will use before falling back
-                  to the default amount.
+                  to the default amount. Recurring autopay members are skipped.
                 </p>
               </div>
 
@@ -328,6 +340,8 @@ export default async function BillingPage({ searchParams }: PageProps) {
                       className={
                         billingPreview.usesDefault
                           ? "mt-1 text-sm font-semibold text-amber-700"
+                          : billingPreview.isSkipped
+                            ? "mt-1 text-sm font-semibold text-slate-500"
                           : "mt-1 text-sm font-semibold text-green-700"
                       }
                     >
@@ -335,7 +349,6 @@ export default async function BillingPage({ searchParams }: PageProps) {
                     </p>
                     <p className="text-xs text-slate-500">
                       {billingPreview.source}
-                      {member.autopay_active ? " - Auto-Pay" : ""}
                     </p>
                   </div>
                 );
