@@ -16,7 +16,9 @@ type PageProps = {
 async function getActiveMembers() {
   const { data, error } = await supabaseAdmin
     .from("members")
-    .select("id, first_name, last_name, recurring_amount, autopay_active")
+    .select(
+      "id, first_name, last_name, recurring_amount, custom_dues_amount, autopay_active"
+    )
     .eq("status", "active")
     .order("last_name", { ascending: true });
 
@@ -74,6 +76,43 @@ function formatMoney(amount: number) {
   }).format(amount);
 }
 
+function getMemberName(member: {
+  first_name?: string | null;
+  last_name?: string | null;
+}) {
+  return [member.first_name, member.last_name].filter(Boolean).join(" ");
+}
+
+function getBillingPreview(member: {
+  recurring_amount?: number | string | null;
+  custom_dues_amount?: number | string | null;
+}) {
+  const recurringAmount = Number(member.recurring_amount || 0);
+  const customDuesAmount = Number(member.custom_dues_amount || 0);
+
+  if (recurringAmount > 0) {
+    return {
+      amount: formatMoney(recurringAmount),
+      source: "Recurring amount",
+      usesDefault: false,
+    };
+  }
+
+  if (customDuesAmount > 0) {
+    return {
+      amount: formatMoney(customDuesAmount),
+      source: "Member dues amount",
+      usesDefault: false,
+    };
+  }
+
+  return {
+    amount: "Default below",
+    source: "No member amount set",
+    usesDefault: true,
+  };
+}
+
 export default async function BillingPage({ searchParams }: PageProps) {
   const query = await searchParams;
   const summary = await getBillingSummary();
@@ -115,10 +154,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
 
           <h1 className="mt-3 text-4xl font-bold">Monthly Dues</h1>
 
-          <div
-            className="mt-6 grid gap-4"
-            style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
-          >
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <p className="text-sm text-slate-400">Charges</p>
               <p className="text-xl font-bold">{summary.totalCharges}</p>
@@ -162,38 +198,40 @@ export default async function BillingPage({ searchParams }: PageProps) {
           <h2 className="text-2xl font-bold">Generate Monthly Dues</h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Active members use their recurring amount first, then their member
-            dues amount, then the default monthly amount below.
+            Each active member is charged their recurring amount first, then
+            their member dues amount. The default below is only used when a
+            member has no amount set.
           </p>
 
-          <div
-            className="mt-6 grid gap-4"
-            style={{ gridTemplateColumns: "1fr 1fr" }}
-          >
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+            <label className="block space-y-2">
+              <span className="font-semibold">Generate For</span>
 
-          <label className="block space-y-2">
-  <span className="font-semibold">Generate For</span>
+              <select
+                name="member_id"
+                defaultValue=""
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+              >
+                <option value="">All Active Members</option>
 
-  <select
-    name="member_id"
-    defaultValue=""
-    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-  >
-    <option value="">All Active Members</option>
+                {members.map((member) => {
+                  const billingPreview = getBillingPreview(member);
 
-    {members.map((member) => (
-      <option key={member.id} value={member.id}>
-        {member.last_name}, {member.first_name}
-        {member.autopay_active ? " — Auto-Pay" : ""}
-      </option>
-    ))}
-  </select>
+                  return (
+                    <option key={member.id} value={member.id}>
+                      {member.last_name}, {member.first_name} -{" "}
+                      {billingPreview.amount}
+                      {member.autopay_active ? " - Auto-Pay" : ""}
+                    </option>
+                  );
+                })}
+              </select>
 
-  <p className="text-xs text-slate-500">
-    Leave this as All Active Members for the monthly batch, or choose one
-    member for an individual charge.
-  </p>
-</label>
+              <p className="text-xs text-slate-500">
+                Leave this as All Active Members for the monthly batch, or
+                choose one member for an individual charge.
+              </p>
+            </label>
 
             <label className="space-y-2">
               <span className="font-semibold">Billing Month</span>
@@ -229,10 +267,7 @@ export default async function BillingPage({ searchParams }: PageProps) {
             </label>
           </div>
 
-          <div
-            className="mt-4 grid gap-4"
-            style={{ gridTemplateColumns: "1fr 1fr" }}
-          >
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
               <span className="font-semibold">Default Monthly Amount</span>
               <input
@@ -244,6 +279,10 @@ export default async function BillingPage({ searchParams }: PageProps) {
                 placeholder="75.00"
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
               />
+              <p className="text-xs text-slate-500">
+                Used only for members without a recurring amount or member dues
+                amount.
+              </p>
             </label>
 
             <label className="space-y-2">
@@ -256,6 +295,52 @@ export default async function BillingPage({ searchParams }: PageProps) {
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
               />
             </label>
+          </div>
+
+          <div className="mt-6 rounded-2xl bg-[#fbf8f2] p-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold">Member Amount Preview</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  This is what the monthly batch will use before falling back
+                  to the default amount.
+                </p>
+              </div>
+
+              <p className="text-sm font-semibold text-[#8b6b2e]">
+                {members.length} active members
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {members.map((member) => {
+                const billingPreview = getBillingPreview(member);
+
+                return (
+                  <div
+                    key={member.id}
+                    className="rounded-xl border border-[#e3d9c7] bg-white p-3"
+                  >
+                    <p className="font-semibold">
+                      {getMemberName(member) || "Unnamed member"}
+                    </p>
+                    <p
+                      className={
+                        billingPreview.usesDefault
+                          ? "mt-1 text-sm font-semibold text-amber-700"
+                          : "mt-1 text-sm font-semibold text-green-700"
+                      }
+                    >
+                      {billingPreview.amount}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {billingPreview.source}
+                      {member.autopay_active ? " - Auto-Pay" : ""}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <button

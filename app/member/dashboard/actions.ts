@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { sendZelleReviewEmail } from "@/lib/payments/sendZelleReviewEmail";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -100,6 +101,23 @@ export async function submitZellePaymentClaim(formData: FormData) {
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  try {
+    await sendZelleReviewEmail({
+      memberName: memberName || "Member",
+      memberEmail: member.email,
+      amount,
+      purpose,
+      note,
+      chargeId: charge.id,
+    });
+  } catch (emailError) {
+    console.error("ZELLE_REVIEW_EMAIL_SEND_FAILED", {
+      chargeId: charge.id,
+      error:
+        emailError instanceof Error ? emailError.message : String(emailError),
+    });
   }
 
   revalidatePath("/member/dashboard");
