@@ -87,6 +87,12 @@ function parseSolaDate(value: string | undefined) {
     return new Date().toISOString();
   }
 
+  const directDate = new Date(value);
+
+  if (!Number.isNaN(directDate.getTime())) {
+    return directDate.toISOString();
+  }
+
   const normalized = value.includes("T")
     ? value
     : value.replace(" ", "T");
@@ -200,6 +206,14 @@ function reportRowsFromResponse(response: Record<string, unknown>) {
       response.ReportData ||
       response.reportData
   );
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Unable to import previous Sola payments.";
 }
 
 async function requireAdmin() {
@@ -690,129 +704,138 @@ export async function syncHistoricalSolaPayments(formData: FormData) {
     );
   }
 
-  const { data: members, error: membersError } = await supabaseAdmin
-    .from("members")
-    .select("id, first_name, last_name, email, sola_customer_id")
-    .order("last_name", { ascending: true })
-    .order("first_name", { ascending: true });
-
-  if (membersError) {
-    throw new Error(membersError.message);
-  }
-
-  const memberRows = (members || []) as HistoricalImportMember[];
-  const response = await callSolaReportingApi({
-    xCommand: "report:approved",
-    xGetNewest: "false",
-    xgetnewest: "false",
-    xMaxRecords: 1000,
-    xmaxrecords: 1000,
-    xBeginDate: fromDate,
-    xEndDate: toDate,
-    xFromDate: fromDate,
-    xToDate: toDate,
-    xFields:
-      "xRefNum,xCommand,xName,xEmail,xAmount,xEnteredDate,xStatus,xResponseResult,xMaskedCardNumber,xCardType,xAuthCode,xInvoice,xDescription,xCustId,xCustomerId",
-  });
-
-  const rows = reportRowsFromResponse(response);
   let importedCount = 0;
   let skippedCount = 0;
   let unmatchedCount = 0;
 
-  for (const row of rows) {
-    if (!isApprovedSale(row)) {
-      skippedCount += 1;
-      continue;
+  try {
+    const { data: members, error: membersError } = await supabaseAdmin
+      .from("members")
+      .select("id, first_name, last_name, email, sola_customer_id")
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true });
+
+    if (membersError) {
+      throw new Error(membersError.message);
     }
 
-    const reference = rowValue(row, "xRefNum", "RefNum");
-    const amount = Number(rowValue(row, "xAmount", "Amount") || 0);
+    const memberRows = (members || []) as HistoricalImportMember[];
+    const response = await callSolaReportingApi({
+      xCommand: "report:approved",
+      xGetNewest: "false",
+      xgetnewest: "false",
+      xMaxRecords: 1000,
+      xmaxrecords: 1000,
+      xBeginDate: fromDate,
+      xEndDate: toDate,
+      xFromDate: fromDate,
+      xToDate: toDate,
+      xFields:
+        "xRefNum,xCommand,xName,xEmail,xAmount,xEnteredDate,xStatus,xResponseResult,xMaskedCardNumber,xCardType,xAuthCode,xInvoice,xDescription,xCustId,xCustID,xCustomerId",
+    });
 
-    if (!reference || !Number.isFinite(amount) || amount <= 0) {
-      skippedCount += 1;
-      continue;
-    }
+    const rows = reportRowsFromResponse(response);
 
-    const { data: existingPayment, error: existingError } =
-      await supabaseAdmin
+    for (const row of rows) {
+      if (!isApprovedSale(row)) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const reference = rowValue(row, "xRefNum", "RefNum");
+      const amount = Number(rowValue(row, "xAmount", "Amount") || 0);
+
+      if (!reference || !Number.isFinite(amount) || amount <= 0) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const { data: existingPayments, error: existingError } =
+        await supabaseAdmin
         .from("payments")
         .select("id")
         .eq("external_payment_id", reference)
-        .maybeSingle();
+        .limit(1);
 
-    if (existingError) {
-      throw new Error(existingError.message);
-    }
+      if (existingError) {
+        throw new Error(existingError.message);
+      }
 
-    if (existingPayment) {
-      skippedCount += 1;
-      continue;
-    }
+      if ((existingPayments || []).length > 0) {
+        skippedCount += 1;
+        continue;
+      }
 
-    const member = matchHistoricalMember(row, memberRows);
+      const member = matchHistoricalMember(row, memberRows);
 
-    if (!member) {
-      unmatchedCount += 1;
-      continue;
-    }
+      if (!member) {
+        unmatchedCount += 1;
+        continue;
+      }
 
-    const paidAt = parseSolaDate(
-      rowValue(row, "xEnteredDate", "EnteredDate", "TransactionDate")
-    );
-    const paidDate = paidAt.slice(0, 10);
-    const description =
-      rowValue(row, "xDescription", "Description", "xInvoice", "Invoice") ||
-      "Historical Sola payment";
-    const receiptNumber = `KBA-${paidDate.replaceAll("-", "")}-${reference}`;
-
-    const { data: charge, error: chargeError } = await supabaseAdmin
-      .from("member_charges")
-      .insert({
-        member_id: member.id,
-        charge_type: "Sola Payment",
-        description,
-        amount,
-        status: "paid",
-        due_date: paidDate,
-        paid_at: paidAt,
-        payment_method: "Card",
-        payment_provider: "sola",
-        paid_amount: amount,
-        external_payment_id: reference,
-        payment_note: "Imported from Sola Reporting API",
-      })
-      .select("id")
-      .single();
-
-    if (chargeError || !charge) {
-      throw new Error(
-        chargeError?.message || "Unable to create imported Sola charge."
+      const paidAt = parseSolaDate(
+        rowValue(row, "xEnteredDate", "EnteredDate", "TransactionDate")
       );
+      const paidDate = paidAt.slice(0, 10);
+      const description =
+        rowValue(row, "xDescription", "Description", "xInvoice", "Invoice") ||
+        "Historical Sola payment";
+      const receiptNumber = `KBA-${paidDate.replaceAll("-", "")}-${reference}`;
+
+      const { data: charge, error: chargeError } = await supabaseAdmin
+        .from("member_charges")
+        .insert({
+          member_id: member.id,
+          charge_type: "Sola Payment",
+          description,
+          amount,
+          status: "paid",
+          due_date: paidDate,
+          paid_at: paidAt,
+          payment_method: "Card",
+          payment_provider: "sola",
+          paid_amount: amount,
+          external_payment_id: reference,
+          payment_note: "Imported from Sola Reporting API",
+        })
+        .select("id")
+        .single();
+
+      if (chargeError || !charge) {
+        throw new Error(
+          chargeError?.message || "Unable to create imported Sola charge."
+        );
+      }
+
+      const { error: paymentError } = await supabaseAdmin
+        .from("payments")
+        .insert({
+          member_id: member.id,
+          charge_id: charge.id,
+          amount,
+          payment_method: "Card",
+          payment_provider: "sola",
+          external_payment_id: reference,
+          payer_email: rowValue(row, "xEmail", "Email") || member.email,
+          status: "paid",
+          note: "Imported historical Sola payment",
+          paid_at: paidAt,
+          receipt_number: receiptNumber,
+          raw_provider_response: row,
+        });
+
+      if (paymentError) {
+        throw new Error(paymentError.message);
+      }
+
+      importedCount += 1;
     }
-
-    const { error: paymentError } = await supabaseAdmin
-      .from("payments")
-      .insert({
-        member_id: member.id,
-        charge_id: charge.id,
-        amount,
-        payment_method: "Card",
-        payment_provider: "sola",
-        external_payment_id: reference,
-        payer_email: rowValue(row, "xEmail", "Email") || member.email,
-        status: "paid",
-        note: "Imported historical Sola payment",
-        paid_at: paidAt,
-        receipt_number: receiptNumber,
-        raw_provider_response: row,
-      });
-
-    if (paymentError) {
-      throw new Error(paymentError.message);
-    }
-
-    importedCount += 1;
+  } catch (error) {
+    redirect(
+      `/admin/recurring-schedules?error=${encodeURIComponent(
+        errorMessage(error)
+      )}`
+    );
   }
 
   revalidatePath("/admin/recurring-schedules");
