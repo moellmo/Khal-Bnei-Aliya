@@ -208,6 +208,52 @@ function reportRowsFromResponse(response: Record<string, unknown>) {
   );
 }
 
+function parseDateInput(value: string) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date;
+}
+
+function formatDateInput(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addUtcDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
+function getSolaReportDateChunks(fromDate: string, toDate: string) {
+  const startDate = parseDateInput(fromDate);
+  const endDate = parseDateInput(toDate);
+
+  if (!startDate || !endDate || startDate > endDate) {
+    throw new Error("Choose a valid Sola import date range.");
+  }
+
+  const chunks: { fromDate: string; toDate: string }[] = [];
+  let chunkStart = startDate;
+
+  while (chunkStart <= endDate) {
+    const maxChunkEnd = addUtcDays(chunkStart, 99);
+    const chunkEnd = maxChunkEnd < endDate ? maxChunkEnd : endDate;
+
+    chunks.push({
+      fromDate: formatDateInput(chunkStart),
+      toDate: formatDateInput(chunkEnd),
+    });
+
+    chunkStart = addUtcDays(chunkEnd, 1);
+  }
+
+  return chunks;
+}
+
 function errorMessage(error: unknown) {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -720,21 +766,24 @@ export async function syncHistoricalSolaPayments(formData: FormData) {
     }
 
     const memberRows = (members || []) as HistoricalImportMember[];
-    const response = await callSolaReportingApi({
-      xCommand: "report:approved",
-      xGetNewest: "false",
-      xgetnewest: "false",
-      xMaxRecords: 1000,
-      xmaxrecords: 1000,
-      xBeginDate: fromDate,
-      xEndDate: toDate,
-      xFromDate: fromDate,
-      xToDate: toDate,
-      xFields:
-        "xRefNum,xCommand,xName,xEmail,xAmount,xEnteredDate,xStatus,xResponseResult,xMaskedCardNumber,xCardType,xAuthCode,xInvoice,xDescription,xCustId,xCustID,xCustomerId",
-    });
+    const dateChunks = getSolaReportDateChunks(fromDate, toDate);
+    const rows: SolaReportRow[] = [];
 
-    const rows = reportRowsFromResponse(response);
+    for (const chunk of dateChunks) {
+      const response = await callSolaReportingApi({
+        xCommand: "report:approved",
+        xGetNewest: "false",
+        xgetnewest: "false",
+        xMaxRecords: 1000,
+        xmaxrecords: 1000,
+        xBeginDate: chunk.fromDate,
+        xEndDate: chunk.toDate,
+        xFields:
+          "xRefNum,xCommand,xName,xEmail,xAmount,xEnteredDate,xStatus,xResponseResult,xMaskedCardNumber,xCardType,xAuthCode,xInvoice,xDescription,xCustId,xCustID,xCustomerId",
+      });
+
+      rows.push(...reportRowsFromResponse(response));
+    }
 
     for (const row of rows) {
       if (!isApprovedSale(row)) {
