@@ -3,6 +3,7 @@ import { callSolaRecurringApi } from "@/lib/solaRecurring";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   linkRecurringSchedule,
+  syncHistoricalSolaPayments,
   syncRecurringPayments,
   unlinkRecurringSchedule,
 } from "./actions";
@@ -61,6 +62,10 @@ type PageProps = {
     imported?: string;
     skipped?: string;
     receiptErrors?: string;
+    historicalSynced?: string;
+    historicalImported?: string;
+    historicalSkipped?: string;
+    historicalUnmatched?: string;
     error?: string;
   }>;
 };
@@ -159,6 +164,16 @@ function normalizeEmail(value: string | null | undefined) {
   return String(value || "").trim().toLowerCase();
 }
 
+function dateInputValue(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
 async function getMembers(): Promise<Member[]> {
   const { data, error } = await supabaseAdmin
     .from("members")
@@ -208,6 +223,9 @@ export default async function RecurringSchedulesPage({
   searchParams,
 }: PageProps) {
   const params = await searchParams;
+  const now = new Date();
+  const today = dateInputValue(now);
+  const thirtyDaysAgo = dateInputValue(addDays(now, -30));
 
   const [members, schedules] = await Promise.all([
     getMembers(),
@@ -309,9 +327,69 @@ export default async function RecurringSchedulesPage({
           </Message>
         ) : null}
 
+        {params.historicalSynced === "1" ? (
+          <Message type="success">
+            Historical Sola import completed. Imported{" "}
+            {params.historicalImported || "0"}, skipped{" "}
+            {params.historicalSkipped || "0"}, unmatched{" "}
+            {params.historicalUnmatched || "0"}.
+          </Message>
+        ) : null}
+
         {params.error ? (
           <Message type="error">{params.error}</Message>
         ) : null}
+
+        <section className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.6fr)]">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#8b6b2e]">
+                Historical Import
+              </p>
+              <h2 className="mt-2 text-2xl font-bold">
+                Import Previous Sola Payments
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+                Pull approved one-time Sola/Cardknox payments from the
+                Reporting API. The importer skips duplicates by reference
+                number, attaches matched payments to members, and counts
+                unmatched rows for review.
+              </p>
+            </div>
+
+            <form
+              action={syncHistoricalSolaPayments}
+              className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-2"
+            >
+              <label className="space-y-2 text-sm font-bold text-slate-700">
+                From
+                <input
+                  type="date"
+                  name="from_date"
+                  defaultValue={thirtyDaysAgo}
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2 text-sm font-bold text-slate-700">
+                To
+                <input
+                  type="date"
+                  name="to_date"
+                  defaultValue={today}
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white sm:col-span-2"
+              >
+                Import Approved Payments
+              </button>
+            </form>
+          </div>
+        </section>
 
         <section className="mt-8 space-y-5">
           {schedules.map((schedule) => {

@@ -5,6 +5,11 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { callSolaRecurringApi } from "@/lib/solaRecurring";
+import {
+  callSolaReportingApi,
+  parseSolaReportRows,
+  type SolaReportRow,
+} from "@/lib/solaReporting";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
 
 type SolaTransaction = {
@@ -17,6 +22,14 @@ type SolaTransaction = {
   GatewayRefnum?: string;
   GatewayStatus?: string;
   GatewayError?: string;
+};
+
+type HistoricalImportMember = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  sola_customer_id: string | null;
 };
 
 function getString(formData: FormData, key: string) {
@@ -94,6 +107,99 @@ function getBillingPeriod(value: string) {
     billingMonth: date.getUTCMonth() + 1,
     billingYear: date.getUTCFullYear(),
   };
+}
+
+function rowValue(row: SolaReportRow, ...keys: string[]) {
+  const entries = Object.entries(row);
+
+  for (const key of keys) {
+    const match = entries.find(
+      ([entryKey]) => entryKey.toLowerCase() === key.toLowerCase()
+    );
+
+    if (match) {
+      return String(match[1] || "").trim();
+    }
+  }
+
+  return "";
+}
+
+function normalizeLookup(value: string | null | undefined) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function memberName(member: HistoricalImportMember) {
+  return [member.first_name, member.last_name].filter(Boolean).join(" ").trim();
+}
+
+function matchHistoricalMember(
+  row: SolaReportRow,
+  members: HistoricalImportMember[]
+) {
+  const email = normalizeLookup(rowValue(row, "xEmail", "Email"));
+  const customerId = rowValue(row, "xCustId", "xCustomerId", "CustomerId");
+  const name = normalizeLookup(rowValue(row, "xName", "Name"));
+
+  if (email) {
+    const byEmail = members.find(
+      (member) => normalizeLookup(member.email) === email
+    );
+    if (byEmail) return byEmail;
+  }
+
+  if (customerId) {
+    const byCustomerId = members.find(
+      (member) => String(member.sola_customer_id || "") === customerId
+    );
+    if (byCustomerId) return byCustomerId;
+  }
+
+  if (name) {
+    return (
+      members.find((member) =>
+        normalizeLookup(memberName(member)).includes(name)
+      ) ||
+      members.find((member) =>
+        name.includes(normalizeLookup(memberName(member)))
+      ) ||
+      null
+    );
+  }
+
+  return null;
+}
+
+function isApprovedSale(row: SolaReportRow) {
+  const command = rowValue(row, "xCommand", "Command").toLowerCase();
+  const status = rowValue(row, "xStatus", "Status").toLowerCase();
+  const result = rowValue(
+    row,
+    "xResponseResult",
+    "xResult",
+    "ResponseResult",
+    "Result"
+  ).toLowerCase();
+
+  return (
+    command.includes("sale") &&
+    !command.includes("refund") &&
+    !command.includes("void") &&
+    (status === "approved" || result === "a" || result === "approved")
+  );
+}
+
+function reportRowsFromResponse(response: Record<string, unknown>) {
+  return parseSolaReportRows(
+    response.xReportData ||
+      response.XReportData ||
+      response.ReportData ||
+      response.reportData
+  );
 }
 
 async function requireAdmin() {
@@ -567,5 +673,153 @@ export async function syncRecurringPayments(formData: FormData) {
 
   redirect(
     `/admin/recurring-schedules?synced=1&imported=${importedCount}&skipped=${skippedCount}&receiptErrors=${receiptErrorCount}`
+  );
+}
+
+export async function syncHistoricalSolaPayments(formData: FormData) {
+  await requireAdmin();
+
+  const fromDate = getString(formData, "from_date");
+  const toDate = getString(formData, "to_date");
+
+  if (!fromDate || !toDate) {
+    redirect(
+      `/admin/recurring-schedules?error=${encodeURIComponent(
+        "Choose a from date and to date for the Sola payment import."
+      )}`
+    );
+  }
+
+  const { data: members, error: membersError } = await supabaseAdmin
+    .from("members")
+    .select("id, first_name, last_name, email, sola_customer_id")
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+
+  if (membersError) {
+    throw new Error(membersError.message);
+  }
+
+  const memberRows = (members || []) as HistoricalImportMember[];
+  const response = await callSolaReportingApi({
+    xCommand: "report:approved",
+    xGetNewest: "false",
+    xgetnewest: "false",
+    xMaxRecords: 1000,
+    xmaxrecords: 1000,
+    xBeginDate: fromDate,
+    xEndDate: toDate,
+    xFromDate: fromDate,
+    xToDate: toDate,
+    xFields:
+      "xRefNum,xCommand,xName,xEmail,xAmount,xEnteredDate,xStatus,xResponseResult,xMaskedCardNumber,xCardType,xAuthCode,xInvoice,xDescription,xCustId,xCustomerId",
+  });
+
+  const rows = reportRowsFromResponse(response);
+  let importedCount = 0;
+  let skippedCount = 0;
+  let unmatchedCount = 0;
+
+  for (const row of rows) {
+    if (!isApprovedSale(row)) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const reference = rowValue(row, "xRefNum", "RefNum");
+    const amount = Number(rowValue(row, "xAmount", "Amount") || 0);
+
+    if (!reference || !Number.isFinite(amount) || amount <= 0) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const { data: existingPayment, error: existingError } =
+      await supabaseAdmin
+        .from("payments")
+        .select("id")
+        .eq("external_payment_id", reference)
+        .maybeSingle();
+
+    if (existingError) {
+      throw new Error(existingError.message);
+    }
+
+    if (existingPayment) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const member = matchHistoricalMember(row, memberRows);
+
+    if (!member) {
+      unmatchedCount += 1;
+      continue;
+    }
+
+    const paidAt = parseSolaDate(
+      rowValue(row, "xEnteredDate", "EnteredDate", "TransactionDate")
+    );
+    const paidDate = paidAt.slice(0, 10);
+    const description =
+      rowValue(row, "xDescription", "Description", "xInvoice", "Invoice") ||
+      "Historical Sola payment";
+    const receiptNumber = `KBA-${paidDate.replaceAll("-", "")}-${reference}`;
+
+    const { data: charge, error: chargeError } = await supabaseAdmin
+      .from("member_charges")
+      .insert({
+        member_id: member.id,
+        charge_type: "Sola Payment",
+        description,
+        amount,
+        status: "paid",
+        due_date: paidDate,
+        paid_at: paidAt,
+        payment_method: "Card",
+        payment_provider: "sola",
+        paid_amount: amount,
+        external_payment_id: reference,
+        payment_note: "Imported from Sola Reporting API",
+      })
+      .select("id")
+      .single();
+
+    if (chargeError || !charge) {
+      throw new Error(
+        chargeError?.message || "Unable to create imported Sola charge."
+      );
+    }
+
+    const { error: paymentError } = await supabaseAdmin
+      .from("payments")
+      .insert({
+        member_id: member.id,
+        charge_id: charge.id,
+        amount,
+        payment_method: "Card",
+        payment_provider: "sola",
+        external_payment_id: reference,
+        payer_email: rowValue(row, "xEmail", "Email") || member.email,
+        status: "paid",
+        note: "Imported historical Sola payment",
+        paid_at: paidAt,
+        receipt_number: receiptNumber,
+        raw_provider_response: row,
+      });
+
+    if (paymentError) {
+      throw new Error(paymentError.message);
+    }
+
+    importedCount += 1;
+  }
+
+  revalidatePath("/admin/recurring-schedules");
+  revalidatePath("/admin/accounting");
+  revalidatePath("/admin/members");
+
+  redirect(
+    `/admin/recurring-schedules?historicalSynced=1&historicalImported=${importedCount}&historicalSkipped=${skippedCount}&historicalUnmatched=${unmatchedCount}`
   );
 }
