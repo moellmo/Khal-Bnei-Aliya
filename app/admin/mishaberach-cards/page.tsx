@@ -173,6 +173,13 @@ export default async function MishaberachCardsPage({
               >
                 Manage Members
               </Link>
+
+              <Link
+                href="/admin/mishaberach-cards/non-member"
+                className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
+              >
+                Non-member Card
+              </Link>
             </div>
           </div>
 
