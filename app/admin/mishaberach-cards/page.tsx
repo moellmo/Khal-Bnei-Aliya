@@ -1,5 +1,10 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  clearMishaberachPendingChanges,
+  markMishaberachCardReviewed,
+} from "./actions";
+import { MISHABERACH_PENDING_START_AT } from "@/lib/mishaberachReview";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,8 @@ type Member = {
 type PageProps = {
   searchParams?: Promise<{
     q?: string;
+    cleared?: string;
+    reviewed?: string;
   }>;
 };
 
@@ -43,8 +50,7 @@ function isRecentChange(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return false;
 
-  const thirtyDays = 1000 * 60 * 60 * 24 * 30;
-  return Date.now() - date.getTime() <= thirtyDays;
+  return date.getTime() >= new Date(MISHABERACH_PENDING_START_AT).getTime();
 }
 
 async function getMembers(query: string): Promise<Member[]> {
@@ -130,6 +136,14 @@ export default async function MishaberachCardsPage({
           </p>
         </div>
 
+        {params?.cleared || params?.reviewed ? (
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-bold text-emerald-800">
+            {params?.cleared
+              ? "Pending Mishaberach changes were cleared."
+              : "Mishaberach card was marked reviewed."}
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -137,16 +151,29 @@ export default async function MishaberachCardsPage({
 
               <p className="mt-2 text-sm text-slate-500">
                 {members.length} {members.length === 1 ? "member" : "members"}{" "}
-                shown. {pendingCount} with recent changes near the top.
+                shown. {pendingCount} pending for printing.
               </p>
             </div>
 
-            <Link
-              href="/admin/members"
-              className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
-            >
-              Manage Members
-            </Link>
+            <div className="flex flex-wrap gap-3">
+              {pendingCount > 0 ? (
+                <form action={clearMishaberachPendingChanges}>
+                  <button
+                    type="submit"
+                    className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#10192b]"
+                  >
+                    Clear Pending Changes
+                  </button>
+                </form>
+              ) : null}
+
+              <Link
+                href="/admin/members"
+                className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold transition hover:bg-[#f2eadc]"
+              >
+                Manage Members
+              </Link>
+            </div>
           </div>
 
           <form method="GET" className="mt-6">
@@ -208,12 +235,30 @@ export default async function MishaberachCardsPage({
                     </p>
                   </div>
 
-                  <Link
-                    href={`/admin/members/${member.id}/mishaberach-card`}
-                    className="shrink-0 rounded-full bg-[#1d2940] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#10192b]"
-                  >
-                    Open Card
-                  </Link>
+                  <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+                    <Link
+                      href={`/admin/members/${member.id}/mishaberach-card`}
+                      className="rounded-full bg-[#1d2940] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#10192b]"
+                    >
+                      Open Card
+                    </Link>
+
+                    {isRecentChange(member.updated_at) ? (
+                      <form action={markMishaberachCardReviewed}>
+                        <input
+                          type="hidden"
+                          name="member_id"
+                          value={member.id}
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold text-slate-800 transition hover:bg-[#f2eadc]"
+                        >
+                          Mark Reviewed
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ))}
