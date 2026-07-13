@@ -32,6 +32,7 @@ function refreshMemberPages(memberId: string) {
   revalidatePath(`/admin/members/${memberId}`);
   revalidatePath(`/admin/members/${memberId}/payments`);
   revalidatePath("/admin/members");
+  revalidatePath("/admin/mishaberach-cards");
 }
 
 export async function updateMember(memberId: string, formData: FormData) {
@@ -114,6 +115,11 @@ export async function addFamilyMember(
     throw new Error(error.message);
   }
 
+  await supabaseAdmin
+    .from("members")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", memberId);
+
   refreshMemberPages(memberId);
 
   redirect(`/admin/members/${memberId}?tab=mishaberach&familyAdded=1`);
@@ -132,6 +138,11 @@ export async function deleteFamilyMember(
   if (error) {
     throw new Error(error.message);
   }
+
+  await supabaseAdmin
+    .from("members")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", memberId);
 
   refreshMemberPages(memberId);
 
@@ -154,6 +165,11 @@ export async function toggleFamilyMemberOnCard(
   if (error) {
     throw new Error(error.message);
   }
+
+  await supabaseAdmin
+    .from("members")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", memberId);
 
   refreshMemberPages(memberId);
 

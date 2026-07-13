@@ -11,14 +11,49 @@ type Member = {
   tribe_status: string | null;
   email: string | null;
   status: string | null;
+  updated_at: string | null;
 };
 
-async function getMembers(): Promise<Member[]> {
+type PageProps = {
+  searchParams?: Promise<{
+    q?: string;
+  }>;
+};
+
+function normalizeSearch(value: string) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "No changes recorded";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function isRecentChange(value: string | null) {
+  if (!value) return false;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const thirtyDays = 1000 * 60 * 60 * 24 * 30;
+  return Date.now() - date.getTime() <= thirtyDays;
+}
+
+async function getMembers(query: string): Promise<Member[]> {
   const { data, error } = await supabaseAdmin
     .from("members")
     .select(
-      "id, first_name, last_name, hebrew_name, tribe_status, email, status"
+      "id, first_name, last_name, hebrew_name, tribe_status, email, status, updated_at"
     )
+    .order("updated_at", { ascending: false, nullsFirst: false })
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
 
@@ -27,11 +62,39 @@ async function getMembers(): Promise<Member[]> {
     return [];
   }
 
-  return (data || []) as Member[];
+  const members = (data || []) as Member[];
+  const normalizedQuery = normalizeSearch(query);
+
+  if (!normalizedQuery) {
+    return members;
+  }
+
+  return members.filter((member) => {
+    const haystack = normalizeSearch(
+      [
+        member.first_name,
+        member.last_name,
+        member.hebrew_name,
+        member.email,
+        member.status,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    );
+
+    return haystack.includes(normalizedQuery);
+  });
 }
 
-export default async function MishaberachCardsPage() {
-  const members = await getMembers();
+export default async function MishaberachCardsPage({
+  searchParams,
+}: PageProps) {
+  const params = await searchParams;
+  const query = params?.q?.trim() || "";
+  const members = await getMembers(query);
+  const pendingCount = members.filter((member) =>
+    isRecentChange(member.updated_at)
+  ).length;
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -74,7 +137,7 @@ export default async function MishaberachCardsPage() {
 
               <p className="mt-2 text-sm text-slate-500">
                 {members.length} {members.length === 1 ? "member" : "members"}{" "}
-                currently in the system.
+                shown. {pendingCount} with recent changes near the top.
               </p>
             </div>
 
@@ -86,17 +149,41 @@ export default async function MishaberachCardsPage() {
             </Link>
           </div>
 
+          <form method="GET" className="mt-6">
+            <label className="block text-sm font-bold text-slate-700">
+              Search cards
+              <input
+                name="q"
+                defaultValue={query}
+                className="mt-2 w-full rounded-2xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                placeholder="Search by name, Hebrew name, email, or status"
+              />
+            </label>
+          </form>
+
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             {members.map((member) => (
               <div
                 key={member.id}
-                className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5"
+                className={`rounded-2xl border p-5 ${
+                  isRecentChange(member.updated_at)
+                    ? "border-[#c49a3a] bg-[#fff8e6]"
+                    : "border-[#e3d9c7] bg-[#fbf8f2]"
+                }`}
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
-                    <p className="text-lg font-bold">
-                      {member.first_name} {member.last_name}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-lg font-bold">
+                        {member.first_name} {member.last_name}
+                      </p>
+
+                      {isRecentChange(member.updated_at) ? (
+                        <span className="rounded-full bg-[#8b6b2e] px-3 py-1 text-xs font-black uppercase tracking-[0.12em] text-white">
+                          Pending changes
+                        </span>
+                      ) : null}
+                    </div>
 
                     {member.hebrew_name ? (
                       <p
@@ -114,6 +201,10 @@ export default async function MishaberachCardsPage() {
                     <p className="mt-2 text-sm text-slate-500">
                       {member.tribe_status || "Yisroel"}
                       {member.email ? ` · ${member.email}` : ""}
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-slate-500">
+                      Last changed: {formatDateTime(member.updated_at)}
                     </p>
                   </div>
 

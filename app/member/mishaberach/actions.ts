@@ -57,6 +57,18 @@ function refreshMishaberachPages() {
   revalidatePath("/member/dashboard");
   revalidatePath("/member/mishaberach");
   revalidatePath("/member/mishaberach/preview");
+  revalidatePath("/admin/mishaberach-cards");
+}
+
+async function touchMemberCard(memberId: string) {
+  const { error } = await supabaseAdmin
+    .from("members")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", memberId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
 }
 
 export async function updateMainMishaberach(formData: FormData) {
@@ -74,6 +86,8 @@ export async function updateMainMishaberach(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await touchMemberCard(member.id);
 
   await sendMishaberachUpdateEmail({
     memberId: member.id,
@@ -113,6 +127,8 @@ export async function addFamilyMember(formData: FormData) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await touchMemberCard(member.id);
 
   await sendMishaberachUpdateEmail({
     memberId: member.id,
@@ -157,6 +173,8 @@ export async function updateFamilyMember(
     throw new Error(error.message);
   }
 
+  await touchMemberCard(member.id);
+
   await sendMishaberachUpdateEmail({
     memberId: member.id,
     memberName: getMemberName(member),
@@ -182,6 +200,8 @@ export async function deleteFamilyMember(familyMemberId: string) {
   if (error) {
     throw new Error(error.message);
   }
+
+  await touchMemberCard(member.id);
 
   await sendMishaberachUpdateEmail({
     memberId: member.id,
@@ -212,6 +232,8 @@ export async function toggleFamilyMemberOnCard(
   if (error) {
     throw new Error(error.message);
   }
+
+  await touchMemberCard(member.id);
 
   await sendMishaberachUpdateEmail({
     memberId: member.id,
