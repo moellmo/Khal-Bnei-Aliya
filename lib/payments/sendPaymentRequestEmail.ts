@@ -56,7 +56,7 @@ export async function sendPaymentRequestEmail({
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://www.khalbneialiya.com";
-  const payUrl = `${siteUrl}/member/dashboard#charge-${chargeId}`;
+  const payUrl = `${siteUrl}/pay/${chargeId}`;
   const subject = isOpenAmount
     ? `${chargeType} payment request`
     : `${formatMoney(amount)} payment request`;
@@ -104,7 +104,7 @@ export async function sendPaymentRequestEmail({
             </div>
 
             <p>
-              You can pay by card in the member portal, or send Zelle to
+              You can open the payment request online and confirm Zelle sent to
               <strong> khalbneialiyah@gmail.com</strong>.
             </p>
 
