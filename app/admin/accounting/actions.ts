@@ -164,6 +164,38 @@ export async function updateExpense(formData: FormData) {
   redirect(`${redirectUrl}&expenseAdded=1`);
 }
 
+export async function deleteExpense(formData: FormData) {
+  const expenseId = getString(formData, "expense_id");
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+
+  const redirectUrl = `/admin/accounting?view=expenses&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  if (!expenseId) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Choose an expense to delete."
+      )}`
+    );
+  }
+
+  const { error } = await supabaseAdmin
+    .from("accounting_expenses")
+    .delete()
+    .eq("id", expenseId);
+
+  if (error) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(error.message)}`
+    );
+  }
+
+  revalidatePath("/admin/accounting");
+  redirect(`${redirectUrl}&expenseAdded=1`);
+}
+
 export async function uploadExpenseReceipt(formData: FormData) {
   const expenseId = getString(formData, "expense_id");
   const receiptEntry = formData.get("receipt_file");

@@ -4,6 +4,7 @@ import {
   addExpense,
   addZellePayment,
   approveZellePayment,
+  deleteExpense,
   generateRecurringExpenses,
   importAccountingCsv,
   recordManualPayment,
@@ -1732,92 +1733,108 @@ export default async function AccountingPage({
 
             <div className="mt-5 space-y-3">
               {expensesResult.rows.map((expense) => (
-                <form
+                <div
                   key={expense.id}
-                  action={updateExpense}
-                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(160px,1fr)_140px_130px_150px_auto]"
+                  className="rounded-2xl bg-[#fbf8f2] p-4"
                 >
-                  <input type="hidden" name="expense_id" value={expense.id} />
-                  <input type="hidden" name="month" value={selectedMonth} />
-                  <input type="hidden" name="year" value={selectedYear} />
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Vendor
-                    </span>
-                    <input
-                      name="vendor"
-                      required
-                      defaultValue={expense.vendor}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Category
-                    </span>
-                    <input
-                      name="category"
-                      defaultValue={expense.category || ""}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Amount
-                    </span>
-                    <input
-                      name="amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      required
-                      defaultValue={Number(expense.amount || 0)}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Date
-                    </span>
-                    <input
-                      name="expense_date"
-                      type="date"
-                      required
-                      defaultValue={
-                        expense.expense_date ||
-                        new Date().toISOString().slice(0, 10)
-                      }
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
-                    />
-                  </label>
-
-                  <button
-                    type="submit"
-                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                  <form
+                    action={updateExpense}
+                    className="grid gap-3 lg:grid-cols-[minmax(160px,1fr)_140px_130px_150px_auto]"
                   >
-                    Update
-                  </button>
+                    <input type="hidden" name="expense_id" value={expense.id} />
+                    <input type="hidden" name="month" value={selectedMonth} />
+                    <input type="hidden" name="year" value={selectedYear} />
 
-                  <label className="space-y-1 lg:col-span-4">
-                    <span className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Note
-                      {expense.recurring_template_id ? (
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] tracking-normal text-green-800">
-                          Recurring
-                        </span>
-                      ) : null}
-                    </span>
-                    <input
-                      name="note"
-                      defaultValue={expense.note || ""}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
-                    />
-                  </label>
-                </form>
+                    <label className="space-y-1">
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Vendor
+                      </span>
+                      <input
+                        name="vendor"
+                        required
+                        defaultValue={expense.vendor}
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                      />
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Category
+                      </span>
+                      <input
+                        name="category"
+                        defaultValue={expense.category || ""}
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                      />
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Amount
+                      </span>
+                      <input
+                        name="amount"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        required
+                        defaultValue={Number(expense.amount || 0)}
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                      />
+                    </label>
+
+                    <label className="space-y-1">
+                      <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Date
+                      </span>
+                      <input
+                        name="expense_date"
+                        type="date"
+                        required
+                        defaultValue={
+                          expense.expense_date ||
+                          new Date().toISOString().slice(0, 10)
+                        }
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                      />
+                    </label>
+
+                    <button
+                      type="submit"
+                      className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                    >
+                      Update
+                    </button>
+
+                    <label className="space-y-1 lg:col-span-4">
+                      <span className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                        Note
+                        {expense.recurring_template_id ? (
+                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] tracking-normal text-green-800">
+                            Recurring
+                          </span>
+                        ) : null}
+                      </span>
+                      <input
+                        name="note"
+                        defaultValue={expense.note || ""}
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                      />
+                    </label>
+                  </form>
+
+                  <form action={deleteExpense} className="mt-3 text-right">
+                    <input type="hidden" name="expense_id" value={expense.id} />
+                    <input type="hidden" name="month" value={selectedMonth} />
+                    <input type="hidden" name="year" value={selectedYear} />
+                    <button
+                      type="submit"
+                      className="rounded-full border border-red-200 bg-white px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-50"
+                    >
+                      Delete Expense
+                    </button>
+                  </form>
+                </div>
               ))}
 
               {expensesResult.rows.length === 0 && (
