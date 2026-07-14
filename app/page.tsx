@@ -258,15 +258,20 @@ export default async function Home({ searchParams }: HomePageProps) {
                 </Link>
               ) : (
                 <>
-                  {memberAccountLinked && (
+                  {memberAccountLinked && !isAdmin && (
                     <Link href="/member/dashboard" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
                       Member Dashboard
                     </Link>
                   )}
                   {isAdmin && (
-                    <Link href="/admin" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
-                      Admin Dashboard
-                    </Link>
+                    <>
+                      <Link href="/admin" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                        Admin Dashboard
+                      </Link>
+                      <Link href="/admin/accounting" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                        Accounting Dashboard
+                      </Link>
+                    </>
                   )}
                   <form action={signOut}>
                     <button
@@ -328,7 +333,7 @@ export default async function Home({ searchParams }: HomePageProps) {
               </>
             ) : (
               <>
-                {memberAccountLinked && (
+                {memberAccountLinked && !isAdmin && (
                   <Link
                     href="/member/dashboard"
                     className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
@@ -338,12 +343,21 @@ export default async function Home({ searchParams }: HomePageProps) {
                 )}
 
                 {isAdmin && (
-                  <Link
-                    href="/admin"
-                    className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
-                  >
-                    Admin Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      href="/admin"
+                      className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
+                    >
+                      Admin Dashboard
+                    </Link>
+
+                    <Link
+                      href="/admin/accounting"
+                      className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
+                    >
+                      Accounting
+                    </Link>
+                  </>
                 )}
 
                 <form action={signOut}>
