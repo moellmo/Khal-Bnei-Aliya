@@ -900,6 +900,60 @@ export default async function AccountingPage({
             ))}
           </div>
 
+          {activeView === "monthly" && (
+            <form
+              method="GET"
+              className="mt-6 rounded-2xl bg-[#fbf8f2] p-4"
+            >
+              <input type="hidden" name="view" value="monthly" />
+              <div className="grid gap-3 sm:grid-cols-[1fr_120px_auto]">
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Viewing Month
+                  </span>
+                  <select
+                    name="month"
+                    defaultValue={String(selectedMonth)}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 font-semibold"
+                  >
+                    <option value="1">January</option>
+                    <option value="2">February</option>
+                    <option value="3">March</option>
+                    <option value="4">April</option>
+                    <option value="5">May</option>
+                    <option value="6">June</option>
+                    <option value="7">July</option>
+                    <option value="8">August</option>
+                    <option value="9">September</option>
+                    <option value="10">October</option>
+                    <option value="11">November</option>
+                    <option value="12">December</option>
+                  </select>
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Year
+                  </span>
+                  <input
+                    name="year"
+                    type="number"
+                    min="2026"
+                    defaultValue={selectedYear}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 font-semibold"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="self-end rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+                >
+                  Update Month
+                </button>
+              </div>
+            </form>
+          )}
+
           <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="rounded-2xl bg-[#fbf8f2] p-5">
               <h3 className="font-bold">Payment Method Breakdown</h3>
@@ -2064,41 +2118,21 @@ export default async function AccountingPage({
           className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
         >
           <input type="hidden" name="view" value="billing" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
-            <label className="space-y-2">
-              <span className="font-semibold">Month</span>
-
-              <select
-                name="month"
-                defaultValue={String(selectedMonth)}
-                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-              >
-                <option value="1">January</option>
-                <option value="2">February</option>
-                <option value="3">March</option>
-                <option value="4">April</option>
-                <option value="5">May</option>
-                <option value="6">June</option>
-                <option value="7">July</option>
-                <option value="8">August</option>
-                <option value="9">September</option>
-                <option value="10">October</option>
-                <option value="11">November</option>
-                <option value="12">December</option>
-              </select>
-            </label>
-
-            <label className="space-y-2">
-              <span className="font-semibold">Year</span>
-
-              <input
-                name="year"
-                type="number"
-                min="2026"
-                defaultValue={selectedYear}
-                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-              />
-            </label>
+          <input type="hidden" name="month" value={selectedMonth} />
+          <input type="hidden" name="year" value={selectedYear} />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#9a7a37]">
+                Billing list
+              </p>
+              <h2 className="mt-1 text-2xl font-bold">
+                {getMonthName(selectedMonth)} {selectedYear}
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Change the month from Overview, then use this filter to review
+                member billing status.
+              </p>
+            </div>
 
             <label className="space-y-2">
               <span className="font-semibold">Show</span>
