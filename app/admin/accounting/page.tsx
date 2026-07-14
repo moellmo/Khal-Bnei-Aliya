@@ -762,28 +762,68 @@ export default async function AccountingPage({
           </div>
         )}
 
-        <div className="mt-8 flex gap-3 overflow-x-auto pb-2">
-          {[
-            ["monthly", "Overview"],
-            ["billing", "Billing"],
-            ["expenses", "Expenses"],
-            ["payments", "Payments"],
-            ["yearly", "Yearly"],
-            ["uploads", "Uploads"],
-            ["receipts", "Receipts"],
-          ].map(([view, label]) => (
-            <Link
-              key={view}
-              href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=${view}`}
-              className={
-                activeView === view
-                  ? "shrink-0 rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
-                  : "shrink-0 rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
-              }
-            >
-              {label}
-            </Link>
-          ))}
+        <div className="mt-8">
+          <div className="rounded-[1.5rem] border border-[#e3d9c7] bg-white p-4 shadow-sm md:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#9a7a37]">
+                  Accounting
+                </p>
+                <h2 className="mt-1 text-xl font-bold">Choose Section</h2>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-3 py-1 text-xs font-bold text-slate-600">
+                {getMonthName(selectedMonth)} {selectedYear}
+              </span>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {[
+                ["monthly", "Overview"],
+                ["billing", "Billing"],
+                ["expenses", "Expenses"],
+                ["payments", "Payments"],
+                ["yearly", "Yearly"],
+                ["uploads", "Uploads"],
+                ["receipts", "Receipts"],
+              ].map(([view, label]) => (
+                <Link
+                  key={view}
+                  href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=${view}`}
+                  className={
+                    activeView === view
+                      ? "rounded-2xl bg-[#1d2940] px-4 py-3 text-center text-sm font-bold text-white shadow-sm"
+                      : "rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] px-4 py-3 text-center text-sm font-bold text-slate-700"
+                  }
+                >
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          <div className="hidden gap-3 overflow-x-auto pb-2 md:flex">
+            {[
+              ["monthly", "Overview"],
+              ["billing", "Billing"],
+              ["expenses", "Expenses"],
+              ["payments", "Payments"],
+              ["yearly", "Yearly"],
+              ["uploads", "Uploads"],
+              ["receipts", "Receipts"],
+            ].map(([view, label]) => (
+              <Link
+                key={view}
+                href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=${view}`}
+                className={
+                  activeView === view
+                    ? "shrink-0 rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                    : "shrink-0 rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+                }
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
 
         {(activeView === "monthly" ||
