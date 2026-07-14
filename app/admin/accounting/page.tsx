@@ -1074,6 +1074,9 @@ export default async function AccountingPage({
                 defaultValue="expenses"
               >
                 <option value="expenses">Expenses</option>
+                <option value="recurring_expenses">
+                  Recurring Expenses
+                </option>
                 <option value="zelle">Zelle Payments</option>
               </select>
             </label>
@@ -1091,7 +1094,9 @@ export default async function AccountingPage({
 
             <p className="mt-3 text-xs leading-5 text-slate-500">
               Expenses: vendor, category, amount, date. Zelle: payer_name,
-              payer_email, amount, received_date, purpose.
+              payer_email, amount, received_date, purpose. Recurring:
+              vendor, category, amount, frequency, day_of_month, day_of_week,
+              start_date.
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2">
@@ -1107,6 +1112,13 @@ export default async function AccountingPage({
                 className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold"
               >
                 Zelle CSV Template
+              </a>
+
+              <a
+                href="/api/accounting/templates/recurring-expenses"
+                className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-xs font-bold"
+              >
+                Recurring Expense Template
               </a>
             </div>
 

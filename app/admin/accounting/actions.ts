@@ -718,6 +718,19 @@ function rowDate(row: Record<string, string>) {
   );
 }
 
+function rowBoolean(value: string | undefined, defaultValue = true) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (!normalized) return defaultValue;
+  return !["false", "no", "n", "0", "inactive"].includes(normalized);
+}
+
+function rowInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(String(value || "").replace(/[$,]/g, ""));
+
+  return Number.isFinite(parsed) ? Math.round(parsed) : fallback;
+}
+
 export async function importAccountingCsv(formData: FormData) {
   const importType = getString(formData, "import_type");
   const fileEntry = formData.get("csv_file");
@@ -770,6 +783,66 @@ export async function importAccountingCsv(formData: FormData) {
 
     revalidatePath("/admin/accounting");
     redirect("/admin/accounting?zelleAdded=1");
+  }
+
+  if (importType === "recurring_expenses") {
+    const recurringRows = rows
+      .map((row) => {
+        const frequency =
+          String(row.frequency || row.repeats || "").toLowerCase() ===
+          "weekly"
+            ? "weekly"
+            : "monthly";
+        const dayOfMonth = Math.min(
+          31,
+          Math.max(
+            1,
+            rowInteger(row.day_of_month || row.month_day, 1)
+          )
+        );
+        const dayOfWeek = Math.min(
+          6,
+          Math.max(0, rowInteger(row.day_of_week || row.week_day, 0))
+        );
+
+        return {
+          vendor: row.vendor || row.payee || row.name || row.description,
+          category: row.category || "Imported",
+          amount: rowAmount(row),
+          frequency,
+          day_of_month: dayOfMonth,
+          day_of_week: dayOfWeek,
+          start_date:
+            row.start_date ||
+            row.starts ||
+            new Date().toISOString().slice(0, 10),
+          end_date: row.end_date || row.ends || null,
+          active: rowBoolean(row.active, true),
+          note: row.note || row.memo || row.description || null,
+        };
+      })
+      .filter((row) => row.vendor && row.amount > 0);
+
+    if (recurringRows.length === 0) {
+      redirect(
+        "/admin/accounting?view=uploads&accountingError=No%20valid%20recurring%20expense%20rows%20were%20found%20in%20the%20CSV."
+      );
+    }
+
+    const { error } = await supabaseAdmin
+      .from("accounting_recurring_expenses")
+      .insert(recurringRows);
+
+    if (error) {
+      redirect(
+        `/admin/accounting?view=uploads&accountingError=${encodeURIComponent(
+          error.message
+        )}`
+      );
+    }
+
+    revalidatePath("/admin/accounting");
+    redirect("/admin/accounting?view=expenses&recurringSaved=1");
   }
 
   const expenseRows = rows
