@@ -379,7 +379,7 @@ export async function addZellePayment(formData: FormData) {
   }
 
   revalidatePath("/admin/accounting");
-  redirect("/admin/accounting?zelleAdded=1");
+  redirect("/admin/accounting?view=payments&zelleAdded=1#zelle-matching");
 }
 
 export async function approveZellePayment(formData: FormData) {
@@ -388,7 +388,7 @@ export async function approveZellePayment(formData: FormData) {
   const month = getString(formData, "month");
   const year = getString(formData, "year");
 
-  const redirectUrl = `/admin/accounting?view=monthly&month=${encodeURIComponent(
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
     month
   )}&year=${encodeURIComponent(year)}`;
 
@@ -530,7 +530,7 @@ export async function approveZellePayment(formData: FormData) {
   revalidatePath(`/admin/members/${charge.member_id}/payments`);
   revalidatePath("/member/dashboard");
 
-  redirect(`${redirectUrl}&zelleAdded=1`);
+  redirect(`${redirectUrl}&zelleAdded=1#zelle-matching`);
 }
 
 export async function recordManualPayment(formData: FormData) {
@@ -545,7 +545,7 @@ export async function recordManualPayment(formData: FormData) {
   const month = getString(formData, "month");
   const year = getString(formData, "year");
 
-  const redirectUrl = `/admin/accounting?view=monthly&month=${encodeURIComponent(
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
     month
   )}&year=${encodeURIComponent(year)}`;
 
@@ -782,7 +782,7 @@ export async function importAccountingCsv(formData: FormData) {
     }
 
     revalidatePath("/admin/accounting");
-    redirect("/admin/accounting?zelleAdded=1");
+    redirect("/admin/accounting?view=payments&zelleAdded=1#zelle-matching");
   }
 
   if (importType === "recurring_expenses") {

@@ -76,7 +76,7 @@ export async function sendZelleReviewEmail({
 
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL || "https://www.khalbneialiya.com";
-  const accountingUrl = `${siteUrl}/admin/accounting?view=monthly`;
+  const accountingUrl = `${siteUrl}/admin/accounting?view=payments#zelle-matching`;
   const resend = new Resend(apiKey);
   const safeNote = note?.trim();
 
