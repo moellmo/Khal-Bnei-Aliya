@@ -31,6 +31,17 @@ type KiddushItem = {
   max_quantity: number | null;
 };
 
+function uniqueItemsByName(items: KiddushItem[]) {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = item.name.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function formatShabbosLabel(dateValue: string) {
   const date = new Date(`${dateValue}T12:00:00`);
 
@@ -94,7 +105,7 @@ async function getPageData() {
   return {
     settings,
     settingsError: settingsResult.error?.message || null,
-    items: (itemsResult.data || []) as KiddushItem[],
+    items: uniqueItemsByName((itemsResult.data || []) as KiddushItem[]),
     itemsError: itemsResult.error?.message || null,
     shabbosOptions: shabbosDates.map((date) => ({
       date,

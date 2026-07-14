@@ -15,6 +15,17 @@ type KiddushItem = {
   is_active: boolean;
 };
 
+function uniqueItemsByName(items: KiddushItem[]) {
+  const seen = new Set<string>();
+
+  return items.filter((item) => {
+    const key = item.name.trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
@@ -172,7 +183,7 @@ export async function submitKiddushReservation(formData: FormData) {
     throw new Error(itemsError.message);
   }
 
-  const selectedItems = ((itemRows || []) as KiddushItem[])
+  const selectedItems = uniqueItemsByName((itemRows || []) as KiddushItem[])
     .map((item) => {
       const rawQuantity = Math.max(
         0,

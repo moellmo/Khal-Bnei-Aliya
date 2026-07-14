@@ -140,7 +140,7 @@ export default function KiddushReservationForm({
       </label>
 
       <div className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-4 sm:p-5">
-        <div className="flex flex-col gap-2 border-b border-[#e3d9c7] pb-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="border-b border-[#e3d9c7] pb-4">
           <div>
             <h2 className="text-xl font-black text-slate-900">
               Kiddush Items
@@ -150,10 +150,6 @@ export default function KiddushReservationForm({
               reviewed separately.
             </p>
           </div>
-
-          <p className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-black text-white">
-            {formatMoney(total)}
-          </p>
         </div>
 
         <div className="mt-4 grid gap-3">
@@ -211,31 +207,26 @@ export default function KiddushReservationForm({
           </span>
         </label>
 
-        <div className="mt-4 grid gap-2 rounded-2xl border border-[#e3d9c7] bg-white p-4 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold text-slate-600">Items</span>
-            <span className="font-black">{formatMoney(itemSubtotal)}</span>
+        <div className="mt-4 flex items-center justify-between gap-4 rounded-2xl bg-[#1d2940] p-5 text-white">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#d9bf7a]">
+              Estimated Total
+            </p>
+            <p className="mt-1 text-xs font-bold text-slate-200">
+              Special requests charged separately
+            </p>
+            <p className="mt-1 text-xs font-semibold text-slate-300">
+              Includes {formatMoney(baseFeeAmount)} base Kiddush charge
+            </p>
+            {minimumAdjustment > 0 ? (
+              <p className="mt-1 text-xs font-semibold text-slate-300">
+                Kiddush minimum applied
+              </p>
+            ) : null}
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-semibold text-slate-600">Base Kiddush</span>
-            <span className="font-black">{formatMoney(baseFeeAmount)}</span>
-          </div>
-          {minimumAdjustment > 0 ? (
-            <div className="flex items-center justify-between gap-3">
-              <span className="font-semibold text-slate-600">
-                Minimum Kiddush total
-              </span>
-              <span className="font-black">
-                {formatMoney(minimumAdjustment)}
-              </span>
-            </div>
-          ) : null}
-          <div className="flex items-center justify-between gap-3 border-t border-[#e3d9c7] pt-2">
-            <span className="font-black text-slate-900">Checkout total</span>
-            <span className="text-lg font-black text-[#1d2940]">
-              {formatMoney(total)}
-            </span>
-          </div>
+          <p className="text-3xl font-black text-[#ffd447]">
+            {formatMoney(total)}
+          </p>
         </div>
       </div>
 

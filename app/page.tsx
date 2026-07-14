@@ -198,23 +198,23 @@ export default async function Home({ searchParams }: HomePageProps) {
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
       <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:px-8 lg:px-10">
-        <header className="flex flex-col gap-5 border-b border-[#ddd4c2] pb-6 lg:flex-row lg:items-center lg:justify-between">
+        <header className="flex items-center justify-start gap-3 border-b border-[#ddd4c2] pb-4 lg:justify-between lg:pb-6">
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-3 sm:gap-4"
+            className="flex min-w-0 items-center gap-2 sm:gap-4"
           >
             <img
               src={logoUrl}
               alt="Khal Bnei Aliya logo"
-              className="h-16 w-auto shrink-0 rounded-xl bg-white p-2 shadow-sm sm:h-20"
+              className="h-12 w-auto shrink-0 rounded-lg bg-white p-1.5 shadow-sm sm:h-20 sm:rounded-xl sm:p-2"
             />
 
             <div className="min-w-0">
-              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em]">
                 Khal Bnei Aliya
               </p>
 
-              <h1 className="mt-1 text-xl font-black tracking-tight sm:text-2xl md:text-3xl">
+              <h1 className="mt-0.5 text-lg font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl">
                 קהל בני עליה
               </h1>
 
@@ -225,7 +225,16 @@ export default async function Home({ searchParams }: HomePageProps) {
             </div>
           </Link>
 
-          <div className="flex items-center justify-end">
+          <div className="flex shrink-0 items-center justify-start gap-2 lg:justify-end">
+          {!isLoggedIn ? (
+            <Link
+              href="/login"
+              className="rounded-full border border-[#cbbd9d] bg-white px-3 py-2 text-xs font-bold transition hover:bg-[#f2eadc] md:hidden"
+            >
+              Log In
+            </Link>
+          ) : null}
+
           <details className="relative md:hidden">
             <summary className="cursor-pointer list-none rounded-full bg-[#1d2940] px-4 py-2.5 text-sm font-bold text-white">
               Menu

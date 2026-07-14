@@ -44,6 +44,25 @@ values
   ('Cake Platters', '~2.5-3 lbs', 22, 0, null, 60)
 on conflict do nothing;
 
+with ranked_kiddush_items as (
+  select
+    id,
+    row_number() over (
+      partition by lower(name)
+      order by created_at asc, id asc
+    ) as row_number
+  from public.kiddush_items
+)
+delete from public.kiddush_items
+where id in (
+  select id
+  from ranked_kiddush_items
+  where row_number > 1
+);
+
+create unique index if not exists kiddush_items_name_unique_idx
+  on public.kiddush_items (lower(name));
+
 create table if not exists public.kiddush_reservations (
   id uuid primary key default gen_random_uuid(),
   shabbos_date date not null,
@@ -100,7 +119,7 @@ create table if not exists public.hall_reservation_requests (
   status text not null default 'new',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-I ran it );
+);
 
 create index if not exists hall_reservation_requests_created_at_idx
   on public.hall_reservation_requests (created_at desc);
