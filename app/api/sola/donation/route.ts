@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
+import { markKiddushReservationPaidAndNotify } from "@/lib/kiddush/reservations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ const allowedPurposes = new Set([
   "Matana",
   "Aliyah Pledge",
   "Yamim Noraim Seats",
+  "Kiddush Reservation",
   "Building Fund",
   "Other",
 ]);
@@ -414,6 +416,14 @@ export async function POST(request: NextRequest) {
       note,
       reference,
     });
+
+    if (purpose === "Kiddush Reservation") {
+      await markKiddushReservationPaidAndNotify({
+        note,
+        reference,
+        chargeId: charge.id,
+      });
+    }
 
     let receiptGenerated = false;
     let receiptError: string | null = null;

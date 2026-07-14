@@ -67,6 +67,12 @@ const adminLinks = [
   href: "/admin/yamim-noraim",
 },
 {
+  label: "Kiddush Reservations",
+  description:
+    "Update Kiddush items, pricing, notifications, and reserved Shabbosim.",
+  href: "/admin/kiddush",
+},
+{
   label: "Admin Users",
   description: "Manage who can access the admin and accounting dashboards.",
   href: "/admin/admin-users",

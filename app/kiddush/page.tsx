@@ -1,0 +1,200 @@
+import Link from "next/link";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import KiddushReservationForm from "./KiddushReservationForm";
+
+export const dynamic = "force-dynamic";
+
+type PageProps = {
+  searchParams?: Promise<{
+    error?: string;
+    reserved?: string;
+    method?: string;
+  }>;
+};
+
+type Settings = {
+  enabled: boolean;
+  headline: string | null;
+  message: string | null;
+  zelle_email: string | null;
+};
+
+type KiddushItem = {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  default_quantity: number;
+  max_quantity: number | null;
+};
+
+function formatShabbosLabel(dateValue: string) {
+  const date = new Date(`${dateValue}T12:00:00`);
+
+  return new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+}
+
+function getUpcomingShabbosDates(count = 14) {
+  const dates: string[] = [];
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+
+  const daysUntilSaturday = (6 - date.getDay() + 7) % 7;
+  date.setDate(date.getDate() + daysUntilSaturday);
+
+  for (let index = 0; index < count; index += 1) {
+    const nextDate = new Date(date);
+    nextDate.setDate(date.getDate() + index * 7);
+    dates.push(nextDate.toISOString().slice(0, 10));
+  }
+
+  return dates;
+}
+
+async function getPageData() {
+  const shabbosDates = getUpcomingShabbosDates();
+
+  const [settingsResult, itemsResult, reservationsResult] = await Promise.all([
+    supabaseAdmin
+      .from("kiddush_settings")
+      .select("enabled, headline, message, zelle_email")
+      .eq("id", "default")
+      .maybeSingle(),
+    supabaseAdmin
+      .from("kiddush_items")
+      .select("id, name, description, price, default_quantity, max_quantity")
+      .eq("is_active", true)
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true }),
+    supabaseAdmin
+      .from("kiddush_reservations")
+      .select("shabbos_date")
+      .in("shabbos_date", shabbosDates)
+      .in("payment_status", ["pending", "paid", "zelle_review", "no_payment_due"]),
+  ]);
+
+  const reservedDates = new Set(
+    (reservationsResult.data || []).map((row) => String(row.shabbos_date))
+  );
+
+  return {
+    settings: settingsResult.data as Settings | null,
+    settingsError: settingsResult.error?.message || null,
+    items: (itemsResult.data || []) as KiddushItem[],
+    itemsError: itemsResult.error?.message || null,
+    shabbosOptions: shabbosDates.map((date) => ({
+      date,
+      label: formatShabbosLabel(date),
+      reserved: reservedDates.has(date),
+    })),
+  };
+}
+
+export default async function KiddushPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const { settings, settingsError, items, itemsError, shabbosOptions } =
+    await getPageData();
+  const isOpen = settings?.enabled !== false;
+  const zelleEmail = settings?.zelle_email || "khalbneialiyah@gmail.com";
+
+  return (
+    <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
+      <section className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/"
+            className="text-sm font-semibold text-[#8b6b2e] hover:underline"
+          >
+            ← Back Home
+          </Link>
+
+          <Link
+            href="/donate"
+            className="text-sm font-semibold text-[#8b6b2e] hover:underline"
+          >
+            Donate
+          </Link>
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+          <aside className="rounded-[2rem] bg-[#1d2940] p-7 text-white shadow-sm sm:p-8">
+            <img
+              src="/kba-logo.png"
+              alt="Khal Bnei Aliya"
+              className="h-20 w-auto rounded-xl bg-white p-2"
+            />
+
+            <p className="mt-8 text-sm font-bold uppercase tracking-[0.25em] text-[#d9bf7a]">
+              Khal Bnei Aliya
+            </p>
+
+            <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
+              {settings?.headline || "Kiddush Reservations"}
+            </h1>
+
+            <p className="mt-4 text-base leading-7 text-slate-200">
+              {settings?.message ||
+                "Reserve an upcoming Shabbos Kiddush, choose standard items, add your sponsorship text, and complete payment by card or Zelle."}
+            </p>
+
+            <div className="mt-6 rounded-2xl bg-white/10 p-5">
+              <p className="text-sm font-bold text-[#f0d99a]">
+                Zelle
+              </p>
+
+              <p className="mt-2 text-xl font-black">
+                {zelleEmail}
+              </p>
+
+              <p className="mt-2 text-sm leading-6 text-slate-200">
+                Include your name and Kiddush date in the memo.
+              </p>
+            </div>
+          </aside>
+
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
+            {params?.reserved === "1" ? (
+              <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-800">
+                Kiddush reservation received.
+                {params.method === "zelle"
+                  ? " Your Zelle payment was submitted for review."
+                  : ""}
+              </div>
+            ) : null}
+
+            {params?.error ? (
+              <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
+                {params.error}
+              </div>
+            ) : null}
+
+            {settingsError || itemsError ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
+                Kiddush reservations could not be loaded.
+              </div>
+            ) : !isOpen ? (
+              <div className="rounded-2xl bg-[#fbf8f2] p-6 text-center font-bold text-slate-700">
+                Kiddush reservations are not open right now.
+              </div>
+            ) : items.length === 0 ? (
+              <div className="rounded-2xl bg-[#fbf8f2] p-6 text-center font-bold text-slate-700">
+                Kiddush items have not been configured yet.
+              </div>
+            ) : (
+              <KiddushReservationForm
+                items={items}
+                shabbosOptions={shabbosOptions}
+                zelleEmail={zelleEmail}
+              />
+            )}
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}

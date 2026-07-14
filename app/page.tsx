@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { signOut } from "./member/actions";
+import { submitHallReservationRequest } from "./hall-request/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,13 @@ type SeasonalPdf = {
 type YamimNoraimSettings = {
   enabled: boolean;
   active_year: number;
+};
+
+type HomePageProps = {
+  searchParams?: Promise<{
+    hallSubmitted?: string;
+    hallError?: string;
+  }>;
 };
 
 async function getCurrentWeeklyPdf(): Promise<WeeklyPdf | null> {
@@ -132,7 +140,8 @@ async function getYamimNoraimSettings(): Promise<YamimNoraimSettings | null> {
   return data as YamimNoraimSettings | null;
 }
 
-export default async function Home() {
+export default async function Home({ searchParams }: HomePageProps) {
+  const query = await searchParams;
   const authSupabase = await createClient();
 
   const {
@@ -208,6 +217,10 @@ export default async function Home() {
           label: "Full Schedule",
           href: "/davening-times",
         },
+        {
+          label: "Reserve Kiddush",
+          href: "/kiddush",
+        },
       ]
     : [
         {
@@ -221,6 +234,10 @@ export default async function Home() {
         {
           label: "Donate",
           href: "/donate",
+        },
+        {
+          label: "Reserve Kiddush",
+          href: "/kiddush",
         },
         {
           label: "Full Schedule",
@@ -278,6 +295,13 @@ export default async function Home() {
               className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
             >
               Donate
+            </Link>
+
+            <Link
+              href="/kiddush"
+              className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
+            >
+              Kiddush
             </Link>
 
             {!isLoggedIn ? (
@@ -378,6 +402,13 @@ export default async function Home() {
                 className="rounded-full border border-[#cbbd9d] bg-white px-5 py-3 text-center font-bold transition hover:bg-[#f2eadc] sm:px-6"
               >
                 Donate
+              </Link>
+
+              <Link
+                href="/kiddush"
+                className="rounded-full border border-[#cbbd9d] bg-white px-5 py-3 text-center font-bold transition hover:bg-[#f2eadc] sm:px-6"
+              >
+                Reserve Kiddush
               </Link>
             </div>
 
@@ -603,6 +634,143 @@ export default async function Home() {
             </div>
           </section>
         )}
+
+        <section id="hall-request" className="pb-12">
+          <div className="grid gap-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] lg:grid-cols-[0.85fr_1.15fr] md:p-8">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#8b6b2e]">
+                Reservations
+              </p>
+
+              <h2 className="mt-3 text-2xl font-black sm:text-3xl">
+                Kiddush &amp; Shul Hall
+              </h2>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                Reserve an upcoming Kiddush online, or send a request for the
+                shul / hall and we will follow up.
+              </p>
+
+              <Link
+                href="/kiddush"
+                className="mt-5 inline-flex rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#10192b]"
+              >
+                Reserve Kiddush
+              </Link>
+
+              <div className="mt-6 rounded-2xl bg-[#fbf8f2] p-5 text-sm leading-6 text-slate-700">
+                <p className="font-black text-slate-900">
+                  Shul / Hall Contact
+                </p>
+                <p className="mt-2">Yedida Diena</p>
+                <a
+                  href="mailto:Yedidyadiena@gmail.com"
+                  className="font-bold text-[#8b6b2e] hover:underline"
+                >
+                  Yedidyadiena@gmail.com
+                </a>
+                <p>
+                  <a
+                    href="tel:+13477712933"
+                    className="font-bold text-[#8b6b2e] hover:underline"
+                  >
+                    347-771-2933
+                  </a>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-xl font-black">
+                    Request the Shul / Hall
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">
+                    Share the date you need and the right person will get back
+                    to you.
+                  </p>
+                </div>
+
+                {query?.hallSubmitted === "1" ? (
+                  <p className="rounded-full bg-green-50 px-4 py-2 text-xs font-bold text-green-800">
+                    Request sent
+                  </p>
+                ) : null}
+              </div>
+
+              {query?.hallError ? (
+                <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
+                  {query.hallError}
+                </p>
+              ) : null}
+
+              <form
+                action={submitHallReservationRequest}
+                className="mt-5 grid gap-4"
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Name
+                    <input
+                      name="full_name"
+                      required
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Email
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-[0.75fr_1.25fr]">
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Phone
+                    <input
+                      name="phone"
+                      type="tel"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+
+                  <label className="space-y-2 text-sm font-bold text-slate-700">
+                    Date(s) Needed
+                    <input
+                      name="dates_needed"
+                      required
+                      placeholder="One date or a range"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Details
+                  <textarea
+                    name="details"
+                    rows={3}
+                    placeholder="Simcha, setup needs, approximate time..."
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#8b6b2e] px-6 py-3 text-sm font-black text-white transition hover:bg-[#745822]"
+                >
+                  Submit Request
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
 
         <section className="pb-12">
           <div className="grid gap-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] md:grid-cols-[0.9fr_1.1fr] md:p-8">
