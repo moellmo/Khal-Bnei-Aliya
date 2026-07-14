@@ -198,7 +198,7 @@ export default async function Home({ searchParams }: HomePageProps) {
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
       <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:px-8 lg:px-10">
-        <header className="flex items-center justify-start gap-3 border-b border-[#ddd4c2] pb-4 lg:justify-between lg:pb-6">
+        <header className="flex items-center justify-between gap-3 border-b border-[#ddd4c2] pb-4 lg:pb-6">
           <Link
             href="/"
             className="flex min-w-0 items-center gap-2 sm:gap-4"
@@ -214,7 +214,7 @@ export default async function Home({ searchParams }: HomePageProps) {
                 Khal Bnei Aliya
               </p>
 
-              <h1 className="mt-0.5 text-lg font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl">
+              <h1 className="mt-0.5 text-base font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl">
                 קהל בני עליה
               </h1>
 
@@ -225,7 +225,7 @@ export default async function Home({ searchParams }: HomePageProps) {
             </div>
           </Link>
 
-          <div className="flex shrink-0 items-center justify-start gap-2 lg:justify-end">
+          <div className="flex shrink-0 items-center justify-end gap-2">
           {!isLoggedIn ? (
             <Link
               href="/login"
