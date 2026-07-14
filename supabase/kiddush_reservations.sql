@@ -36,13 +36,17 @@ create table if not exists public.kiddush_items (
 insert into public.kiddush_items
   (name, description, price, default_quantity, max_quantity, display_order)
 values
-  ('Cholent', 'Homemade', 25, 1, 1, 10),
-  ('Potato Kugel', '9x13', 35, 1, 1, 20),
+  ('Cholent', 'Homemade', 25, 1, null, 10),
+  ('Potato Kugel', '9x13', 35, 1, null, 20),
   ('Cake / Cookies', '~1 lb pkg', 10, 6, null, 30),
   ('Sauteed Liver', '6.5 oz', 10, 3, null, 40),
   ('Herring', '7 oz', 8, 2, null, 50),
   ('Cake Platters', '~2.5-3 lbs', 22, 0, null, 60)
 on conflict do nothing;
+
+update public.kiddush_items
+set max_quantity = null
+where max_quantity is not null;
 
 with ranked_kiddush_items as (
   select

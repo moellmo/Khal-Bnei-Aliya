@@ -9,7 +9,6 @@ type KiddushItem = {
   description: string | null;
   price: number;
   default_quantity: number;
-  max_quantity: number | null;
 };
 
 type ShabbosOption = {
@@ -61,14 +60,10 @@ export default function KiddushReservationForm({
 
   function setQuantity(item: KiddushItem, value: string) {
     const parsed = Math.max(0, Math.floor(Number(value || 0)));
-    const quantity =
-      item.max_quantity === null
-        ? parsed
-        : Math.min(parsed, Number(item.max_quantity));
 
     setQuantities((current) => ({
       ...current,
-      [item.id]: Number.isFinite(quantity) ? quantity : 0,
+      [item.id]: Number.isFinite(parsed) ? parsed : 0,
     }));
   }
 
@@ -162,14 +157,13 @@ export default function KiddushReservationForm({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-black text-slate-900">{item.name}</p>
                   <span className="rounded-full bg-[#f0e5ca] px-2.5 py-1 text-xs font-black text-[#8b6b2e]">
-                    {formatMoney(Number(item.price || 0))}
-                    {item.max_quantity === 1 ? "" : " ea"}
+                    {formatMoney(Number(item.price || 0))} ea
                   </span>
                 </div>
                 <p className="mt-1 text-sm font-semibold text-slate-500">
                   {item.description || "Standard Kiddush item"}
-                  {item.max_quantity !== null
-                    ? ` | Max ${item.max_quantity}`
+                  {item.default_quantity > 0
+                    ? ` | Suggested ${item.default_quantity}`
                     : ""}
                 </p>
               </div>
@@ -180,7 +174,6 @@ export default function KiddushReservationForm({
                   name={`item_${item.id}`}
                   type="number"
                   min="0"
-                  max={item.max_quantity ?? undefined}
                   step="1"
                   value={quantities[item.id] || 0}
                   onChange={(event) =>

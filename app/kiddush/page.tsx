@@ -28,7 +28,6 @@ type KiddushItem = {
   description: string | null;
   price: number;
   default_quantity: number;
-  max_quantity: number | null;
 };
 
 function uniqueItemsByName(items: KiddushItem[]) {
@@ -87,7 +86,7 @@ async function getPageData() {
   const [itemsResult, reservationsResult] = await Promise.all([
     supabaseAdmin
       .from("kiddush_items")
-      .select("id, name, description, price, default_quantity, max_quantity")
+      .select("id, name, description, price, default_quantity")
       .eq("is_active", true)
       .order("display_order", { ascending: true })
       .order("name", { ascending: true }),

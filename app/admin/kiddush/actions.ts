@@ -155,8 +155,6 @@ export async function updateKiddushItems(formData: FormData) {
 
   const itemIds = formData.getAll("item_id").map((value) => String(value));
   const updates = itemIds.map((id) => {
-    const maxQuantityRaw = getString(formData, `max_quantity_${id}`);
-
     return {
       id,
       name: getString(formData, `name_${id}`),
@@ -166,10 +164,7 @@ export async function updateKiddushItems(formData: FormData) {
         0,
         Math.floor(getNumber(formData, `default_quantity_${id}`))
       ),
-      max_quantity:
-        maxQuantityRaw === ""
-          ? null
-          : Math.max(0, Math.floor(Number(maxQuantityRaw))),
+      max_quantity: null,
       display_order: Math.floor(getNumber(formData, `display_order_${id}`)),
       is_active: formData.get(`is_active_${id}`) === "on",
       updated_at: new Date().toISOString(),
@@ -204,8 +199,6 @@ export async function addKiddushItem(formData: FormData) {
     );
   }
 
-  const maxQuantityRaw = getString(formData, "new_max_quantity");
-
   const { error } = await supabaseAdmin.from("kiddush_items").insert({
     name,
     description: getString(formData, "new_description") || null,
@@ -214,10 +207,7 @@ export async function addKiddushItem(formData: FormData) {
       0,
       Math.floor(getNumber(formData, "new_default_quantity"))
     ),
-    max_quantity:
-      maxQuantityRaw === ""
-        ? null
-        : Math.max(0, Math.floor(Number(maxQuantityRaw))),
+    max_quantity: null,
     display_order: Math.floor(getNumber(formData, "new_display_order")),
     is_active: true,
   });

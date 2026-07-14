@@ -39,7 +39,6 @@ type KiddushItem = {
   description: string | null;
   price: number;
   default_quantity: number;
-  max_quantity: number | null;
   display_order: number;
   is_active: boolean;
 };
@@ -116,7 +115,7 @@ async function getPageData(showAll: boolean) {
     supabaseAdmin
       .from("kiddush_items")
       .select(
-        "id, name, description, price, default_quantity, max_quantity, display_order, is_active"
+        "id, name, description, price, default_quantity, display_order, is_active"
       )
       .order("display_order", { ascending: true })
       .order("name", { ascending: true }),
@@ -407,15 +406,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   type="number"
                   min="0"
                   step="1"
-                  placeholder="Default quantity"
-                  className="rounded-xl border border-[#d8cdb7] px-3 py-3"
-                />
-                <input
-                  name="new_max_quantity"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="Max quantity blank = no max"
+                  placeholder="Suggested quantity"
                   className="rounded-xl border border-[#d8cdb7] px-3 py-3"
                 />
                 <input
@@ -458,8 +449,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   <th className="px-3 py-2">Item</th>
                   <th className="px-3 py-2">Description</th>
                   <th className="px-3 py-2">Price</th>
-                  <th className="px-3 py-2">Default</th>
-                  <th className="px-3 py-2">Max</th>
+                  <th className="px-3 py-2">Suggested</th>
                   <th className="px-3 py-2">Order</th>
                 </tr>
               </thead>
@@ -506,16 +496,6 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         step="1"
                         defaultValue={item.default_quantity}
                         className="w-20 rounded-lg border border-[#d8cdb7] bg-white px-2 py-2"
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <input
-                        name={`max_quantity_${item.id}`}
-                        type="number"
-                        min="0"
-                        step="1"
-                        defaultValue={item.max_quantity ?? ""}
-                        className="w-24 rounded-lg border border-[#d8cdb7] bg-white px-2 py-2"
                       />
                     </td>
                     <td className="rounded-r-2xl px-3 py-3">

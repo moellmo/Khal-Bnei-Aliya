@@ -11,7 +11,6 @@ type KiddushItem = {
   name: string;
   description: string | null;
   price: number;
-  max_quantity: number | null;
   is_active: boolean;
 };
 
@@ -174,7 +173,7 @@ export async function submitKiddushReservation(formData: FormData) {
 
   const { data: itemRows, error: itemsError } = await supabaseAdmin
     .from("kiddush_items")
-    .select("id, name, description, price, max_quantity, is_active")
+    .select("id, name, description, price, is_active")
     .eq("is_active", true)
     .order("display_order", { ascending: true })
     .order("name", { ascending: true });
@@ -189,19 +188,15 @@ export async function submitKiddushReservation(formData: FormData) {
         0,
         Math.floor(getNumber(formData, `item_${item.id}`))
       );
-      const quantity =
-        item.max_quantity === null
-          ? rawQuantity
-          : Math.min(rawQuantity, Number(item.max_quantity));
       const unitPrice = Number(item.price || 0);
 
       return {
         id: item.id,
         name: item.name,
         description: item.description,
-        quantity,
+        quantity: rawQuantity,
         unitPrice,
-        lineTotal: quantity * unitPrice,
+        lineTotal: rawQuantity * unitPrice,
       };
     })
     .filter((item) => item.quantity > 0);
