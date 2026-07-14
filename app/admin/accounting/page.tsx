@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { QuickChargeMemberPicker } from "../QuickChargeMemberPicker";
 import {
   addExpense,
   addZellePayment,
@@ -591,6 +592,18 @@ export default async function AccountingPage({
   const visiblePayments = showAllPayments
     ? paymentsResult.rows
     : paymentsResult.rows.slice(0, 5);
+  const zelleMemberOptions = rows
+    .map(({ member }) => ({
+      id: member.id,
+      first_name: member.first_name,
+      last_name: member.last_name,
+      email: member.email,
+    }))
+    .sort((a, b) =>
+      `${a.last_name || ""} ${a.first_name || ""}`.localeCompare(
+        `${b.last_name || ""} ${b.first_name || ""}`
+      )
+    );
 
   const onlinePaymentTotal = paymentsResult.rows
     .filter((payment) => {
@@ -1995,28 +2008,14 @@ export default async function AccountingPage({
                     <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#9a7a37]">
                       No open charge?
                     </p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      Leave member blank to create a guest/non-member paid
+                      charge for this Zelle row.
+                    </p>
                     <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)_auto]">
-                      <label className="min-w-0 space-y-1">
-                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                          Member
-                        </span>
-                        <select
-                          name="member_id"
-                          disabled={payment.status === "matched"}
-                          className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
-                          defaultValue=""
-                        >
-                          <option value="">
-                            Guest / non-member payer
-                          </option>
-                          {rows.map(({ member }) => (
-                            <option key={member.id} value={member.id}>
-                              {member.last_name}, {member.first_name}
-                              {member.email ? ` - ${member.email}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <div className="min-w-0">
+                        <QuickChargeMemberPicker members={zelleMemberOptions} />
+                      </div>
 
                       <label className="min-w-0 space-y-1">
                         <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
@@ -2053,6 +2052,17 @@ export default async function AccountingPage({
                       </button>
                     </div>
                   </div>
+
+                  <label className="flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-bold text-slate-700 lg:col-span-3">
+                    <input
+                      name="send_receipt"
+                      type="checkbox"
+                      defaultChecked
+                      className="h-4 w-4"
+                      disabled={payment.status === "matched"}
+                    />
+                    Send receipt email if an email is available
+                  </label>
                 </form>
               ))}
 
@@ -2073,6 +2083,10 @@ export default async function AccountingPage({
             className="min-w-0 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
           >
             <h2 className="text-2xl font-bold">Bring In Zelle Payment</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Saving a Zelle row does not email anyone. Choose whether to send
+              a receipt when you match it or create the paid charge.
+            </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <label className="min-w-0 space-y-2">
@@ -2232,6 +2246,16 @@ export default async function AccountingPage({
                 placeholder="Check number, payer name, memo..."
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
               />
+            </label>
+
+            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
+              <input
+                name="send_receipt"
+                type="checkbox"
+                defaultChecked
+                className="h-4 w-4"
+              />
+              Send receipt email if an email is available
             </label>
 
             <button

@@ -417,6 +417,7 @@ export async function addZellePayment(formData: FormData) {
 export async function approveZellePayment(formData: FormData) {
   const zelleId = getString(formData, "zelle_id");
   const chargeId = getString(formData, "charge_id");
+  const sendReceipt = formData.get("send_receipt") === "on";
   const month = getString(formData, "month");
   const year = getString(formData, "year");
 
@@ -546,15 +547,17 @@ export async function approveZellePayment(formData: FormData) {
     );
   }
 
-  try {
-    await createAndSendReceipt({ paymentId: payment.id });
-  } catch (receiptError) {
-    console.error("ZELLE_MATCH_RECEIPT_ERROR", {
-      paymentId: payment.id,
-      zelleId,
-      chargeId,
-      error: receiptError,
-    });
+  if (sendReceipt) {
+    try {
+      await createAndSendReceipt({ paymentId: payment.id });
+    } catch (receiptError) {
+      console.error("ZELLE_MATCH_RECEIPT_ERROR", {
+        paymentId: payment.id,
+        zelleId,
+        chargeId,
+        error: receiptError,
+      });
+    }
   }
 
   revalidatePath("/admin/accounting");
@@ -570,6 +573,7 @@ export async function createPaidChargeFromZelle(formData: FormData) {
   const memberId = getString(formData, "member_id");
   const chargeType = getString(formData, "charge_type") || "Zelle Payment";
   const description = getString(formData, "description") || chargeType;
+  const sendReceipt = formData.get("send_receipt") === "on";
   const month = getString(formData, "month");
   const year = getString(formData, "year");
 
@@ -734,14 +738,16 @@ export async function createPaidChargeFromZelle(formData: FormData) {
     );
   }
 
-  try {
-    await createAndSendReceipt({ paymentId: payment.id });
-  } catch (receiptError) {
-    console.error("ZELLE_CREATE_PAID_CHARGE_RECEIPT_ERROR", {
-      paymentId: payment.id,
-      zelleId,
-      error: receiptError,
-    });
+  if (sendReceipt) {
+    try {
+      await createAndSendReceipt({ paymentId: payment.id });
+    } catch (receiptError) {
+      console.error("ZELLE_CREATE_PAID_CHARGE_RECEIPT_ERROR", {
+        paymentId: payment.id,
+        zelleId,
+        error: receiptError,
+      });
+    }
   }
 
   revalidatePath("/admin/accounting");
@@ -761,6 +767,7 @@ export async function recordManualPayment(formData: FormData) {
     new Date().toISOString().slice(0, 10);
   const payerEmail = getString(formData, "payer_email") || null;
   const paymentNote = getString(formData, "payment_note") || null;
+  const sendReceipt = formData.get("send_receipt") === "on";
   const month = getString(formData, "month");
   const year = getString(formData, "year");
 
@@ -846,14 +853,16 @@ export async function recordManualPayment(formData: FormData) {
     );
   }
 
-  try {
-    await createAndSendReceipt({ paymentId: payment.id });
-  } catch (receiptError) {
-    console.error("ACCOUNTING_MANUAL_PAYMENT_RECEIPT_ERROR", {
-      paymentId: payment.id,
-      chargeId,
-      error: receiptError,
-    });
+  if (sendReceipt) {
+    try {
+      await createAndSendReceipt({ paymentId: payment.id });
+    } catch (receiptError) {
+      console.error("ACCOUNTING_MANUAL_PAYMENT_RECEIPT_ERROR", {
+        paymentId: payment.id,
+        chargeId,
+        error: receiptError,
+      });
+    }
   }
 
   revalidatePath("/admin/accounting");
