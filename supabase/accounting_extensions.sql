@@ -24,6 +24,39 @@ create table if not exists public.zelle_payments (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.accounting_recurring_expenses (
+  id uuid primary key default gen_random_uuid(),
+  vendor text not null,
+  category text,
+  amount numeric(12, 2) not null check (amount > 0),
+  frequency text not null default 'monthly'
+    check (frequency in ('monthly', 'weekly')),
+  day_of_month integer not null default 1 check (day_of_month between 1 and 31),
+  day_of_week integer not null default 0 check (day_of_week between 0 and 6),
+  start_date date not null default current_date,
+  end_date date,
+  active boolean not null default true,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.accounting_expenses
+  add column if not exists recurring_template_id uuid
+  references public.accounting_recurring_expenses(id)
+  on delete set null;
+
+create index if not exists accounting_expenses_recurring_template_id_idx
+  on public.accounting_expenses(recurring_template_id);
+
+alter table public.accounting_recurring_expenses
+  add column if not exists frequency text not null default 'monthly'
+  check (frequency in ('monthly', 'weekly'));
+
+alter table public.accounting_recurring_expenses
+  add column if not exists day_of_week integer not null default 0
+  check (day_of_week between 0 and 6);
+
 insert into storage.buckets (id, name, public)
 values ('payment-receipts', 'payment-receipts', false)
 on conflict (id) do nothing;

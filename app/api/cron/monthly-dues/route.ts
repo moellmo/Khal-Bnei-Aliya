@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { generateAccountingRecurringExpenses } from "@/lib/accounting/recurringExpenses";
 import { generateMonthlyDuesCharges } from "@/lib/billing/monthlyDues";
 
 export const runtime = "nodejs";
@@ -55,6 +56,24 @@ export async function GET(request: NextRequest) {
       sendEmails: true,
     });
 
+    let recurringExpensesResult = {
+      createdCount: 0,
+      skippedCount: 0,
+    };
+    let recurringExpensesError: string | null = null;
+
+    try {
+      recurringExpensesResult = await generateAccountingRecurringExpenses({
+        month: billingMonth,
+        year: billingYear,
+      });
+    } catch (error) {
+      recurringExpensesError =
+        error instanceof Error
+          ? error.message
+          : "Unable to generate recurring expenses.";
+    }
+
     console.log("MONTHLY_DUES_CRON_COMPLETE", {
       billingMonth,
       billingYear,
@@ -62,6 +81,11 @@ export async function GET(request: NextRequest) {
       skippedCount: result.skippedCount,
       emailSentCount: result.emailSentCount,
       emailSkippedCount: result.emailSkippedCount,
+      recurringExpensesCreatedCount:
+        recurringExpensesResult.createdCount,
+      recurringExpensesSkippedCount:
+        recurringExpensesResult.skippedCount,
+      recurringExpensesError,
       errorCount: result.errors.length,
       errors: result.errors,
     });
@@ -71,6 +95,8 @@ export async function GET(request: NextRequest) {
       billingMonth,
       billingYear,
       dueDate,
+      recurringExpenses: recurringExpensesResult,
+      recurringExpensesError,
       ...result,
     });
   } catch (error) {

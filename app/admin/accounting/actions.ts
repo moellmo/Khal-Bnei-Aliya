@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { generateAccountingRecurringExpenses } from "@/lib/accounting/recurringExpenses";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
 
 const ACCOUNTING_RECEIPTS_BUCKET = "accounting-receipts";
@@ -119,6 +120,50 @@ export async function addExpense(formData: FormData) {
   redirect("/admin/accounting?view=receipts&expenseAdded=1");
 }
 
+export async function updateExpense(formData: FormData) {
+  const expenseId = getString(formData, "expense_id");
+  const vendor = getString(formData, "vendor");
+  const category = getString(formData, "category") || "General";
+  const amount = getNumber(formData, "amount");
+  const expenseDate = getString(formData, "expense_date");
+  const note = getString(formData, "note") || null;
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+
+  const redirectUrl = `/admin/accounting?view=expenses&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  if (!expenseId || !vendor || amount <= 0 || !expenseDate) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Expense update requires vendor, date, and amount."
+      )}`
+    );
+  }
+
+  const { error } = await supabaseAdmin
+    .from("accounting_expenses")
+    .update({
+      vendor,
+      category,
+      amount,
+      expense_date: expenseDate,
+      note,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", expenseId);
+
+  if (error) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(error.message)}`
+    );
+  }
+
+  revalidatePath("/admin/accounting");
+  redirect(`${redirectUrl}&expenseAdded=1`);
+}
+
 export async function uploadExpenseReceipt(formData: FormData) {
   const expenseId = getString(formData, "expense_id");
   const receiptEntry = formData.get("receipt_file");
@@ -199,6 +244,104 @@ export async function addPresetExpense(formData: FormData) {
 
   revalidatePath("/admin/accounting");
   redirect("/admin/accounting?expenseAdded=1");
+}
+
+export async function saveRecurringExpenseTemplate(formData: FormData) {
+  const templateId = getString(formData, "template_id");
+  const vendor = getString(formData, "vendor");
+  const category = getString(formData, "category") || "Monthly";
+  const amount = getNumber(formData, "amount");
+  const frequency =
+    getString(formData, "frequency") === "weekly" ? "weekly" : "monthly";
+  const dayOfMonth = Math.min(
+    31,
+    Math.max(1, Math.round(getNumber(formData, "day_of_month") || 1))
+  );
+  const dayOfWeek = Math.min(
+    6,
+    Math.max(0, Math.round(getNumber(formData, "day_of_week") || 0))
+  );
+  const startDate =
+    getString(formData, "start_date") || new Date().toISOString().slice(0, 10);
+  const endDate = getString(formData, "end_date") || null;
+  const note = getString(formData, "note") || null;
+  const active = formData.get("active") === "on";
+
+  if (!vendor || amount <= 0) {
+    redirect(
+      "/admin/accounting?view=expenses&accountingError=Recurring%20expense%20requires%20vendor%20and%20amount."
+    );
+  }
+
+  const payload = {
+    vendor,
+    category,
+    amount,
+    frequency,
+    day_of_month: dayOfMonth,
+    day_of_week: dayOfWeek,
+    start_date: startDate,
+    end_date: endDate,
+    note,
+    active,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = templateId
+    ? await supabaseAdmin
+        .from("accounting_recurring_expenses")
+        .update(payload)
+        .eq("id", templateId)
+    : await supabaseAdmin
+        .from("accounting_recurring_expenses")
+        .insert(payload);
+
+  if (error) {
+    redirect(
+      `/admin/accounting?view=expenses&accountingError=${encodeURIComponent(
+        error.message
+      )}`
+    );
+  }
+
+  revalidatePath("/admin/accounting");
+  redirect("/admin/accounting?view=expenses&recurringSaved=1");
+}
+
+export async function generateRecurringExpenses(formData: FormData) {
+  const month = getNumber(formData, "month");
+  const year = getNumber(formData, "year");
+
+  if (month < 1 || month > 12 || year < 2026) {
+    redirect(
+      "/admin/accounting?view=expenses&accountingError=Choose%20a%20valid%20month%20and%20year."
+    );
+  }
+
+  let result: {
+    createdCount: number;
+    skippedCount: number;
+  };
+
+  try {
+    result = await generateAccountingRecurringExpenses({
+      month,
+      year,
+    });
+  } catch (error) {
+    redirect(
+      `/admin/accounting?view=expenses&month=${month}&year=${year}&accountingError=${encodeURIComponent(
+        error instanceof Error
+          ? error.message
+          : "Unable to generate recurring expenses."
+      )}`
+    );
+  }
+
+  revalidatePath("/admin/accounting");
+  redirect(
+    `/admin/accounting?view=expenses&month=${month}&year=${year}&recurringGenerated=1&created=${result.createdCount}&skipped=${result.skippedCount}`
+  );
 }
 
 export async function addZellePayment(formData: FormData) {

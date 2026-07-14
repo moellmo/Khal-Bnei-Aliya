@@ -2,11 +2,13 @@ import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   addExpense,
-  addPresetExpense,
   addZellePayment,
   approveZellePayment,
+  generateRecurringExpenses,
   importAccountingCsv,
   recordManualPayment,
+  saveRecurringExpenseTemplate,
+  updateExpense,
   uploadExpenseReceipt,
 } from "./actions";
 
@@ -56,6 +58,10 @@ type PageProps = {
     expenseAdded?: string;
     zelleAdded?: string;
     paymentAdded?: string;
+    recurringGenerated?: string;
+    recurringSaved?: string;
+    created?: string;
+    skipped?: string;
   }>;
 };
 
@@ -65,7 +71,23 @@ type Expense = {
   category: string | null;
   amount: number;
   expense_date: string | null;
+  note: string | null;
   receipt_url: string | null;
+  recurring_template_id: string | null;
+};
+
+type RecurringExpenseTemplate = {
+  id: string;
+  vendor: string;
+  category: string | null;
+  amount: number;
+  frequency: string | null;
+  day_of_month: number | null;
+  day_of_week: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  active: boolean | null;
+  note: string | null;
 };
 
 type ZellePayment = {
@@ -109,14 +131,6 @@ type OpenChargeOption = {
       }[]
     | null;
 };
-
-const monthlyExpensePresets = [
-  { vendor: "Rent", category: "Rent", amount: 0 },
-  { vendor: "Rabbi", category: "Payroll", amount: 0 },
-  { vendor: "Utilities", category: "Utilities", amount: 0 },
-  { vendor: "Cleaning", category: "Maintenance", amount: 0 },
-  { vendor: "Kiddush", category: "Kiddush", amount: 0 },
-];
 
 function formatMoney(amount: number | null | undefined) {
   return new Intl.NumberFormat("en-US", {
@@ -280,7 +294,9 @@ async function getExpenses(
   const range = dateRange(month, year);
   const { data, error } = await supabaseAdmin
     .from("accounting_expenses")
-    .select("id, vendor, category, amount, expense_date, receipt_url")
+    .select(
+      "id, vendor, category, amount, expense_date, note, receipt_url, recurring_template_id"
+    )
     .gte("expense_date", range.start)
     .lt("expense_date", range.end)
     .order("expense_date", { ascending: false })
@@ -295,6 +311,31 @@ async function getExpenses(
 
   return {
     rows: (data || []) as Expense[],
+    error: null,
+  };
+}
+
+async function getRecurringExpenseTemplates(): Promise<{
+  rows: RecurringExpenseTemplate[];
+  error: string | null;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from("accounting_recurring_expenses")
+    .select(
+      "id, vendor, category, amount, frequency, day_of_month, day_of_week, start_date, end_date, active, note"
+    )
+    .order("active", { ascending: false })
+    .order("vendor", { ascending: true });
+
+  if (error) {
+    return {
+      rows: [],
+      error: error.message,
+    };
+  }
+
+  return {
+    rows: (data || []) as RecurringExpenseTemplate[],
     error: null,
   };
 }
@@ -401,10 +442,15 @@ export default async function AccountingPage({
 
   const selectedStatus = query?.status || "all";
   const activeView = query?.view || "monthly";
+  const selectedMonthStart = `${selectedYear}-${String(selectedMonth).padStart(
+    2,
+    "0"
+  )}-01`;
 
   const [
     rows,
     expensesResult,
+    recurringTemplatesResult,
     zelleResult,
     paymentsResult,
     yearlyExpenses,
@@ -415,6 +461,7 @@ export default async function AccountingPage({
   ] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
     getExpenses(selectedMonth, selectedYear),
+    getRecurringExpenseTemplates(),
     getZellePayments(selectedMonth, selectedYear),
     getPayments(selectedMonth, selectedYear),
     getExpenses(null, selectedYear),
@@ -701,17 +748,27 @@ export default async function AccountingPage({
 
         {(query?.expenseAdded === "1" ||
           query?.zelleAdded === "1" ||
-          query?.paymentAdded === "1") && (
+          query?.paymentAdded === "1" ||
+          query?.recurringSaved === "1") && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Accounting entry saved.
           </div>
         )}
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        {query?.recurringGenerated === "1" && (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Generated {query.created || "0"} recurring expenses. Skipped{" "}
+            {query.skipped || "0"} already-created expenses.
+          </div>
+        )}
+
+        <div className="mt-8 flex gap-3 overflow-x-auto pb-2">
           {[
-            ["monthly", "Monthly"],
+            ["monthly", "Overview"],
+            ["billing", "Billing"],
+            ["expenses", "Expenses"],
+            ["payments", "Payments"],
             ["yearly", "Yearly"],
-            ["cashflow", "Cash Flow"],
             ["uploads", "Uploads"],
             ["receipts", "Receipts"],
           ].map(([view, label]) => (
@@ -720,8 +777,8 @@ export default async function AccountingPage({
               href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=${view}`}
               className={
                 activeView === view
-                  ? "rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
-                  : "rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
+                  ? "shrink-0 rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white shadow-sm"
+                  : "shrink-0 rounded-full bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-[#fbf8f2]"
               }
             >
               {label}
@@ -730,6 +787,9 @@ export default async function AccountingPage({
         </div>
 
         {(activeView === "monthly" ||
+          activeView === "billing" ||
+          activeView === "expenses" ||
+          activeView === "payments" ||
           activeView === "yearly" ||
           activeView === "cashflow") && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
@@ -996,80 +1056,6 @@ export default async function AccountingPage({
           </div>
         )}
 
-        {activeView === "monthly" && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
-            <h2 className="text-2xl font-bold">Monthly Expense Quick List</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Enter this month&apos;s amount and add common expenses without
-              retyping the vendor and category.
-            </p>
-
-            <div className="mt-5 space-y-3">
-              {monthlyExpensePresets.map((preset) => (
-                <form
-                  key={`${preset.vendor}-${preset.category}`}
-                  action={addPresetExpense}
-                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-[1fr_150px_150px_auto]"
-                >
-                  <div>
-                    <p className="font-bold">{preset.vendor}</p>
-                    <p className="text-sm text-slate-500">
-                      {preset.category}
-                    </p>
-                  </div>
-
-                  <input
-                    type="hidden"
-                    name="vendor"
-                    value={preset.vendor}
-                  />
-                  <input
-                    type="hidden"
-                    name="category"
-                    value={preset.category}
-                  />
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Amount
-                    </span>
-                    <input
-                      name="amount"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      required
-                      placeholder="0.00"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
-                    />
-                  </label>
-
-                  <label className="space-y-1">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                      Date
-                    </span>
-                    <input
-                      name="expense_date"
-                      type="date"
-                      defaultValue={new Date().toISOString().slice(0, 10)}
-                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
-                    />
-                  </label>
-
-                  <button
-                    type="submit"
-                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
-                  >
-                    Add
-                  </button>
-                </form>
-              ))}
-            </div>
-          </div>
-        </div>
-        )}
-
         {activeView === "uploads" && (
           <form
             action={importAccountingCsv}
@@ -1213,8 +1199,324 @@ export default async function AccountingPage({
           </div>
         )}
 
-        {activeView === "monthly" && (
-        <div className="mt-8 grid gap-6 xl:grid-cols-3">
+        {activeView === "expenses" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">Saved Recurring Expenses</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Save rent, rabbi, utilities, and other repeating expenses
+                  once. Weekly items create one row for each matching weekday;
+                  edit the actual generated expense when the amount changes.
+                </p>
+              </div>
+
+              <form action={generateRecurringExpenses}>
+                <input type="hidden" name="month" value={selectedMonth} />
+                <input type="hidden" name="year" value={selectedYear} />
+                <button
+                  type="submit"
+                  className="rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white"
+                >
+                  Generate for {getMonthName(selectedMonth)}
+                </button>
+              </form>
+            </div>
+
+            {recurringTemplatesResult.error ? (
+              <div className="mt-5 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-900">
+                Recurring expense setup needs the latest Supabase SQL applied:{" "}
+                {recurringTemplatesResult.error}
+              </div>
+            ) : null}
+
+            <form
+              action={saveRecurringExpenseTemplate}
+              className="mt-5 grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[1fr_1fr_130px_140px_140px_150px_auto]"
+            >
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Vendor
+                </span>
+                <input
+                  name="vendor"
+                  required
+                  placeholder="Rent"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Category
+                </span>
+                <input
+                  name="category"
+                  placeholder="Rent, Payroll..."
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Amount
+                </span>
+                <input
+                  name="amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Repeats
+                </span>
+                <select
+                  name="frequency"
+                  defaultValue="monthly"
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                >
+                  <option value="monthly">Monthly</option>
+                  <option value="weekly">Weekly</option>
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Month Day
+                </span>
+                <input
+                  name="day_of_month"
+                  type="number"
+                  min="1"
+                  max="31"
+                  defaultValue={1}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Week Day
+                </span>
+                <select
+                  name="day_of_week"
+                  defaultValue="6"
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                >
+                  <option value="0">Sunday</option>
+                  <option value="1">Monday</option>
+                  <option value="2">Tuesday</option>
+                  <option value="3">Wednesday</option>
+                  <option value="4">Thursday</option>
+                  <option value="5">Friday</option>
+                  <option value="6">Shabbos</option>
+                </select>
+              </label>
+
+              <label className="space-y-1">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Starts
+                </span>
+                <input
+                  name="start_date"
+                  type="date"
+                  defaultValue={selectedMonthStart}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <label className="flex items-center gap-2 self-end rounded-xl bg-white px-3 py-2 text-sm font-bold">
+                <input name="active" type="checkbox" defaultChecked />
+                Active
+              </label>
+
+              <label className="space-y-1 lg:col-span-6">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Note
+                </span>
+                <input
+                  name="note"
+                  placeholder="Optional internal note"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                />
+              </label>
+
+              <button
+                type="submit"
+                className="self-end rounded-full bg-[#8b6b2e] px-5 py-2.5 text-sm font-bold text-white"
+              >
+                Save Default
+              </button>
+            </form>
+
+            <div className="mt-5 space-y-3">
+              {recurringTemplatesResult.rows.map((template) => (
+                <form
+                  key={template.id}
+                  action={saveRecurringExpenseTemplate}
+                  className="grid gap-3 rounded-2xl border border-[#e3d9c7] bg-white p-4 lg:grid-cols-[1fr_1fr_120px_130px_110px_130px_150px_150px_auto]"
+                >
+                  <input
+                    type="hidden"
+                    name="template_id"
+                    value={template.id}
+                  />
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Vendor
+                    </span>
+                    <input
+                      name="vendor"
+                      required
+                      defaultValue={template.vendor}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Category
+                    </span>
+                    <input
+                      name="category"
+                      defaultValue={template.category || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Amount
+                    </span>
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      defaultValue={Number(template.amount || 0)}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Repeats
+                    </span>
+                    <select
+                      name="frequency"
+                      defaultValue={template.frequency || "monthly"}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="weekly">Weekly</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Month Day
+                    </span>
+                    <input
+                      name="day_of_month"
+                      type="number"
+                      min="1"
+                      max="31"
+                      defaultValue={template.day_of_month || 1}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Week Day
+                    </span>
+                    <select
+                      name="day_of_week"
+                      defaultValue={template.day_of_week ?? 6}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    >
+                      <option value="0">Sunday</option>
+                      <option value="1">Monday</option>
+                      <option value="2">Tuesday</option>
+                      <option value="3">Wednesday</option>
+                      <option value="4">Thursday</option>
+                      <option value="5">Friday</option>
+                      <option value="6">Shabbos</option>
+                    </select>
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Starts
+                    </span>
+                    <input
+                      name="start_date"
+                      type="date"
+                      defaultValue={template.start_date || selectedMonthStart}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Ends
+                    </span>
+                    <input
+                      name="end_date"
+                      type="date"
+                      defaultValue={template.end_date || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="flex items-center gap-2 self-end rounded-xl bg-[#fbf8f2] px-3 py-2 text-sm font-bold">
+                    <input
+                      name="active"
+                      type="checkbox"
+                      defaultChecked={Boolean(template.active)}
+                    />
+                    Active
+                  </label>
+
+                  <label className="space-y-1 lg:col-span-8">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Note
+                    </span>
+                    <input
+                      name="note"
+                      defaultValue={template.note || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                  >
+                    Update
+                  </button>
+                </form>
+              ))}
+
+              {!recurringTemplatesResult.error &&
+                recurringTemplatesResult.rows.length === 0 && (
+                  <div className="rounded-2xl bg-[#fbf8f2] p-6 text-center text-slate-500">
+                    No saved recurring expenses yet.
+                  </div>
+                )}
+            </div>
+          </div>
+        )}
+
+        {activeView === "expenses" && (
+        <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)]">
           <form
             action={addExpense}
             className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -1299,6 +1601,125 @@ export default async function AccountingPage({
               Save Expense
             </button>
           </form>
+
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  {getMonthName(selectedMonth)} Expenses
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Edit generated weekly or monthly rows after the actual amount
+                  is known.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                {formatMoney(expenseTotal)}
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {expensesResult.rows.map((expense) => (
+                <form
+                  key={expense.id}
+                  action={updateExpense}
+                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(160px,1fr)_140px_130px_150px_auto]"
+                >
+                  <input type="hidden" name="expense_id" value={expense.id} />
+                  <input type="hidden" name="month" value={selectedMonth} />
+                  <input type="hidden" name="year" value={selectedYear} />
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Vendor
+                    </span>
+                    <input
+                      name="vendor"
+                      required
+                      defaultValue={expense.vendor}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Category
+                    </span>
+                    <input
+                      name="category"
+                      defaultValue={expense.category || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Amount
+                    </span>
+                    <input
+                      name="amount"
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      required
+                      defaultValue={Number(expense.amount || 0)}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Date
+                    </span>
+                    <input
+                      name="expense_date"
+                      type="date"
+                      required
+                      defaultValue={
+                        expense.expense_date ||
+                        new Date().toISOString().slice(0, 10)
+                      }
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <button
+                    type="submit"
+                    className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                  >
+                    Update
+                  </button>
+
+                  <label className="space-y-1 lg:col-span-4">
+                    <span className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Note
+                      {expense.recurring_template_id ? (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] tracking-normal text-green-800">
+                          Recurring
+                        </span>
+                      ) : null}
+                    </span>
+                    <input
+                      name="note"
+                      defaultValue={expense.note || ""}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+                </form>
+              ))}
+
+              {expensesResult.rows.length === 0 && (
+                <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                  No expenses recorded for this month yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        )}
+
+        {activeView === "payments" && (
+        <div className="mt-8 grid gap-6 xl:grid-cols-2">
 
           <form
             action={addZellePayment}
@@ -1476,7 +1897,7 @@ export default async function AccountingPage({
         </div>
         )}
 
-        {activeView === "monthly" && (
+        {activeView === "payments" && (
           <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -1576,7 +1997,7 @@ export default async function AccountingPage({
           </div>
         )}
 
-        {activeView === "monthly" && (
+        {activeView === "billing" && (
         <form
           method="GET"
           className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -1644,7 +2065,7 @@ export default async function AccountingPage({
         </form>
         )}
 
-        {activeView === "monthly" && (
+        {activeView === "billing" && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
