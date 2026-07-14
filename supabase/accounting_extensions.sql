@@ -41,6 +41,17 @@ create table if not exists public.accounting_recurring_expenses (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.accounting_bank_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  balance numeric(12, 2) not null,
+  snapshot_date date not null,
+  note text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists accounting_bank_snapshots_snapshot_date_idx
+  on public.accounting_bank_snapshots(snapshot_date desc);
+
 alter table public.accounting_expenses
   add column if not exists recurring_template_id uuid
   references public.accounting_recurring_expenses(id)

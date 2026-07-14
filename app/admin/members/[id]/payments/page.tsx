@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Fragment } from "react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { deleteManualPayment, updateManualPayment } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +48,11 @@ type PaymentRow = Payment & {
 type PageProps = {
   params: Promise<{
     id: string;
+  }>;
+  searchParams?: Promise<{
+    paymentError?: string;
+    paymentUpdated?: string;
+    paymentDeleted?: string;
   }>;
 };
 
@@ -185,8 +192,21 @@ function displayMethod(payment: Payment) {
   return payment.payment_method || payment.payment_provider || "—";
 }
 
-export default async function MemberPaymentsPage({ params }: PageProps) {
+function isEditableManualPayment(payment: Payment) {
+  return payment.payment_provider !== "sola";
+}
+
+function dateInputValue(value: string | null | undefined) {
+  if (!value) return new Date().toISOString().slice(0, 10);
+  return value.slice(0, 10);
+}
+
+export default async function MemberPaymentsPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { id } = await params;
+  const query = await searchParams;
 
   const member = await getMember(id);
 
@@ -269,6 +289,19 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
           </div>
         </div>
 
+        {query?.paymentError ? (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
+            {query.paymentError}
+          </div>
+        ) : null}
+
+        {(query?.paymentUpdated === "1" ||
+          query?.paymentDeleted === "1") ? (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Payment record updated.
+          </div>
+        ) : null}
+
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -288,7 +321,7 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
           </div>
 
           <div className="mt-6 overflow-x-auto">
-            <table className="w-full min-w-[1100px] border-separate border-spacing-y-3 text-left text-sm">
+            <table className="w-full min-w-[1200px] border-separate border-spacing-y-3 text-left text-sm">
               <thead>
                 <tr className="text-xs uppercase tracking-[0.16em] text-slate-500">
                   <th className="px-4">Paid Date</th>
@@ -299,74 +332,228 @@ export default async function MemberPaymentsPage({ params }: PageProps) {
                   <th className="px-4">Reference</th>
                   <th className="px-4">Receipt</th>
                   <th className="px-4">Note</th>
+                  <th className="px-4">Edit</th>
                 </tr>
               </thead>
 
               <tbody>
-                {payments.map((payment) => (
-                  <tr key={payment.id} className="bg-[#fbf8f2]">
-                    <td className="rounded-l-2xl px-4 py-4 font-semibold">
-                      {formatDate(payment.paid_at || payment.created_at)}
-                    </td>
+                {payments.map((payment) => {
+                  const editable = isEditableManualPayment(payment);
+                  return (
+                    <Fragment key={payment.id}>
+                      <tr className="bg-[#fbf8f2]">
+                        <td className="rounded-l-2xl px-4 py-4 font-semibold">
+                          {formatDate(payment.paid_at || payment.created_at)}
+                        </td>
 
-                    <td className="px-4 py-4 font-bold">
-                      {payment.charge?.charge_type ||
-                        (payment.sola_recurring_id
-                          ? "Membership Dues"
-                          : "Payment")}
-                    </td>
+                        <td className="px-4 py-4 font-bold">
+                          {payment.charge?.charge_type ||
+                            (payment.sola_recurring_id
+                              ? "Membership Dues"
+                              : "Payment")}
+                        </td>
 
-                    <td className="px-4 py-4 text-slate-600">
-                      {payment.charge?.description || "—"}
-                    </td>
+                        <td className="px-4 py-4 text-slate-600">
+                          {payment.charge?.description || "—"}
+                        </td>
 
-                    <td className="px-4 py-4 text-right font-black">
-                      {formatMoney(payment.amount)}
-                    </td>
+                        <td className="px-4 py-4 text-right font-black">
+                          {formatMoney(payment.amount)}
+                        </td>
 
-                    <td className="px-4 py-4">
-                      <span
-                        className={
-                          payment.payment_provider === "sola"
-                            ? "rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800"
-                            : "rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
-                        }
-                      >
-                        {displayMethod(payment)}
-                      </span>
-                    </td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={
+                              payment.payment_provider === "sola"
+                                ? "rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800"
+                                : "rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700"
+                            }
+                          >
+                            {displayMethod(payment)}
+                          </span>
+                        </td>
 
-                    <td className="px-4 py-4 font-mono text-xs text-slate-600">
-                      {payment.external_payment_id || "—"}
-                    </td>
+                        <td className="px-4 py-4 font-mono text-xs text-slate-600">
+                          {payment.external_payment_id || "—"}
+                        </td>
 
-                    <td className="px-4 py-4">
-                     {payment.receipt_pdf_url ? (
-  <a
-    href={`/api/receipts/${payment.id}`}
-    target="_blank"
-    rel="noreferrer"
-    className="font-bold text-[#8b6b2e] underline"
-  >
-    View PDF
-  </a>
-) : (
-                        <span className="text-slate-400">
-                          {payment.receipt_number || "Pending"}
-                        </span>
-                      )}
-                    </td>
+                        <td className="px-4 py-4">
+                          {payment.receipt_pdf_url ? (
+                            <a
+                              href={`/api/receipts/${payment.id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-bold text-[#8b6b2e] underline"
+                            >
+                              View PDF
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">
+                              {payment.receipt_number || "Pending"}
+                            </span>
+                          )}
+                        </td>
 
-                    <td className="rounded-r-2xl px-4 py-4 text-slate-600">
-                      {payment.note || "—"}
-                    </td>
-                  </tr>
-                ))}
+                        <td className="px-4 py-4 text-slate-600">
+                          {payment.note || "—"}
+                        </td>
+
+                        <td className="rounded-r-2xl px-4 py-4">
+                          {editable ? (
+                            <span className="text-xs font-bold text-[#8b6b2e]">
+                              Editable below
+                            </span>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-400">
+                              Sola read-only
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+
+                      {editable ? (
+                        <tr>
+                          <td colSpan={9} className="rounded-2xl bg-white p-4">
+                            <div className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-4">
+                              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#8b6b2e]">
+                                Edit manual payment
+                              </p>
+                              <form
+                                action={updateManualPayment}
+                                className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_120px_130px_150px_minmax(0,1fr)_auto]"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="member_id"
+                                  value={member.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="payment_id"
+                                  value={payment.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="payer_email"
+                                  value={payment.payer_email || ""}
+                                />
+
+                                <label className="space-y-1">
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Charge
+                                  </span>
+                                  <select
+                                    name="charge_id"
+                                    defaultValue={payment.charge_id || ""}
+                                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                                  >
+                                    <option value="">No charge</option>
+                                    {payment.charge_id && payment.charge ? (
+                                      <option value={payment.charge_id}>
+                                        Current: {payment.charge.charge_type} -{" "}
+                                        {formatMoney(payment.charge.amount)}
+                                      </option>
+                                    ) : null}
+                                    {openCharges.map((charge) => (
+                                      <option key={charge.id} value={charge.id}>
+                                        {charge.charge_type} -{" "}
+                                        {charge.description || "Open charge"} -{" "}
+                                        {formatMoney(charge.amount)}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+
+                                <label className="space-y-1">
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Amount
+                                  </span>
+                                  <input
+                                    name="amount"
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    defaultValue={Number(payment.amount || 0)}
+                                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                                  />
+                                </label>
+
+                                <label className="space-y-1">
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Paid date
+                                  </span>
+                                  <input
+                                    name="paid_date"
+                                    type="date"
+                                    defaultValue={dateInputValue(
+                                      payment.paid_at || payment.created_at
+                                    )}
+                                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                                  />
+                                </label>
+
+                                <label className="space-y-1">
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Method
+                                  </span>
+                                  <select
+                                    name="payment_method"
+                                    defaultValue={payment.payment_method || "Zelle"}
+                                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                                  >
+                                    <option>Zelle</option>
+                                    <option>Check</option>
+                                    <option>Cash</option>
+                                    <option>Other</option>
+                                  </select>
+                                </label>
+
+                                <label className="space-y-1">
+                                  <span className="text-xs font-bold text-slate-500">
+                                    Note
+                                  </span>
+                                  <input
+                                    name="note"
+                                    defaultValue={payment.note || ""}
+                                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                                  />
+                                </label>
+
+                                <button className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white">
+                                  Save
+                                </button>
+                              </form>
+
+                              <form
+                                action={deleteManualPayment}
+                                className="mt-3 text-right"
+                              >
+                                <input
+                                  type="hidden"
+                                  name="member_id"
+                                  value={member.id}
+                                />
+                                <input
+                                  type="hidden"
+                                  name="payment_id"
+                                  value={payment.id}
+                                />
+                                <button className="rounded-full border border-red-200 bg-white px-4 py-2 text-xs font-bold text-red-700 hover:bg-red-50">
+                                  Delete payment and reopen charge
+                                </button>
+                              </form>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
 
                 {payments.length === 0 && (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="rounded-2xl bg-[#fbf8f2] px-4 py-10 text-center text-slate-500"
                     >
                       No payments recorded yet.

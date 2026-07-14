@@ -10,6 +10,7 @@ import {
   generateRecurringExpenses,
   importAccountingCsv,
   recordManualPayment,
+  saveBankSnapshot,
   saveRecurringExpenseTemplate,
   updateExpense,
   uploadExpenseReceipt,
@@ -66,6 +67,8 @@ type PageProps = {
     created?: string;
     skipped?: string;
     payments?: string;
+    bankError?: string;
+    bankSaved?: string;
   }>;
 };
 
@@ -92,6 +95,14 @@ type RecurringExpenseTemplate = {
   end_date: string | null;
   active: boolean | null;
   note: string | null;
+};
+
+type BankSnapshot = {
+  id: string;
+  balance: number;
+  snapshot_date: string;
+  note: string | null;
+  created_at: string | null;
 };
 
 type ZellePayment = {
@@ -453,6 +464,63 @@ async function getPayments(
   };
 }
 
+async function getLatestBankSnapshot(): Promise<{
+  row: BankSnapshot | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabaseAdmin
+    .from("accounting_bank_snapshots")
+    .select("id, balance, snapshot_date, note, created_at")
+    .order("snapshot_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      row: null,
+      error: error.message,
+    };
+  }
+
+  return {
+    row: (data as BankSnapshot | null) || null,
+    error: null,
+  };
+}
+
+async function getCashActivitySince(startDate: string | null | undefined) {
+  if (!startDate) {
+    return {
+      payments: 0,
+      expenses: 0,
+    };
+  }
+
+  const [paymentsResult, expensesResult] = await Promise.all([
+    supabaseAdmin
+      .from("payments")
+      .select("amount")
+      .eq("status", "paid")
+      .gte("paid_at", `${startDate}T00:00:00.000Z`),
+    supabaseAdmin
+      .from("accounting_expenses")
+      .select("amount")
+      .gte("expense_date", startDate),
+  ]);
+
+  return {
+    payments: (paymentsResult.data || []).reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    ),
+    expenses: (expensesResult.data || []).reduce(
+      (sum, expense) => sum + Number(expense.amount || 0),
+      0
+    ),
+  };
+}
+
 async function getOpenChargeOptions(): Promise<OpenChargeOption[]> {
   const { data, error } = await supabaseAdmin
     .from("member_charges")
@@ -510,6 +578,7 @@ export default async function AccountingPage({
     yearlyPayments,
     yearlyDuesCharges,
     openChargeOptions,
+    bankSnapshotResult,
   ] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
     getExpenses(selectedMonth, selectedYear),
@@ -521,7 +590,11 @@ export default async function AccountingPage({
     getPayments(null, selectedYear),
     getYearlyDuesCharges(selectedYear),
     getOpenChargeOptions(),
+    getLatestBankSnapshot(),
   ]);
+  const bankActivitySinceSnapshot = await getCashActivitySince(
+    bankSnapshotResult.row?.snapshot_date
+  );
 
   const billedRows = rows.filter((row) => Boolean(row.charge));
 
@@ -643,6 +716,11 @@ export default async function AccountingPage({
   const cashInTotal = paymentTotal + pendingZelleTotal;
   const cashOutTotal = expenseTotal;
   const netCashTotal = cashInTotal - cashOutTotal;
+  const projectedBankBalance = bankSnapshotResult.row
+    ? Number(bankSnapshotResult.row.balance || 0) +
+      bankActivitySinceSnapshot.payments -
+      bankActivitySinceSnapshot.expenses
+    : null;
 
   const yearlyExpenseTotal = yearlyExpenses.rows.reduce(
     (sum, expense) => sum + Number(expense.amount || 0),
@@ -824,12 +902,26 @@ export default async function AccountingPage({
           </div>
         )}
 
+        {query?.bankError && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 font-semibold text-red-800">
+            {query.bankError}
+          </div>
+        )}
+
         {(query?.expenseAdded === "1" ||
           query?.zelleAdded === "1" ||
           query?.paymentAdded === "1" ||
-          query?.recurringSaved === "1") && (
+          query?.recurringSaved === "1" ||
+          query?.bankSaved === "1") && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Accounting entry saved.
+            {query?.zelleAdded === "1" && query.created ? (
+              <span>
+                {" "}
+                Auto-matched {query.created} Zelle payments. Left{" "}
+                {query.skipped || "0"} for review.
+              </span>
+            ) : null}
           </div>
         )}
 
@@ -928,13 +1020,17 @@ export default async function AccountingPage({
 
             {(expensesResult.error ||
               zelleResult.error ||
-              paymentsResult.error) && (
+              paymentsResult.error ||
+              bankSnapshotResult.error) && (
               <p className="max-w-xl rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">
                 Supabase setup needed for full accounting:
                 {expensesResult.error ? " accounting_expenses" : ""}
                 {expensesResult.error && zelleResult.error ? " and" : ""}
                 {zelleResult.error ? " zelle_payments" : ""}.
                 {paymentsResult.error ? " payments" : ""}
+                {bankSnapshotResult.error
+                  ? " accounting_bank_snapshots"
+                  : ""}
               </p>
             )}
           </div>
@@ -1032,7 +1128,7 @@ export default async function AccountingPage({
             </form>
           )}
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_0.8fr_0.8fr]">
             <div className="rounded-2xl bg-[#fbf8f2] p-5">
               <h3 className="font-bold">Payment Method Breakdown</h3>
               <div className="mt-4 space-y-3">
@@ -1063,6 +1159,71 @@ export default async function AccountingPage({
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="rounded-2xl bg-[#fbf8f2] p-5">
+              <h3 className="font-bold">Bank Balance</h3>
+              {bankSnapshotResult.row ? (
+                <>
+                  <p className="mt-3 text-3xl font-black text-[#1d2940]">
+                    {formatMoney(projectedBankBalance)}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    Based on {formatMoney(bankSnapshotResult.row.balance)} on{" "}
+                    {formatDate(bankSnapshotResult.row.snapshot_date)}, plus{" "}
+                    {formatMoney(bankActivitySinceSnapshot.payments)} in and
+                    minus {formatMoney(bankActivitySinceSnapshot.expenses)} out
+                    since then.
+                  </p>
+                </>
+              ) : (
+                <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold text-slate-500">
+                  Enter the current bank balance once to start tracking the
+                  running estimate.
+                </p>
+              )}
+
+              <form action={saveBankSnapshot} className="mt-4 space-y-3">
+                <input type="hidden" name="month" value={selectedMonth} />
+                <input type="hidden" name="year" value={selectedYear} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Real Bank Balance
+                    </span>
+                    <input
+                      name="balance"
+                      type="number"
+                      step="0.01"
+                      required
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                    />
+                  </label>
+
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      As Of
+                    </span>
+                    <input
+                      name="snapshot_date"
+                      type="date"
+                      required
+                      defaultValue={new Date().toISOString().slice(0, 10)}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                    />
+                  </label>
+                </div>
+
+                <input
+                  name="note"
+                  placeholder="Optional note"
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                />
+
+                <button className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white">
+                  Save Bank Balance
+                </button>
+              </form>
             </div>
 
             <div className="rounded-2xl bg-[#1d2940] p-5 text-white">
@@ -1241,7 +1402,9 @@ export default async function AccountingPage({
           >
             <h2 className="text-2xl font-bold">Upload CSV</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Import expenses or Zelle payments from a bank export.
+              Import expenses or Zelle payments from a bank export. Zelle rows
+              auto-match open charges or create a paid charge when possible;
+              only unresolved rows stay in Zelle Matching.
             </p>
 
             <label className="mt-5 block space-y-2">
@@ -1276,6 +1439,15 @@ export default async function AccountingPage({
               vendor, category, amount, frequency, day_of_month, day_of_week,
               start_date.
             </p>
+
+            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
+              <input
+                name="send_receipt"
+                type="checkbox"
+                className="h-4 w-4"
+              />
+              Send receipt emails for imported Zelle payments
+            </label>
 
             <div className="mt-4 flex flex-wrap gap-2">
               <a
@@ -2100,8 +2272,8 @@ export default async function AccountingPage({
           >
             <h2 className="text-2xl font-bold">Bring In Zelle Payment</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Saving a Zelle row does not email anyone. Choose whether to send
-              a receipt when you match it or create the paid charge.
+              This will auto-match an open charge or create a paid charge. If
+              it cannot resolve safely, it will stay in Zelle Matching.
             </p>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -2163,6 +2335,15 @@ export default async function AccountingPage({
                 rows={3}
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
               />
+            </label>
+
+            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
+              <input
+                name="send_receipt"
+                type="checkbox"
+                className="h-4 w-4"
+              />
+              Send receipt email if an email is available
             </label>
 
             <button
