@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   addKiddushItem,
   markKiddushPaid,
+  updateKiddushFinalTotal,
   updateKiddushItems,
   updateKiddushSettings,
 } from "./actions";
@@ -17,6 +18,7 @@ type PageProps = {
     itemsSaved?: string;
     itemAdded?: string;
     reservationUpdated?: string;
+    balanceBilled?: string;
   }>;
 };
 
@@ -24,6 +26,9 @@ type Settings = {
   enabled: boolean;
   notification_email: string;
   zelle_email: string;
+  weeks_to_show: number;
+  base_fee_amount: number;
+  minimum_total_amount: number;
   headline: string | null;
   message: string | null;
 };
@@ -48,11 +53,20 @@ type Reservation = {
   sponsorship_text: string;
   items: unknown;
   special_requests: string | null;
+  item_subtotal_amount: number;
+  base_fee_amount: number;
+  minimum_adjustment_amount: number;
   total_amount: number;
+  final_total_amount: number | null;
+  special_request_amount: number | null;
+  additional_amount: number;
   payment_method: string | null;
   payment_status: string;
   payment_reference: string | null;
+  charge_id: string | null;
+  additional_charge_id: string | null;
   created_at: string;
+  amount_paid: number;
 };
 
 function formatMoney(amount: number | null | undefined) {
@@ -94,7 +108,9 @@ async function getPageData(showAll: boolean) {
   const [settingsResult, itemsResult, reservationsResult] = await Promise.all([
     supabaseAdmin
       .from("kiddush_settings")
-      .select("enabled, notification_email, zelle_email, headline, message")
+      .select(
+        "enabled, notification_email, zelle_email, weeks_to_show, base_fee_amount, minimum_total_amount, headline, message"
+      )
       .eq("id", "default")
       .maybeSingle(),
     supabaseAdmin
@@ -107,19 +123,65 @@ async function getPageData(showAll: boolean) {
     supabaseAdmin
       .from("kiddush_reservations")
       .select(
-        "id, shabbos_date, sponsor_name, sponsor_email, sponsor_phone, sponsorship_text, items, special_requests, total_amount, payment_method, payment_status, payment_reference, created_at"
+        "id, shabbos_date, sponsor_name, sponsor_email, sponsor_phone, sponsorship_text, items, special_requests, item_subtotal_amount, base_fee_amount, minimum_adjustment_amount, total_amount, final_total_amount, special_request_amount, additional_amount, payment_method, payment_status, payment_reference, charge_id, additional_charge_id, created_at"
       )
       .gte("shabbos_date", showAll ? "1900-01-01" : today)
       .order("shabbos_date", { ascending: true })
       .limit(showAll ? 250 : 8),
   ]);
 
+  const reservations = (reservationsResult.data || []) as Omit<
+    Reservation,
+    "amount_paid"
+  >[];
+  const chargeIds = reservations
+    .flatMap((reservation) => [
+      reservation.charge_id,
+      reservation.additional_charge_id,
+    ])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+  const paidByChargeId = new Map<string, number>();
+
+  if (chargeIds.length > 0) {
+    const { data: payments } = await supabaseAdmin
+      .from("payments")
+      .select("charge_id, amount")
+      .in("charge_id", chargeIds)
+      .eq("status", "paid");
+
+    for (const payment of payments || []) {
+      const chargeId = String(payment.charge_id || "");
+      paidByChargeId.set(
+        chargeId,
+        (paidByChargeId.get(chargeId) || 0) + Number(payment.amount || 0)
+      );
+    }
+  }
+
   return {
     settings: settingsResult.data as Settings | null,
     settingsError: settingsResult.error?.message || null,
     items: (itemsResult.data || []) as KiddushItem[],
     itemsError: itemsResult.error?.message || null,
-    reservations: (reservationsResult.data || []) as Reservation[],
+    reservations: reservations.map((reservation) => {
+      const paymentSum = [
+        reservation.charge_id,
+        reservation.additional_charge_id,
+      ].reduce(
+        (sum, chargeId) =>
+          sum + (paidByChargeId.get(String(chargeId || "")) || 0),
+        0
+      );
+
+      return {
+        ...reservation,
+        amount_paid:
+          paymentSum > 0 || reservation.payment_status !== "paid"
+            ? paymentSum
+            : Number(reservation.total_amount || 0),
+      };
+    }),
     reservationsError: reservationsResult.error?.message || null,
   };
 }
@@ -185,7 +247,8 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
         {params?.settingsSaved ||
         params?.itemsSaved ||
         params?.itemAdded ||
-        params?.reservationUpdated ? (
+        params?.reservationUpdated ||
+        params?.balanceBilled ? (
           <p className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 text-sm font-bold text-green-800">
             Kiddush admin changes saved.
           </p>
@@ -251,6 +314,45 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3"
                 />
               </label>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Weeks Shown
+                  <input
+                    name="weeks_to_show"
+                    type="number"
+                    min="1"
+                    max="104"
+                    step="1"
+                    defaultValue={settings?.weeks_to_show || 26}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Base Fee
+                  <input
+                    name="base_fee_amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={Number(settings?.base_fee_amount ?? 49)}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2 text-sm font-bold text-slate-700">
+                  Minimum Total
+                  <input
+                    name="minimum_total_amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={Number(settings?.minimum_total_amount ?? 215)}
+                    className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3"
+                  />
+                </label>
+              </div>
 
               <label className="space-y-2 text-sm font-bold text-slate-700">
                 Page Headline
@@ -486,11 +588,43 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                     </p>
                   </div>
                   <p className="rounded-full bg-white px-3 py-1 text-sm font-black">
-                    {formatMoney(reservation.total_amount)}
+                    {formatMoney(
+                      reservation.final_total_amount ?? reservation.total_amount
+                    )}
                   </p>
                 </div>
 
                 <div className="mt-4 grid gap-3 text-sm text-slate-700">
+                  <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-3 text-center">
+                    <div>
+                      <p className="text-xs font-bold text-slate-500">Base</p>
+                      <p className="font-black">
+                        {formatMoney(reservation.total_amount)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-500">Paid</p>
+                      <p className="font-black">
+                        {formatMoney(reservation.amount_paid)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-500">
+                        Remains
+                      </p>
+                      <p className="font-black">
+                        {formatMoney(
+                          Math.max(
+                            0,
+                            Number(
+                              reservation.final_total_amount ??
+                                reservation.total_amount
+                            ) - reservation.amount_paid
+                          )
+                        )}
+                      </p>
+                    </div>
+                  </div>
                   <p>
                     <span className="font-bold text-slate-900">Text:</span>{" "}
                     {reservation.sponsorship_text}
@@ -536,13 +670,40 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </form>
                     ) : null}
                   </div>
+                  {reservation.special_requests ? (
+                    <form
+                      action={updateKiddushFinalTotal.bind(
+                        null,
+                        reservation.id
+                      )}
+                      className="grid gap-2 rounded-xl bg-white p-3 sm:grid-cols-[1fr_auto]"
+                    >
+                      <label className="grid gap-1 text-sm font-bold text-slate-700">
+                        Final total after special requests
+                        <input
+                          name="final_total_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          defaultValue={Number(
+                            reservation.final_total_amount ??
+                              reservation.total_amount
+                          ).toFixed(2)}
+                          className="rounded-lg border border-[#d8cdb7] px-3 py-2"
+                        />
+                      </label>
+                      <button className="self-end rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
+                        Bill Remaining
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               </article>
             ))}
           </div>
 
           <div className="mt-5 hidden overflow-x-auto lg:block">
-            <table className="w-full min-w-[1120px] border-separate border-spacing-y-2 text-left text-sm">
+            <table className="w-full min-w-[1280px] border-separate border-spacing-y-2 text-left text-sm">
               <thead className="text-xs uppercase tracking-[0.12em] text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Shabbos</th>
@@ -551,6 +712,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   <th className="px-3 py-2">Items</th>
                   <th className="px-3 py-2">Special</th>
                   <th className="px-3 py-2">Total</th>
+                  <th className="px-3 py-2">Paid / Final</th>
                   <th className="px-3 py-2">Payment</th>
                   <th className="px-3 py-2">Submitted</th>
                 </tr>
@@ -590,6 +752,60 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-3 py-3 font-bold">
                       {formatMoney(reservation.total_amount)}
+                      {reservation.minimum_adjustment_amount > 0 ? (
+                        <p className="text-xs font-semibold text-slate-500">
+                          Includes {formatMoney(reservation.minimum_adjustment_amount)} minimum
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3">
+                      <p className="font-bold">
+                        Paid: {formatMoney(reservation.amount_paid)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Final:{" "}
+                        {formatMoney(
+                          reservation.final_total_amount ??
+                            reservation.total_amount
+                        )}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Remains:{" "}
+                        {formatMoney(
+                          Math.max(
+                            0,
+                            Number(
+                              reservation.final_total_amount ??
+                                reservation.total_amount
+                            ) - reservation.amount_paid
+                          )
+                        )}
+                      </p>
+                      {reservation.special_requests ? (
+                        <form
+                          action={updateKiddushFinalTotal.bind(
+                            null,
+                            reservation.id
+                          )}
+                          className="mt-2 grid gap-2"
+                        >
+                          <input
+                            name="final_total_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={Number(
+                              reservation.final_total_amount ??
+                                reservation.total_amount
+                            ).toFixed(2)}
+                            className="w-32 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
+                            aria-label="Final total after special requests"
+                          />
+                          <button className="rounded-full bg-[#1d2940] px-3 py-1 text-xs font-bold text-white">
+                            Bill Remaining
+                          </button>
+                        </form>
+                      ) : null}
                     </td>
                     <td className="px-3 py-3">
                       <p className="font-bold capitalize">

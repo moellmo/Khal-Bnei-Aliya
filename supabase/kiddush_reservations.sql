@@ -3,10 +3,18 @@ create table if not exists public.kiddush_settings (
   enabled boolean not null default true,
   notification_email text not null default 'ybcuzz@gmail.com',
   zelle_email text not null default 'khalbneialiyah@gmail.com',
+  weeks_to_show integer not null default 26 check (weeks_to_show between 1 and 104),
+  base_fee_amount numeric(12, 2) not null default 49,
+  minimum_total_amount numeric(12, 2) not null default 215,
   headline text not null default 'Kiddush Reservations',
   message text,
   updated_at timestamptz not null default now()
 );
+
+alter table public.kiddush_settings
+  add column if not exists weeks_to_show integer not null default 26 check (weeks_to_show between 1 and 104),
+  add column if not exists base_fee_amount numeric(12, 2) not null default 49,
+  add column if not exists minimum_total_amount numeric(12, 2) not null default 215;
 
 insert into public.kiddush_settings (id)
 values ('default')
@@ -45,16 +53,32 @@ create table if not exists public.kiddush_reservations (
   sponsorship_text text not null,
   items jsonb not null default '[]'::jsonb,
   special_requests text,
+  item_subtotal_amount numeric(12, 2) not null default 0,
+  base_fee_amount numeric(12, 2) not null default 0,
+  minimum_adjustment_amount numeric(12, 2) not null default 0,
   subtotal_amount numeric(12, 2) not null default 0,
   total_amount numeric(12, 2) not null default 0,
+  final_total_amount numeric(12, 2),
+  special_request_amount numeric(12, 2),
+  additional_amount numeric(12, 2) not null default 0,
   payment_method text,
   payment_status text not null default 'pending',
   payment_reference text,
   charge_id uuid,
+  additional_charge_id uuid,
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.kiddush_reservations
+  add column if not exists item_subtotal_amount numeric(12, 2) not null default 0,
+  add column if not exists base_fee_amount numeric(12, 2) not null default 0,
+  add column if not exists minimum_adjustment_amount numeric(12, 2) not null default 0,
+  add column if not exists final_total_amount numeric(12, 2),
+  add column if not exists special_request_amount numeric(12, 2),
+  add column if not exists additional_amount numeric(12, 2) not null default 0,
+  add column if not exists additional_charge_id uuid;
 
 create unique index if not exists kiddush_reservations_one_open_per_date_idx
   on public.kiddush_reservations (shabbos_date)
@@ -76,7 +100,7 @@ create table if not exists public.hall_reservation_requests (
   status text not null default 'new',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
-);
+I ran it );
 
 create index if not exists hall_reservation_requests_created_at_idx
   on public.hall_reservation_requests (created_at desc);

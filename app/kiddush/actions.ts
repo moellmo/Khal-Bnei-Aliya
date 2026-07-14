@@ -132,7 +132,9 @@ export async function submitKiddushReservation(formData: FormData) {
 
   const { data: settings, error: settingsError } = await supabaseAdmin
     .from("kiddush_settings")
-    .select("enabled, notification_email, zelle_email")
+    .select(
+      "enabled, notification_email, zelle_email, base_fee_amount, minimum_total_amount"
+    )
     .eq("id", "default")
     .maybeSingle();
 
@@ -193,12 +195,23 @@ export async function submitKiddushReservation(formData: FormData) {
     })
     .filter((item) => item.quantity > 0);
 
-  const totalAmount = selectedItems.reduce(
+  const itemSubtotalAmount = selectedItems.reduce(
     (sum, item) => sum + item.lineTotal,
     0
   );
+  const baseFeeAmount = Math.max(0, Number(settings.base_fee_amount || 49));
+  const subtotalAmount = itemSubtotalAmount + baseFeeAmount;
+  const minimumTotalAmount = Math.max(
+    0,
+    Number(settings.minimum_total_amount || 215)
+  );
+  const minimumAdjustmentAmount = Math.max(
+    0,
+    minimumTotalAmount - subtotalAmount
+  );
+  const totalAmount = subtotalAmount + minimumAdjustmentAmount;
 
-  if (totalAmount <= 0 && !specialRequests) {
+  if (itemSubtotalAmount <= 0 && !specialRequests) {
     errorRedirect("Please select at least one item or enter a special request.");
   }
 
@@ -219,8 +232,12 @@ export async function submitKiddushReservation(formData: FormData) {
       sponsorship_text: sponsorshipText,
       items: selectedItems,
       special_requests: specialRequests,
-      subtotal_amount: totalAmount,
+      item_subtotal_amount: itemSubtotalAmount,
+      base_fee_amount: baseFeeAmount,
+      minimum_adjustment_amount: minimumAdjustmentAmount,
+      subtotal_amount: subtotalAmount,
       total_amount: totalAmount,
+      final_total_amount: totalAmount,
       payment_method: paymentMethod,
       payment_status: paymentStatus,
     })

@@ -22,6 +22,8 @@ type KiddushReservationFormProps = {
   items: KiddushItem[];
   shabbosOptions: ShabbosOption[];
   zelleEmail: string;
+  baseFeeAmount: number;
+  minimumTotalAmount: number;
 };
 
 function formatMoney(amount: number) {
@@ -35,6 +37,8 @@ export default function KiddushReservationForm({
   items,
   shabbosOptions,
   zelleEmail,
+  baseFeeAmount,
+  minimumTotalAmount,
 }: KiddushReservationFormProps) {
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(
@@ -42,7 +46,7 @@ export default function KiddushReservationForm({
     )
   );
 
-  const total = useMemo(
+  const itemSubtotal = useMemo(
     () =>
       items.reduce(
         (sum, item) =>
@@ -51,6 +55,9 @@ export default function KiddushReservationForm({
       ),
     [items, quantities]
   );
+  const subtotalWithBase = itemSubtotal + baseFeeAmount;
+  const minimumAdjustment = Math.max(0, minimumTotalAmount - subtotalWithBase);
+  const total = subtotalWithBase + minimumAdjustment;
 
   function setQuantity(item: KiddushItem, value: string) {
     const parsed = Math.max(0, Math.floor(Number(value || 0)));
@@ -203,6 +210,33 @@ export default function KiddushReservationForm({
             charged separately after review.
           </span>
         </label>
+
+        <div className="mt-4 grid gap-2 rounded-2xl border border-[#e3d9c7] bg-white p-4 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold text-slate-600">Items</span>
+            <span className="font-black">{formatMoney(itemSubtotal)}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="font-semibold text-slate-600">Base Kiddush</span>
+            <span className="font-black">{formatMoney(baseFeeAmount)}</span>
+          </div>
+          {minimumAdjustment > 0 ? (
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-semibold text-slate-600">
+                Minimum Kiddush total
+              </span>
+              <span className="font-black">
+                {formatMoney(minimumAdjustment)}
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-3 border-t border-[#e3d9c7] pt-2">
+            <span className="font-black text-slate-900">Checkout total</span>
+            <span className="text-lg font-black text-[#1d2940]">
+              {formatMoney(total)}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-[#e3d9c7] bg-white p-4 sm:p-5">

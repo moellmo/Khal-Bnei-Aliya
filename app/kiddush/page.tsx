@@ -17,6 +17,9 @@ type Settings = {
   headline: string | null;
   message: string | null;
   zelle_email: string | null;
+  weeks_to_show: number | null;
+  base_fee_amount: number | null;
+  minimum_total_amount: number | null;
 };
 
 type KiddushItem = {
@@ -31,12 +34,11 @@ type KiddushItem = {
 function formatShabbosLabel(dateValue: string) {
   const date = new Date(`${dateValue}T12:00:00`);
 
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
+  return `Shabbos, ${new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  }).format(date)}`;
 }
 
 function getUpcomingShabbosDates(count = 14) {
@@ -57,14 +59,21 @@ function getUpcomingShabbosDates(count = 14) {
 }
 
 async function getPageData() {
-  const shabbosDates = getUpcomingShabbosDates();
+  const settingsResult = await supabaseAdmin
+    .from("kiddush_settings")
+    .select(
+      "enabled, headline, message, zelle_email, weeks_to_show, base_fee_amount, minimum_total_amount"
+    )
+    .eq("id", "default")
+    .maybeSingle();
+  const settings = settingsResult.data as Settings | null;
+  const weeksToShow = Math.min(
+    104,
+    Math.max(1, Number(settings?.weeks_to_show || 26))
+  );
+  const shabbosDates = getUpcomingShabbosDates(weeksToShow);
 
-  const [settingsResult, itemsResult, reservationsResult] = await Promise.all([
-    supabaseAdmin
-      .from("kiddush_settings")
-      .select("enabled, headline, message, zelle_email")
-      .eq("id", "default")
-      .maybeSingle(),
+  const [itemsResult, reservationsResult] = await Promise.all([
     supabaseAdmin
       .from("kiddush_items")
       .select("id, name, description, price, default_quantity, max_quantity")
@@ -83,7 +92,7 @@ async function getPageData() {
   );
 
   return {
-    settings: settingsResult.data as Settings | null,
+    settings,
     settingsError: settingsResult.error?.message || null,
     items: (itemsResult.data || []) as KiddushItem[],
     itemsError: itemsResult.error?.message || null,
@@ -190,6 +199,8 @@ export default async function KiddushPage({ searchParams }: PageProps) {
                 items={items}
                 shabbosOptions={shabbosOptions}
                 zelleEmail={zelleEmail}
+                baseFeeAmount={Number(settings?.base_fee_amount || 49)}
+                minimumTotalAmount={Number(settings?.minimum_total_amount || 215)}
               />
             )}
           </div>

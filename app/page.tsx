@@ -195,56 +195,6 @@ export default async function Home({ searchParams }: HomePageProps) {
     legacyWeeklyPdf?.title ||
     "This Week’s Schedule";
 
-  const quickLinks = isLoggedIn
-    ? [
-        {
-          label: "Member Dashboard",
-          href: "/member/dashboard",
-        },
-        ...(isAdmin
-          ? [
-              {
-                label: "Admin Dashboard",
-                href: "/admin",
-              },
-              {
-                label: "Accounting Dashboard",
-                href: "/admin/accounting",
-              },
-            ]
-          : []),
-        {
-          label: "Full Schedule",
-          href: "/davening-times",
-        },
-        {
-          label: "Reserve Kiddush",
-          href: "/kiddush",
-        },
-      ]
-    : [
-        {
-          label: "Create Account",
-          href: "/membership",
-        },
-        {
-          label: "Member Login",
-          href: "/login",
-        },
-        {
-          label: "Donate",
-          href: "/donate",
-        },
-        {
-          label: "Reserve Kiddush",
-          href: "/kiddush",
-        },
-        {
-          label: "Full Schedule",
-          href: "/davening-times",
-        },
-      ];
-
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
       <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:px-8 lg:px-10">
@@ -275,7 +225,54 @@ export default async function Home({ searchParams }: HomePageProps) {
             </div>
           </Link>
 
-          <nav className="flex flex-wrap items-center gap-2 text-sm font-bold sm:gap-3">
+          <div className="flex items-center justify-end">
+          <details className="relative md:hidden">
+            <summary className="cursor-pointer list-none rounded-full bg-[#1d2940] px-4 py-2.5 text-sm font-bold text-white">
+              Menu
+            </summary>
+            <div className="absolute right-0 z-20 mt-3 grid w-56 gap-2 rounded-2xl border border-[#e3d9c7] bg-white p-3 text-sm font-bold shadow-xl">
+              <Link href="/davening-times" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                Davening Times
+              </Link>
+              <Link href="/kiddush" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                Sponsor Kiddush
+              </Link>
+              <Link href="/membership" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                Membership
+              </Link>
+              <Link href="/donate" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                Donate
+              </Link>
+              {!isLoggedIn ? (
+                <Link href="/login" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                  Log In
+                </Link>
+              ) : (
+                <>
+                  {memberAccountLinked && (
+                    <Link href="/member/dashboard" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                      Member Dashboard
+                    </Link>
+                  )}
+                  {isAdmin && (
+                    <Link href="/admin" className="rounded-xl px-3 py-2 hover:bg-[#fbf8f2]">
+                      Admin Dashboard
+                    </Link>
+                  )}
+                  <form action={signOut}>
+                    <button
+                      type="submit"
+                      className="w-full rounded-xl px-3 py-2 text-left text-red-700 hover:bg-red-50"
+                    >
+                      Sign Out
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
+          </details>
+
+          <nav className="hidden flex-wrap items-center gap-2 text-sm font-bold md:flex sm:gap-3">
             <Link
               href="/davening-times"
               className="rounded-full bg-[#1d2940] px-4 py-2.5 text-white transition hover:bg-[#10192b] sm:px-5"
@@ -301,7 +298,7 @@ export default async function Home({ searchParams }: HomePageProps) {
               href="/kiddush"
               className="rounded-full border border-[#cbbd9d] bg-white px-4 py-2.5 transition hover:bg-[#f2eadc] sm:px-5"
             >
-              Kiddush
+              Sponsor Kiddush
             </Link>
 
             {!isLoggedIn ? (
@@ -351,6 +348,7 @@ export default async function Home({ searchParams }: HomePageProps) {
               </>
             )}
           </nav>
+          </div>
         </header>
 
         <section className="grid grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:py-10">
@@ -369,16 +367,6 @@ export default async function Home({ searchParams }: HomePageProps) {
               meaningful tefillah, growth in Torah, and
               building a strong community together.
             </p>
-
-            <div className="mt-6 rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
-                Mara D&apos;Asra
-              </p>
-              <p className="mt-2 text-xl font-black">
-                Rav Avigdor Gutnicki -{" "}
-                <span dir="rtl">מרא דאתרא</span>
-              </p>
-            </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
               {showYamimNoraimButton && (
@@ -408,92 +396,8 @@ export default async function Home({ searchParams }: HomePageProps) {
                 href="/kiddush"
                 className="rounded-full border border-[#cbbd9d] bg-white px-5 py-3 text-center font-bold transition hover:bg-[#f2eadc] sm:px-6"
               >
-                Reserve Kiddush
+                Sponsor Kiddush
               </Link>
-            </div>
-
-            <div className="mt-10 rounded-2xl bg-[#f8f4eb] p-5 sm:p-6">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
-                {isLoggedIn
-                  ? "Your Online Account"
-                  : "Member Portal"}
-              </p>
-
-              <p className="mt-3 text-sm leading-6 text-slate-700">
-                {isLoggedIn
-                  ? isAdmin
-                    ? "Access your member account, administration, billing, and accounting tools."
-                    : "View your membership dues, payments, receipts, and account information."
-                  : "Log in to view dues, payments, receipts, and membership information."}
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                {!isLoggedIn ? (
-                  <>
-                    <Link
-                      href="/login"
-                      className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
-                    >
-                      Log In
-                    </Link>
-
-                    <Link
-                      href="/membership"
-                      className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
-                    >
-                      Create Account
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      href="/member/dashboard"
-                      className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
-                    >
-                      Member Dashboard
-                    </Link>
-
-                    {isAdmin && (
-                      <Link
-                        href="/admin"
-                        className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
-                      >
-                        Admin Dashboard
-                      </Link>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <details className="mt-5 rounded-2xl bg-[#fbf8f2] p-4 sm:hidden">
-              <summary className="cursor-pointer text-sm font-black text-[#1d2940]">
-                More account links
-              </summary>
-
-              <div className="mt-4 grid gap-3">
-                {quickLinks.map((item) => (
-                  <Link
-                    key={`${item.label}-${item.href}-mobile`}
-                    href={item.href}
-                    className="rounded-2xl bg-white p-4 text-sm font-bold shadow-sm"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            </details>
-
-            <div className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2">
-              {quickLinks.map((item) => (
-                <Link
-                  key={`${item.label}-${item.href}`}
-                  href={item.href}
-                  className="rounded-2xl bg-[#fbf8f2] p-4 text-sm font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  {item.label}
-                </Link>
-              ))}
             </div>
           </div>
 
@@ -636,138 +540,96 @@ export default async function Home({ searchParams }: HomePageProps) {
         )}
 
         <section id="hall-request" className="pb-12">
-          <div className="grid gap-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] lg:grid-cols-[0.85fr_1.15fr] md:p-8">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#8b6b2e]">
-                Reservations
-              </p>
-
-              <h2 className="mt-3 text-2xl font-black sm:text-3xl">
-                Kiddush &amp; Shul Hall
-              </h2>
-
-              <p className="mt-3 text-sm leading-6 text-slate-600">
-                Reserve an upcoming Kiddush online, or send a request for the
-                shul / hall and we will follow up.
-              </p>
-
-              <Link
-                href="/kiddush"
-                className="mt-5 inline-flex rounded-full bg-[#1d2940] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#10192b]"
-              >
-                Reserve Kiddush
-              </Link>
-
-              <div className="mt-6 rounded-2xl bg-[#fbf8f2] p-5 text-sm leading-6 text-slate-700">
-                <p className="font-black text-slate-900">
-                  Shul / Hall Contact
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] md:p-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#8b6b2e]">
+                  Shul / Hall
                 </p>
-                <p className="mt-2">Yedida Diena</p>
-                <a
-                  href="mailto:Yedidyadiena@gmail.com"
-                  className="font-bold text-[#8b6b2e] hover:underline"
-                >
-                  Yedidyadiena@gmail.com
-                </a>
-                <p>
+                <h2 className="mt-2 text-2xl font-black">
+                  Reserve the Shul or Hall
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Contact Yedida Diena at{" "}
+                  <a
+                    href="mailto:Yedidyadiena@gmail.com"
+                    className="font-bold text-[#8b6b2e] hover:underline"
+                  >
+                    Yedidyadiena@gmail.com
+                  </a>{" "}
+                  or{" "}
                   <a
                     href="tel:+13477712933"
                     className="font-bold text-[#8b6b2e] hover:underline"
                   >
                     347-771-2933
                   </a>
+                  .
                 </p>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <h3 className="text-xl font-black">
-                    Request the Shul / Hall
-                  </h3>
-                  <p className="mt-1 text-sm leading-6 text-slate-600">
-                    Share the date you need and the right person will get back
-                    to you.
-                  </p>
-                </div>
+              <details className="rounded-2xl bg-[#fbf8f2] p-4 lg:min-w-[420px]">
+                <summary className="cursor-pointer text-sm font-black text-[#1d2940]">
+                  Send a request
+                </summary>
 
                 {query?.hallSubmitted === "1" ? (
-                  <p className="rounded-full bg-green-50 px-4 py-2 text-xs font-bold text-green-800">
-                    Request sent
+                  <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm font-bold text-green-800">
+                    Request sent.
                   </p>
                 ) : null}
-              </div>
 
-              {query?.hallError ? (
-                <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
-                  {query.hallError}
-                </p>
-              ) : null}
+                {query?.hallError ? (
+                  <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
+                    {query.hallError}
+                  </p>
+                ) : null}
 
-              <form
-                action={submitHallReservationRequest}
-                className="mt-5 grid gap-4"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Name
-                    <input
-                      name="full_name"
-                      required
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Email
+                <form
+                  action={submitHallReservationRequest}
+                  className="mt-4 grid gap-3"
+                >
+                  <input
+                    name="full_name"
+                    required
+                    placeholder="Name"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2">
                     <input
                       name="email"
                       type="email"
                       required
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                      placeholder="Email"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
                     />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-[0.75fr_1.25fr]">
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Phone
                     <input
                       name="phone"
                       type="tel"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                      placeholder="Phone"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
                     />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Date(s) Needed
-                    <input
-                      name="dates_needed"
-                      required
-                      placeholder="One date or a range"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <label className="space-y-2 text-sm font-bold text-slate-700">
-                  Details
+                  </div>
+                  <input
+                    name="dates_needed"
+                    required
+                    placeholder="Date(s) needed"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                  />
                   <textarea
                     name="details"
-                    rows={3}
-                    placeholder="Simcha, setup needs, approximate time..."
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
+                    rows={2}
+                    placeholder="Details"
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
                   />
-                </label>
-
-                <button
-                  type="submit"
-                  className="rounded-full bg-[#8b6b2e] px-6 py-3 text-sm font-black text-white transition hover:bg-[#745822]"
-                >
-                  Submit Request
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    className="rounded-full bg-[#8b6b2e] px-5 py-3 text-sm font-black text-white transition hover:bg-[#745822]"
+                  >
+                    Submit Request
+                  </button>
+                </form>
+              </details>
             </div>
           </div>
         </section>
