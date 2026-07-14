@@ -390,6 +390,118 @@ export async function approveZellePayment(formData: FormData) {
   redirect(`${redirectUrl}&zelleAdded=1`);
 }
 
+export async function recordManualPayment(formData: FormData) {
+  const chargeId = getString(formData, "charge_id");
+  const paymentMethod = getString(formData, "payment_method") || "Check";
+  const paidAmount = getNumber(formData, "paid_amount");
+  const paidDate =
+    getString(formData, "paid_date") ||
+    new Date().toISOString().slice(0, 10);
+  const payerEmail = getString(formData, "payer_email") || null;
+  const paymentNote = getString(formData, "payment_note") || null;
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+
+  const redirectUrl = `/admin/accounting?view=monthly&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  if (!chargeId || paidAmount <= 0 || !paidDate) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Choose an open charge and enter the payment amount/date."
+      )}`
+    );
+  }
+
+  const { data: charge, error: chargeError } = await supabaseAdmin
+    .from("member_charges")
+    .select("id, member_id, amount, status, charge_type, description")
+    .eq("id", chargeId)
+    .maybeSingle();
+
+  if (chargeError || !charge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        chargeError?.message || "Member charge not found."
+      )}`
+    );
+  }
+
+  if (charge.status === "paid") {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "The selected charge is already paid."
+      )}`
+    );
+  }
+
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const paymentProvider =
+    paymentMethod.toLowerCase() === "card" ? "sola" : "manual";
+
+  const { data: payment, error: paymentError } = await supabaseAdmin
+    .from("payments")
+    .insert({
+      member_id: charge.member_id,
+      charge_id: charge.id,
+      amount: paidAmount,
+      payment_method: paymentMethod,
+      payment_provider: paymentProvider,
+      payer_email: payerEmail,
+      status: "paid",
+      note: paymentNote,
+      paid_at: paidAt,
+    })
+    .select("id")
+    .single();
+
+  if (paymentError || !payment) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        paymentError?.message || "Unable to save payment."
+      )}`
+    );
+  }
+
+  const { error: chargeUpdateError } = await supabaseAdmin
+    .from("member_charges")
+    .update({
+      status: "paid",
+      paid_at: paidAt,
+      payment_method: paymentMethod,
+      payment_provider: paymentProvider,
+      paid_amount: paidAmount,
+      payment_note: paymentNote,
+    })
+    .eq("id", charge.id);
+
+  if (chargeUpdateError) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        `Payment saved, but charge was not updated: ${chargeUpdateError.message}`
+      )}`
+    );
+  }
+
+  try {
+    await createAndSendReceipt({ paymentId: payment.id });
+  } catch (receiptError) {
+    console.error("ACCOUNTING_MANUAL_PAYMENT_RECEIPT_ERROR", {
+      paymentId: payment.id,
+      chargeId,
+      error: receiptError,
+    });
+  }
+
+  revalidatePath("/admin/accounting");
+  revalidatePath(`/admin/members/${charge.member_id}`);
+  revalidatePath(`/admin/members/${charge.member_id}/payments`);
+  revalidatePath("/member/dashboard");
+
+  redirect(`${redirectUrl}&paymentAdded=1`);
+}
+
 function parseCsvLine(line: string) {
   const cells: string[] = [];
   let current = "";

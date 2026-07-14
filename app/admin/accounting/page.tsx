@@ -6,6 +6,7 @@ import {
   addZellePayment,
   approveZellePayment,
   importAccountingCsv,
+  recordManualPayment,
   uploadExpenseReceipt,
 } from "./actions";
 
@@ -54,6 +55,7 @@ type PageProps = {
     accountingError?: string;
     expenseAdded?: string;
     zelleAdded?: string;
+    paymentAdded?: string;
   }>;
 };
 
@@ -75,6 +77,37 @@ type ZellePayment = {
   purpose: string | null;
   note: string | null;
   status: string | null;
+};
+
+type Payment = {
+  id: string;
+  amount: number;
+  payment_method: string | null;
+  payment_provider: string | null;
+  status: string | null;
+  paid_at: string | null;
+};
+
+type OpenChargeOption = {
+  id: string;
+  amount: number;
+  charge_type: string | null;
+  description: string | null;
+  due_date: string | null;
+  members:
+    | {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+      }
+    | {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+      }[]
+    | null;
 };
 
 const monthlyExpensePresets = [
@@ -149,6 +182,26 @@ function dateRange(month: number | null, year: number) {
       : `${year + 1}-01-01`;
 
   return { start, end };
+}
+
+function getOpenChargeMember(charge: OpenChargeOption) {
+  return Array.isArray(charge.members) ? charge.members[0] : charge.members;
+}
+
+function getOpenChargeLabel(charge: OpenChargeOption) {
+  const member = getOpenChargeMember(charge);
+  const memberName = [member?.last_name, member?.first_name]
+    .filter(Boolean)
+    .join(", ");
+
+  return [
+    memberName || "Unknown member",
+    formatMoney(charge.amount),
+    charge.charge_type || "Charge",
+    charge.description || "",
+  ]
+    .filter(Boolean)
+    .join(" - ");
 }
 
 async function getAccountingRows(
@@ -277,6 +330,54 @@ async function getZellePayments(
   };
 }
 
+async function getPayments(
+  month: number | null,
+  year: number
+): Promise<{
+  rows: Payment[];
+  error: string | null;
+}> {
+  const range = dateRange(month, year);
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select("id, amount, payment_method, payment_provider, status, paid_at")
+    .eq("status", "paid")
+    .gte("paid_at", range.start)
+    .lt("paid_at", range.end)
+    .order("paid_at", { ascending: false })
+    .limit(500);
+
+  if (error) {
+    return {
+      rows: [],
+      error: error.message,
+    };
+  }
+
+  return {
+    rows: (data || []) as Payment[],
+    error: null,
+  };
+}
+
+async function getOpenChargeOptions(): Promise<OpenChargeOption[]> {
+  const { data, error } = await supabaseAdmin
+    .from("member_charges")
+    .select(
+      "id, amount, charge_type, description, due_date, members(id, first_name, last_name, email)"
+    )
+    .neq("status", "paid")
+    .order("due_date", { ascending: true })
+    .limit(500);
+
+  if (error) {
+    console.error("Unable to load open charges:", error.message);
+    return [];
+  }
+
+  return (data || []) as OpenChargeOption[];
+}
+
 export default async function AccountingPage({
   searchParams,
 }: PageProps) {
@@ -305,16 +406,22 @@ export default async function AccountingPage({
     rows,
     expensesResult,
     zelleResult,
+    paymentsResult,
     yearlyExpenses,
     yearlyZelle,
+    yearlyPayments,
     yearlyDuesCharges,
+    openChargeOptions,
   ] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
     getExpenses(selectedMonth, selectedYear),
     getZellePayments(selectedMonth, selectedYear),
+    getPayments(selectedMonth, selectedYear),
     getExpenses(null, selectedYear),
     getZellePayments(null, selectedYear),
+    getPayments(null, selectedYear),
     getYearlyDuesCharges(selectedYear),
+    getOpenChargeOptions(),
   ]);
 
   const billedRows = rows.filter((row) => Boolean(row.charge));
@@ -380,12 +487,44 @@ export default async function AccountingPage({
     0
   );
 
-  const openChargeOptions = rows
-    .filter((row) => row.charge && row.charge.status !== "paid")
-    .map((row) => ({
-      charge: row.charge as Charge,
-      member: row.member,
-    }));
+  const paymentTotal = paymentsResult.rows.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
+  const onlinePaymentTotal = paymentsResult.rows
+    .filter((payment) => {
+      const method = String(payment.payment_method || "").toLowerCase();
+      const provider = String(payment.payment_provider || "").toLowerCase();
+
+      return (
+        provider === "sola" ||
+        method === "card" ||
+        method === "applepay" ||
+        method === "googlepay"
+      );
+    })
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const matchedZellePaymentTotal = paymentsResult.rows
+    .filter(
+      (payment) =>
+        String(payment.payment_method || "").toLowerCase() === "zelle"
+    )
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const pendingZelleTotal = zelleResult.rows
+    .filter((payment) => payment.status !== "matched")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const offlinePaymentTotal = Math.max(
+    0,
+    paymentTotal - onlinePaymentTotal - matchedZellePaymentTotal
+  );
+
+  const cashInTotal = paymentTotal + pendingZelleTotal;
+  const cashOutTotal = expenseTotal;
+  const netCashTotal = cashInTotal - cashOutTotal;
 
   const yearlyExpenseTotal = yearlyExpenses.rows.reduce(
     (sum, expense) => sum + Number(expense.amount || 0),
@@ -396,6 +535,18 @@ export default async function AccountingPage({
     (sum, payment) => sum + Number(payment.amount || 0),
     0
   );
+
+  const yearlyPaymentTotal = yearlyPayments.rows.reduce(
+    (sum, payment) => sum + Number(payment.amount || 0),
+    0
+  );
+
+  const yearlyPendingZelleTotal = yearlyZelle.rows
+    .filter((payment) => payment.status !== "matched")
+    .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+
+  const yearlyCashInTotal = yearlyPaymentTotal + yearlyPendingZelleTotal;
+  const yearlyNetCashTotal = yearlyCashInTotal - yearlyExpenseTotal;
 
   const yearlyDuesBilledTotal = yearlyDuesCharges.reduce(
     (sum, charge) => sum + Number(charge.amount || 0),
@@ -461,6 +612,9 @@ export default async function AccountingPage({
     outstandingTotal,
     expenseTotal,
     zelleTotal,
+    paymentTotal,
+    cashInTotal,
+    cashOutTotal,
     1
   );
 
@@ -545,7 +699,9 @@ export default async function AccountingPage({
           </div>
         )}
 
-        {(query?.expenseAdded === "1" || query?.zelleAdded === "1") && (
+        {(query?.expenseAdded === "1" ||
+          query?.zelleAdded === "1" ||
+          query?.paymentAdded === "1") && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Accounting entry saved.
           </div>
@@ -555,6 +711,7 @@ export default async function AccountingPage({
           {[
             ["monthly", "Monthly"],
             ["yearly", "Yearly"],
+            ["cashflow", "Cash Flow"],
             ["uploads", "Uploads"],
             ["receipts", "Receipts"],
           ].map(([view, label]) => (
@@ -572,33 +729,48 @@ export default async function AccountingPage({
           ))}
         </div>
 
-        {(activeView === "monthly" || activeView === "yearly") && (
+        {(activeView === "monthly" ||
+          activeView === "yearly" ||
+          activeView === "cashflow") && (
         <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-bold">Cash Flow Snapshot</h2>
+              <h2 className="text-2xl font-bold">Cash In / Cash Out</h2>
               <p className="mt-1 text-sm text-slate-500">
-                Billing, collected payments, expenses, and Zelle entries.
+                Includes card, Apple Pay, Google Pay, Zelle, checks, cash, and
+                other recorded payments.
               </p>
             </div>
 
-            {(expensesResult.error || zelleResult.error) && (
+            {(expensesResult.error ||
+              zelleResult.error ||
+              paymentsResult.error) && (
               <p className="max-w-xl rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">
                 Supabase setup needed for full accounting:
                 {expensesResult.error ? " accounting_expenses" : ""}
                 {expensesResult.error && zelleResult.error ? " and" : ""}
                 {zelleResult.error ? " zelle_payments" : ""}.
+                {paymentsResult.error ? " payments" : ""}
               </p>
             )}
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-5">
+          <div className="mt-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
             {[
-              ["Billed", billedTotal, "bg-[#1d2940]"],
-              ["Paid", paidTotal, "bg-green-600"],
-              ["Outstanding", outstandingTotal, "bg-[#8b6b2e]"],
-              ["Expenses", expenseTotal, "bg-red-600"],
-              ["Zelle", zelleTotal, "bg-blue-600"],
+              ["Cash In", cashInTotal, "bg-green-600"],
+              ["Online CC/Wallet", onlinePaymentTotal, "bg-[#1d2940]"],
+              [
+                "Zelle",
+                matchedZellePaymentTotal + pendingZelleTotal,
+                "bg-blue-600",
+              ],
+              ["Check/Cash/Other", offlinePaymentTotal, "bg-[#8b6b2e]"],
+              ["Cash Out", cashOutTotal, "bg-red-600"],
+              [
+                "Net",
+                netCashTotal,
+                netCashTotal >= 0 ? "bg-green-700" : "bg-red-700",
+              ],
             ].map(([label, value, color]) => (
               <div key={String(label)} className="rounded-2xl bg-[#fbf8f2] p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500">
@@ -620,6 +792,53 @@ export default async function AccountingPage({
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl bg-[#fbf8f2] p-5">
+              <h3 className="font-bold">Payment Method Breakdown</h3>
+              <div className="mt-4 space-y-3">
+                {[
+                  ["Online card/wallet", onlinePaymentTotal],
+                  ["Matched Zelle", matchedZellePaymentTotal],
+                  ["Pending/unmatched Zelle", pendingZelleTotal],
+                  ["Check, cash, other", offlinePaymentTotal],
+                ].map(([label, value]) => (
+                  <div key={String(label)}>
+                    <div className="flex items-center justify-between gap-4 text-sm">
+                      <span className="font-semibold">{label}</span>
+                      <span className="font-bold">
+                        {formatMoney(Number(value))}
+                      </span>
+                    </div>
+                    <div className="mt-1 h-2 rounded-full bg-slate-200">
+                      <div
+                        className="h-2 rounded-full bg-[#1d2940]"
+                        style={{
+                          width: `${Math.max(
+                            Number(value) > 0 ? 4 : 0,
+                            (Number(value) / graphMax) * 100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-[#1d2940] p-5 text-white">
+              <p className="text-sm font-semibold text-slate-300">
+                Year cashflow
+              </p>
+              <p className="mt-3 text-3xl font-black">
+                {formatMoney(yearlyNetCashTotal)}
+              </p>
+              <p className="mt-3 text-sm text-slate-300">
+                Cash in {formatMoney(yearlyCashInTotal)} minus cash out{" "}
+                {formatMoney(yearlyExpenseTotal)} for {selectedYear}.
+              </p>
+            </div>
           </div>
         </div>
         )}
@@ -995,7 +1214,7 @@ export default async function AccountingPage({
         )}
 
         {activeView === "monthly" && (
-        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="mt-8 grid gap-6 xl:grid-cols-3">
           <form
             action={addExpense}
             className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
@@ -1155,6 +1374,105 @@ export default async function AccountingPage({
               Save Zelle Payment
             </button>
           </form>
+
+          <form
+            action={recordManualPayment}
+            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+          >
+            <input type="hidden" name="month" value={selectedMonth} />
+            <input type="hidden" name="year" value={selectedYear} />
+
+            <h2 className="text-2xl font-bold">Record Check / Cash / Other</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Use this when money came in outside the online card flow. It
+              marks the selected charge paid and creates the payment record.
+            </p>
+
+            <label className="mt-5 block space-y-2">
+              <span className="font-semibold">Open Charge</span>
+              <select
+                name="charge_id"
+                required
+                defaultValue=""
+                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+              >
+                <option value="" disabled>
+                  Select open charge
+                </option>
+                {openChargeOptions.map((charge) => (
+                  <option key={charge.id} value={charge.id}>
+                    {getOpenChargeLabel(charge)}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <label className="space-y-2">
+                <span className="font-semibold">Payment Method</span>
+                <select
+                  name="payment_method"
+                  defaultValue="Check"
+                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                >
+                  <option value="Check">Check</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Zelle">Zelle</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Amount Paid</span>
+                <input
+                  name="paid_amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Paid Date</span>
+                <input
+                  name="paid_date"
+                  type="date"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Receipt Email</span>
+                <input
+                  name="payer_email"
+                  type="email"
+                  placeholder="Optional"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block space-y-2">
+              <span className="font-semibold">Note</span>
+              <textarea
+                name="payment_note"
+                rows={3}
+                placeholder="Check number, payer name, memo..."
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <button
+              type="submit"
+              className="mt-5 rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+            >
+              Mark Charge Paid
+            </button>
+          </form>
         </div>
         )}
 
@@ -1231,11 +1549,9 @@ export default async function AccountingPage({
                       <option value="" disabled>
                         Select charge
                       </option>
-                      {openChargeOptions.map(({ member, charge }) => (
+                      {openChargeOptions.map((charge) => (
                         <option key={charge.id} value={charge.id}>
-                          {member.last_name}, {member.first_name} -{" "}
-                          {formatMoney(charge.amount)} -{" "}
-                          {charge.description || "Open charge"}
+                          {getOpenChargeLabel(charge)}
                         </option>
                       ))}
                     </select>
