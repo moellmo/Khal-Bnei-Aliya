@@ -4,6 +4,7 @@ import {
   addExpense,
   addZellePayment,
   approveZellePayment,
+  createPaidChargeFromZelle,
   deleteExpense,
   generateRecurringExpenses,
   importAccountingCsv,
@@ -63,6 +64,7 @@ type PageProps = {
     recurringSaved?: string;
     created?: string;
     skipped?: string;
+    payments?: string;
   }>;
 };
 
@@ -109,6 +111,30 @@ type Payment = {
   payment_provider: string | null;
   status: string | null;
   paid_at: string | null;
+  payer_email: string | null;
+  note: string | null;
+  members:
+    | {
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+      }
+    | {
+        first_name: string | null;
+        last_name: string | null;
+        email: string | null;
+      }[]
+    | null;
+  member_charges:
+    | {
+        charge_type: string | null;
+        description: string | null;
+      }
+    | {
+        charge_type: string | null;
+        description: string | null;
+      }[]
+    | null;
 };
 
 type OpenChargeOption = {
@@ -217,6 +243,26 @@ function getOpenChargeLabel(charge: OpenChargeOption) {
   ]
     .filter(Boolean)
     .join(" - ");
+}
+
+function getPaymentMember(payment: Payment) {
+  return Array.isArray(payment.members) ? payment.members[0] : payment.members;
+}
+
+function getPaymentCharge(payment: Payment) {
+  return Array.isArray(payment.member_charges)
+    ? payment.member_charges[0]
+    : payment.member_charges;
+}
+
+function getPaymentPayerName(payment: Payment) {
+  const member = getPaymentMember(payment);
+  return (
+    [member?.first_name, member?.last_name].filter(Boolean).join(" ").trim() ||
+    member?.email ||
+    payment.payer_email ||
+    "Unknown payer"
+  );
 }
 
 async function getAccountingRows(
@@ -382,7 +428,9 @@ async function getPayments(
   const range = dateRange(month, year);
   const { data, error } = await supabaseAdmin
     .from("payments")
-    .select("id, amount, payment_method, payment_provider, status, paid_at")
+    .select(
+      "id, amount, payment_method, payment_provider, status, paid_at, payer_email, note, members(first_name, last_name, email), member_charges(charge_type, description)"
+    )
     .eq("status", "paid")
     .gte("paid_at", range.start)
     .lt("paid_at", range.end)
@@ -539,6 +587,10 @@ export default async function AccountingPage({
     (sum, payment) => sum + Number(payment.amount || 0),
     0
   );
+  const showAllPayments = query?.payments === "all";
+  const visiblePayments = showAllPayments
+    ? paymentsResult.rows
+    : paymentsResult.rows.slice(0, 5);
 
   const onlinePaymentTotal = paymentsResult.rows
     .filter((payment) => {
@@ -1870,7 +1922,7 @@ export default async function AccountingPage({
                 <form
                   key={payment.id}
                   action={approveZellePayment}
-                  className="grid gap-3 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)_auto]"
+                  className="grid min-w-0 gap-3 rounded-2xl bg-[#fbf8f2] p-4 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)_auto]"
                 >
                   <input type="hidden" name="zelle_id" value={payment.id} />
                   <input type="hidden" name="month" value={selectedMonth} />
@@ -1909,7 +1961,7 @@ export default async function AccountingPage({
                     ) : null}
                   </div>
 
-                  <label className="space-y-1">
+                  <label className="min-w-0 space-y-1">
                     <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
                       Match to open charge
                     </span>
@@ -1917,7 +1969,7 @@ export default async function AccountingPage({
                       name="charge_id"
                       disabled={payment.status === "matched"}
                       required={payment.status !== "matched"}
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                      className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
                       defaultValue=""
                     >
                       <option value="" disabled>
@@ -1938,6 +1990,69 @@ export default async function AccountingPage({
                   >
                     Approve
                   </button>
+
+                  <div className="border-t border-[#e3d9c7] pt-3 lg:col-span-3">
+                    <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#9a7a37]">
+                      No open charge?
+                    </p>
+                    <div className="mt-3 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_150px_minmax(0,1fr)_auto]">
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Member
+                        </span>
+                        <select
+                          name="member_id"
+                          disabled={payment.status === "matched"}
+                          className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                          defaultValue=""
+                        >
+                          <option value="">
+                            Guest / non-member payer
+                          </option>
+                          {rows.map(({ member }) => (
+                            <option key={member.id} value={member.id}>
+                              {member.last_name}, {member.first_name}
+                              {member.email ? ` - ${member.email}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Type
+                        </span>
+                        <input
+                          name="charge_type"
+                          disabled={payment.status === "matched"}
+                          defaultValue={payment.purpose || "Zelle Payment"}
+                          className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+
+                      <label className="min-w-0 space-y-1">
+                        <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Description
+                        </span>
+                        <input
+                          name="description"
+                          disabled={payment.status === "matched"}
+                          defaultValue={payment.purpose || "Zelle Payment"}
+                          className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+
+                      <button
+                        type="submit"
+                        formAction={createPaidChargeFromZelle}
+                        formNoValidate
+                        disabled={payment.status === "matched"}
+                        className="self-end rounded-full bg-[#8b6b2e] px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Create Paid Charge
+                      </button>
+                    </div>
+                  </div>
                 </form>
               ))}
 
@@ -1951,16 +2066,16 @@ export default async function AccountingPage({
         )}
 
         {activeView === "payments" && (
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
+        <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-2">
 
           <form
             action={addZellePayment}
-            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            className="min-w-0 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
           >
             <h2 className="text-2xl font-bold">Bring In Zelle Payment</h2>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Payer Name</span>
                 <input
                   name="payer_name"
@@ -1969,7 +2084,7 @@ export default async function AccountingPage({
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Payer Email</span>
                 <input
                   name="payer_email"
@@ -1978,7 +2093,7 @@ export default async function AccountingPage({
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Amount</span>
                 <input
                   name="amount"
@@ -1990,7 +2105,7 @@ export default async function AccountingPage({
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Received Date</span>
                 <input
                   name="received_date"
@@ -2002,7 +2117,7 @@ export default async function AccountingPage({
               </label>
             </div>
 
-            <label className="mt-4 block space-y-2">
+            <label className="mt-4 block min-w-0 space-y-2">
               <span className="font-semibold">Purpose</span>
               <input
                 name="purpose"
@@ -2011,7 +2126,7 @@ export default async function AccountingPage({
               />
             </label>
 
-            <label className="mt-4 block space-y-2">
+            <label className="mt-4 block min-w-0 space-y-2">
               <span className="font-semibold">Memo</span>
               <textarea
                 name="note"
@@ -2030,7 +2145,7 @@ export default async function AccountingPage({
 
           <form
             action={recordManualPayment}
-            className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+            className="min-w-0 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
           >
             <input type="hidden" name="month" value={selectedMonth} />
             <input type="hidden" name="year" value={selectedYear} />
@@ -2041,13 +2156,13 @@ export default async function AccountingPage({
               marks the selected charge paid and creates the payment record.
             </p>
 
-            <label className="mt-5 block space-y-2">
+            <label className="mt-5 block min-w-0 space-y-2">
               <span className="font-semibold">Open Charge</span>
               <select
                 name="charge_id"
                 required
                 defaultValue=""
-                className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
               >
                 <option value="" disabled>
                   Select open charge
@@ -2061,12 +2176,12 @@ export default async function AccountingPage({
             </label>
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Payment Method</span>
                 <select
                   name="payment_method"
                   defaultValue="Check"
-                  className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
                 >
                   <option value="Check">Check</option>
                   <option value="Cash">Cash</option>
@@ -2075,7 +2190,7 @@ export default async function AccountingPage({
                 </select>
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Amount Paid</span>
                 <input
                   name="paid_amount"
@@ -2087,7 +2202,7 @@ export default async function AccountingPage({
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Paid Date</span>
                 <input
                   name="paid_date"
@@ -2098,7 +2213,7 @@ export default async function AccountingPage({
                 />
               </label>
 
-              <label className="space-y-2">
+              <label className="min-w-0 space-y-2">
                 <span className="font-semibold">Receipt Email</span>
                 <input
                   name="payer_email"
@@ -2109,7 +2224,7 @@ export default async function AccountingPage({
               </label>
             </div>
 
-            <label className="mt-4 block space-y-2">
+            <label className="mt-4 block min-w-0 space-y-2">
               <span className="font-semibold">Note</span>
               <textarea
                 name="payment_note"
@@ -2127,6 +2242,81 @@ export default async function AccountingPage({
             </button>
           </form>
         </div>
+        )}
+
+        {activeView === "payments" && (
+          <div className="mt-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  {getMonthName(selectedMonth)} Payments
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Showing {showAllPayments ? "all" : "latest"} payments for
+                  this month.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                {formatMoney(paymentTotal)}
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {visiblePayments.map((payment) => {
+                const charge = getPaymentCharge(payment);
+                return (
+                  <div
+                    key={payment.id}
+                    className="grid min-w-0 gap-3 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-[1fr_auto]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate font-bold">
+                          {getPaymentPayerName(payment)}
+                        </p>
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">
+                          {payment.payment_method ||
+                            payment.payment_provider ||
+                            "Payment"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {formatDate(payment.paid_at)} ·{" "}
+                        {charge?.charge_type ||
+                          charge?.description ||
+                          payment.note ||
+                          "Payment"}
+                      </p>
+                    </div>
+                    <p className="self-center text-lg font-black">
+                      {formatMoney(payment.amount)}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {paymentsResult.rows.length === 0 && (
+                <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                  No payments recorded for this month yet.
+                </div>
+              )}
+            </div>
+
+            {paymentsResult.rows.length > 5 && (
+              <div className="mt-5">
+                <Link
+                  href={`/admin/accounting?month=${selectedMonth}&year=${selectedYear}&view=payments${
+                    showAllPayments ? "" : "&payments=all"
+                  }`}
+                  className="inline-flex rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold text-[#1d2940]"
+                >
+                  {showAllPayments
+                    ? "Show latest 5"
+                    : `View all ${paymentsResult.rows.length} payments`}
+                </Link>
+              </div>
+            )}
+          </div>
         )}
 
         {activeView === "billing" && (

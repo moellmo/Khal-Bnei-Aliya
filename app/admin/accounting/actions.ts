@@ -565,6 +565,193 @@ export async function approveZellePayment(formData: FormData) {
   redirect(`${redirectUrl}&zelleAdded=1#zelle-matching`);
 }
 
+export async function createPaidChargeFromZelle(formData: FormData) {
+  const zelleId = getString(formData, "zelle_id");
+  const memberId = getString(formData, "member_id");
+  const chargeType = getString(formData, "charge_type") || "Zelle Payment";
+  const description = getString(formData, "description") || chargeType;
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  if (!zelleId) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Choose a Zelle payment to record."
+      )}`
+    );
+  }
+
+  const { data: zelle, error: zelleError } = await supabaseAdmin
+    .from("zelle_payments")
+    .select(
+      "id, payer_name, payer_email, amount, received_date, purpose, note, status"
+    )
+    .eq("id", zelleId)
+    .maybeSingle();
+
+  if (zelleError || !zelle) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        zelleError?.message || "Zelle payment not found."
+      )}`
+    );
+  }
+
+  if (zelle.status === "matched") {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "This Zelle payment was already matched."
+      )}`
+    );
+  }
+
+  let chargeMemberId = memberId;
+
+  if (!chargeMemberId) {
+    let existingGuest:
+      | {
+          id: string;
+        }
+      | null = null;
+
+    if (zelle.payer_email) {
+      const { data } = await supabaseAdmin
+        .from("members")
+        .select("id")
+        .eq("email", zelle.payer_email)
+        .maybeSingle();
+
+      existingGuest = data;
+    }
+
+    if (existingGuest) {
+      chargeMemberId = existingGuest.id;
+    } else {
+      const payerName = String(zelle.payer_name || "Guest");
+      const nameParts = payerName.split(/\s+/).filter(Boolean);
+      const { data: guest, error: guestError } = await supabaseAdmin
+        .from("members")
+        .insert({
+          first_name: nameParts[0] || "Guest",
+          last_name:
+            nameParts.length > 1 ? nameParts.slice(1).join(" ") : "Guest",
+          email: zelle.payer_email || null,
+          membership_type: "Guest",
+          status: "active",
+          notes: "Created from Zelle accounting payment.",
+        })
+        .select("id")
+        .single();
+
+      if (guestError || !guest) {
+        redirect(
+          `${redirectUrl}&accountingError=${encodeURIComponent(
+            guestError?.message || "Unable to create guest payer."
+          )}`
+        );
+      }
+
+      chargeMemberId = guest.id;
+    }
+  }
+
+  const amount = Number(zelle.amount || 0);
+  const paidDate = zelle.received_date || new Date().toISOString().slice(0, 10);
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+
+  const { data: charge, error: chargeError } = await supabaseAdmin
+    .from("member_charges")
+    .insert({
+      member_id: chargeMemberId,
+      charge_type: chargeType,
+      description,
+      amount,
+      status: "paid",
+      due_date: paidDate,
+      paid_at: paidAt,
+      payment_method: "Zelle",
+      payment_provider: "manual",
+      paid_amount: amount,
+      payment_note: `Created silently from Zelle payment by ${zelle.payer_name}`,
+    })
+    .select("id, member_id")
+    .single();
+
+  if (chargeError || !charge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        chargeError?.message || "Unable to create paid charge."
+      )}`
+    );
+  }
+
+  const { data: payment, error: paymentError } = await supabaseAdmin
+    .from("payments")
+    .insert({
+      member_id: charge.member_id,
+      charge_id: charge.id,
+      amount,
+      payment_method: "Zelle",
+      payment_provider: "manual",
+      payer_email: zelle.payer_email || null,
+      status: "paid",
+      note: [
+        `Created paid charge from Zelle payment by ${zelle.payer_name}.`,
+        zelle.note,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      paid_at: paidAt,
+    })
+    .select("id")
+    .single();
+
+  if (paymentError || !payment) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        paymentError?.message || "Charge created, but payment was not saved."
+      )}`
+    );
+  }
+
+  const { error: zelleUpdateError } = await supabaseAdmin
+    .from("zelle_payments")
+    .update({
+      status: "matched",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", zelle.id);
+
+  if (zelleUpdateError) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        `Payment saved, but Zelle row was not updated: ${zelleUpdateError.message}`
+      )}`
+    );
+  }
+
+  try {
+    await createAndSendReceipt({ paymentId: payment.id });
+  } catch (receiptError) {
+    console.error("ZELLE_CREATE_PAID_CHARGE_RECEIPT_ERROR", {
+      paymentId: payment.id,
+      zelleId,
+      error: receiptError,
+    });
+  }
+
+  revalidatePath("/admin/accounting");
+  revalidatePath(`/admin/members/${charge.member_id}`);
+  revalidatePath(`/admin/members/${charge.member_id}/payments`);
+  revalidatePath("/member/dashboard");
+
+  redirect(`${redirectUrl}&paymentAdded=1#zelle-matching`);
+}
+
 export async function recordManualPayment(formData: FormData) {
   const chargeId = getString(formData, "charge_id");
   const paymentMethod = getString(formData, "payment_method") || "Check";
