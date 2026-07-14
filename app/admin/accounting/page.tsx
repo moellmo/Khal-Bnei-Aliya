@@ -116,11 +116,13 @@ type Payment = {
   note: string | null;
   members:
     | {
+        id: string;
         first_name: string | null;
         last_name: string | null;
         email: string | null;
       }
     | {
+        id: string;
         first_name: string | null;
         last_name: string | null;
         email: string | null;
@@ -430,7 +432,7 @@ async function getPayments(
   const { data, error } = await supabaseAdmin
     .from("payments")
     .select(
-      "id, amount, payment_method, payment_provider, status, paid_at, payer_email, note, members(first_name, last_name, email), member_charges(charge_type, description)"
+      "id, amount, payment_method, payment_provider, status, paid_at, payer_email, note, members(id, first_name, last_name, email), member_charges(charge_type, description)"
     )
     .eq("status", "paid")
     .gte("paid_at", range.start)
@@ -592,6 +594,9 @@ export default async function AccountingPage({
   const visiblePayments = showAllPayments
     ? paymentsResult.rows
     : paymentsResult.rows.slice(0, 5);
+  const unmatchedZelleRows = zelleResult.rows.filter(
+    (payment) => payment.status !== "matched"
+  );
   const zelleMemberOptions = rows
     .map(({ member }) => ({
       id: member.id,
@@ -768,7 +773,7 @@ export default async function AccountingPage({
             {getMonthName(selectedMonth)} {selectedYear}
           </h1>
 
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-6">
             <div>
               <p className="text-sm text-slate-400">Members Billed</p>
               <p className="mt-1 text-2xl font-bold">
@@ -777,16 +782,23 @@ export default async function AccountingPage({
             </div>
 
             <div>
-              <p className="text-sm text-slate-400">Total Billed</p>
+              <p className="text-sm text-slate-400">Dues Billed</p>
               <p className="mt-1 text-2xl font-bold">
                 {formatMoney(billedTotal)}
               </p>
             </div>
 
             <div>
-              <p className="text-sm text-slate-400">Total Paid</p>
+              <p className="text-sm text-slate-400">Dues Paid</p>
               <p className="mt-1 text-2xl font-bold text-green-300">
                 {formatMoney(paidTotal)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-400">Payments Received</p>
+              <p className="mt-1 text-2xl font-bold text-green-200">
+                {formatMoney(paymentTotal)}
               </p>
             </div>
 
@@ -1926,12 +1938,16 @@ export default async function AccountingPage({
                 </p>
               </div>
               <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
-                {zelleResult.rows.length} Zelle rows
+                {unmatchedZelleRows.length} waiting
               </span>
             </div>
+            <p className="mt-3 text-xs font-semibold text-slate-500">
+              Matched Zelle payments move out of this queue and appear in the
+              monthly payments list below.
+            </p>
 
             <div className="mt-5 space-y-3">
-              {zelleResult.rows.map((payment) => (
+              {unmatchedZelleRows.map((payment) => (
                 <form
                   key={payment.id}
                   action={approveZellePayment}
@@ -2066,9 +2082,9 @@ export default async function AccountingPage({
                 </form>
               ))}
 
-              {zelleResult.rows.length === 0 ? (
+              {unmatchedZelleRows.length === 0 ? (
                 <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
-                  No Zelle rows for this month yet.
+                  No unmatched Zelle payments for this month.
                 </div>
               ) : null}
             </div>
@@ -2288,6 +2304,7 @@ export default async function AccountingPage({
             <div className="mt-5 space-y-3">
               {visiblePayments.map((payment) => {
                 const charge = getPaymentCharge(payment);
+                const member = getPaymentMember(payment);
                 return (
                   <div
                     key={payment.id}
@@ -2315,6 +2332,14 @@ export default async function AccountingPage({
                     <p className="self-center text-lg font-black">
                       {formatMoney(payment.amount)}
                     </p>
+                    {member?.id ? (
+                      <Link
+                        href={`/admin/members/${member.id}/payments`}
+                        className="self-center rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-center text-xs font-bold text-[#1d2940] sm:col-span-2 sm:justify-self-end"
+                      >
+                        View / Edit
+                      </Link>
+                    ) : null}
                   </div>
                 );
               })}
