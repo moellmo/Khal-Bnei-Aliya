@@ -195,26 +195,76 @@ export default async function Home({ searchParams }: HomePageProps) {
     legacyWeeklyPdf?.title ||
     "This Week’s Schedule";
 
+  const quickLinks = isLoggedIn
+    ? [
+        {
+          label: "Member Dashboard",
+          href: "/member/dashboard",
+        },
+        ...(isAdmin
+          ? [
+              {
+                label: "Admin Dashboard",
+                href: "/admin",
+              },
+              {
+                label: "Accounting Dashboard",
+                href: "/admin/accounting",
+              },
+            ]
+          : []),
+        {
+          label: "Full Schedule",
+          href: "/davening-times",
+        },
+        {
+          label: "Sponsor Kiddush",
+          href: "/kiddush",
+        },
+      ]
+    : [
+        {
+          label: "Create Account",
+          href: "/membership",
+        },
+        {
+          label: "Member Login",
+          href: "/login",
+        },
+        {
+          label: "Donate",
+          href: "/donate",
+        },
+        {
+          label: "Sponsor Kiddush",
+          href: "/kiddush",
+        },
+        {
+          label: "Full Schedule",
+          href: "/davening-times",
+        },
+      ];
+
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
       <section className="mx-auto max-w-7xl px-4 py-5 sm:px-6 md:px-8 lg:px-10">
         <header className="flex items-center justify-between gap-4 border-b border-[#ddd4c2] pb-4 lg:pb-6">
           <Link
             href="/"
-            className="flex min-w-0 items-center gap-2 sm:gap-4 lg:max-w-[360px]"
+            className="flex min-w-0 items-center gap-2 sm:gap-4 lg:max-w-none"
           >
             <img
               src={logoUrl}
               alt="Khal Bnei Aliya logo"
-              className="h-12 w-auto shrink-0 rounded-lg bg-white p-1.5 shadow-sm sm:h-20 sm:rounded-xl sm:p-2 lg:h-16"
+              className="h-12 w-auto shrink-0 rounded-lg bg-white p-1.5 shadow-sm sm:h-20 sm:rounded-xl sm:p-2 lg:h-20"
             />
 
             <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em] lg:text-sm">
                 Khal Bnei Aliya
               </p>
 
-              <h1 className="mt-0.5 text-base font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl lg:text-2xl">
+              <h1 className="mt-0.5 text-base font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl lg:text-4xl">
                 קהל בני עליה
               </h1>
             </div>
@@ -371,8 +421,8 @@ export default async function Home({ searchParams }: HomePageProps) {
 
         <section className="grid grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:py-10">
           {/* WELCOME */}
-          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10 lg:border-[#1d2940] lg:bg-[#1d2940] lg:text-white lg:shadow-[0_18px_40px_rgba(29,41,64,0.16)]">
-            <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#8b6b2e] lg:text-[#d9bf7a]">
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10">
+            <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#8b6b2e]">
               Welcome
             </p>
 
@@ -380,53 +430,51 @@ export default async function Home({ searchParams }: HomePageProps) {
               Welcome to Khal Bnei Aliya
             </h2>
 
-            <p className="mt-6 text-base leading-8 text-slate-600 sm:text-lg lg:text-slate-200">
+            <p className="mt-6 text-base leading-8 text-slate-600 sm:text-lg">
               A welcoming kehilla dedicated to
               meaningful tefillah, growth in Torah, and
               building a strong community together.
             </p>
 
-            <div className="mt-7 hidden rounded-2xl bg-[#1d2940] p-5 text-white shadow-sm sm:block lg:bg-white/10 lg:p-6 lg:shadow-none">
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#d9bf7a]">
-                  Mara D&apos;Asra
-                </p>
-                <p className="mt-3 text-2xl font-black leading-tight">
-                  Rav Avigdor Gutnicki - מרא דאתרא
-                </p>
-              </div>
+            <div className="mt-6 hidden rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5 sm:block">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+                Mara D&apos;Asra
+              </p>
+              <p className="mt-2 text-xl font-black">
+                Rav Avigdor Gutnicki - מרא דאתרא
+              </p>
+            </div>
 
-              <div className="mt-8 flex flex-wrap gap-3">
-                {showYamimNoraimButton && (
-                  <Link
-                    href="/yamim-noraim"
-                    className="rounded-full bg-white px-5 py-3 text-center font-bold text-[#1d2940] transition hover:bg-[#f2eadc] sm:px-6"
-                  >
-                    Yamim Noraim Seats
-                  </Link>
-                )}
-
+            <div className="mt-8 hidden flex-wrap gap-3 sm:flex">
+              {showYamimNoraimButton && (
                 <Link
-                  href="/membership"
-                  className="rounded-full bg-[#8b6b2e] px-5 py-3 text-center font-bold text-white transition hover:bg-[#745822] sm:px-6"
+                  href="/yamim-noraim"
+                  className="rounded-full bg-[#1d2940] px-5 py-3 text-center font-bold text-white transition hover:bg-[#10192b] sm:px-6"
                 >
-                  Apply for Membership
+                  Yamim Noraim Seats
                 </Link>
+              )}
 
-                <Link
-                  href="/donate"
-                  className="rounded-full border border-white/35 bg-white/10 px-5 py-3 text-center font-bold text-white transition hover:bg-white/20 sm:px-6"
-                >
-                  Donate
-                </Link>
+              <Link
+                href="/membership"
+                className="rounded-full bg-[#8b6b2e] px-5 py-3 text-center font-bold text-white transition hover:bg-[#745822] sm:px-6"
+              >
+                Apply for Membership
+              </Link>
 
-                <Link
-                  href="/kiddush"
-                  className="rounded-full border border-white/35 bg-white/10 px-5 py-3 text-center font-bold text-white transition hover:bg-white/20 sm:px-6"
-                >
-                  Sponsor Kiddush
-                </Link>
-              </div>
+              <Link
+                href="/donate"
+                className="rounded-full border border-[#cbbd9d] bg-white px-5 py-3 text-center font-bold transition hover:bg-[#f2eadc] sm:px-6"
+              >
+                Donate
+              </Link>
+
+              <Link
+                href="/kiddush"
+                className="rounded-full border border-[#cbbd9d] bg-white px-5 py-3 text-center font-bold transition hover:bg-[#f2eadc] sm:px-6"
+              >
+                Sponsor Kiddush
+              </Link>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3 sm:hidden">
@@ -459,6 +507,72 @@ export default async function Home({ searchParams }: HomePageProps) {
               >
                 Sponsor Kiddush
               </Link>
+            </div>
+
+            <div className="mt-10 hidden rounded-2xl bg-[#f8f4eb] p-5 sm:block sm:p-6">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+                {isLoggedIn
+                  ? "Your Online Account"
+                  : "Member Portal"}
+              </p>
+
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                {isLoggedIn
+                  ? isAdmin
+                    ? "Access your member account, administration, billing, and accounting tools."
+                    : "View your membership dues, payments, receipts, and account information."
+                  : "Log in to view dues, payments, receipts, and membership information."}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                {!isLoggedIn ? (
+                  <>
+                    <Link
+                      href="/login"
+                      className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                    >
+                      Log In
+                    </Link>
+
+                    <Link
+                      href="/membership"
+                      className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
+                    >
+                      Create Account
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/member/dashboard"
+                      className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                    >
+                      Member Dashboard
+                    </Link>
+
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-sm font-bold"
+                      >
+                        Admin Dashboard
+                      </Link>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 hidden gap-3 sm:grid sm:grid-cols-2">
+              {quickLinks.map((item) => (
+                <Link
+                  key={`${item.label}-${item.href}`}
+                  href={item.href}
+                  className="rounded-2xl bg-[#fbf8f2] p-4 text-sm font-bold shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  {item.label}
+                </Link>
+              ))}
             </div>
           </div>
 
