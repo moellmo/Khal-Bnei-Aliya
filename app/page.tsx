@@ -436,8 +436,8 @@ export default async function Home({ searchParams }: HomePageProps) {
               building a strong community together.
             </p>
 
-            <div className="mt-6 hidden rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5 sm:block">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+            <div className="mt-6 hidden rounded-2xl border border-[#1d2940] bg-[#1d2940] p-5 text-white shadow-sm sm:block">
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#d9bf7a]">
                 Mara D&apos;Asra
               </p>
               <p className="mt-2 text-xl font-black">
