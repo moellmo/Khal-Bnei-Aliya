@@ -371,8 +371,8 @@ export default async function Home({ searchParams }: HomePageProps) {
 
         <section className="grid grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:py-10">
           {/* WELCOME */}
-          <div className="flex flex-col rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10">
-            <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#8b6b2e]">
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10 lg:border-[#1d2940] lg:bg-[#1d2940] lg:text-white lg:shadow-[0_18px_40px_rgba(29,41,64,0.16)]">
+            <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#8b6b2e] lg:text-[#d9bf7a]">
               Welcome
             </p>
 
@@ -380,13 +380,13 @@ export default async function Home({ searchParams }: HomePageProps) {
               Welcome to Khal Bnei Aliya
             </h2>
 
-            <p className="mt-6 text-base leading-8 text-slate-600 sm:text-lg">
+            <p className="mt-6 text-base leading-8 text-slate-600 sm:text-lg lg:text-slate-200">
               A welcoming kehilla dedicated to
               meaningful tefillah, growth in Torah, and
               building a strong community together.
             </p>
 
-            <div className="mt-6 hidden min-h-[240px] flex-col justify-end rounded-2xl bg-[#1d2940] p-6 text-white shadow-sm sm:flex lg:flex-1">
+            <div className="mt-7 hidden rounded-2xl bg-[#1d2940] p-5 text-white shadow-sm sm:block lg:bg-white/10 lg:p-6 lg:shadow-none">
               <div>
                 <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#d9bf7a]">
                   Mara D&apos;Asra
@@ -612,95 +612,103 @@ export default async function Home({ searchParams }: HomePageProps) {
         )}
 
         <section id="hall-request" className="pb-12">
-          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] md:p-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div>
+          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-4 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-6 md:p-8">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
                 <p className="text-sm font-bold uppercase tracking-[0.25em] text-[#8b6b2e]">
                   Shul / Hall
                 </p>
                 <h2 className="mt-2 text-2xl font-black">
                   Reserve the Shul or Hall
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Contact Yedida Diena at{" "}
+                <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
+                  For shul or hall reservations, contact Yedida Diena.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2 text-sm font-bold">
                   <a
                     href="mailto:Yedidyadiena@gmail.com"
-                    className="font-bold text-[#8b6b2e] hover:underline"
+                    className="rounded-full border border-[#e3d9c7] bg-[#fbf8f2] px-4 py-2 text-[#1d2940] transition hover:bg-[#f2eadc]"
                   >
                     Yedidyadiena@gmail.com
-                  </a>{" "}
-                  or{" "}
+                  </a>
                   <a
                     href="tel:+13477712933"
-                    className="font-bold text-[#8b6b2e] hover:underline"
+                    className="rounded-full border border-[#e3d9c7] bg-[#fbf8f2] px-4 py-2 text-[#1d2940] transition hover:bg-[#f2eadc]"
                   >
                     347-771-2933
                   </a>
-                  .
-                </p>
+                </div>
               </div>
 
-              <details className="rounded-2xl bg-[#fbf8f2] p-4 lg:min-w-[420px]">
-                <summary className="cursor-pointer text-sm font-black text-[#1d2940]">
-                  Send a request
+              <details
+                className="group rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-3 lg:min-w-[440px] lg:max-w-[500px]"
+                open={Boolean(query?.hallSubmitted || query?.hallError)}
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-xl bg-white px-4 py-3 text-sm font-black text-[#1d2940] shadow-sm transition group-open:rounded-b-none">
+                  <span>Send a reservation request</span>
+                  <span className="text-lg leading-none text-[#8b6b2e] transition group-open:rotate-45">
+                    +
+                  </span>
                 </summary>
 
-                {query?.hallSubmitted === "1" ? (
-                  <p className="mt-4 rounded-xl bg-green-50 p-3 text-sm font-bold text-green-800">
-                    Request sent.
-                  </p>
-                ) : null}
+                <div className="rounded-b-xl border-t border-[#e3d9c7] bg-white p-4">
+                  {query?.hallSubmitted === "1" ? (
+                    <p className="rounded-xl bg-green-50 p-3 text-sm font-bold text-green-800">
+                      Request sent. We will get back to you.
+                    </p>
+                  ) : null}
 
-                {query?.hallError ? (
-                  <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
-                    {query.hallError}
-                  </p>
-                ) : null}
+                  {query?.hallError ? (
+                    <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
+                      {query.hallError}
+                    </p>
+                  ) : null}
 
-                <form
-                  action={submitHallReservationRequest}
-                  className="mt-4 grid gap-3"
-                >
-                  <input
-                    name="full_name"
-                    required
-                    placeholder="Name"
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
-                  />
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <input
-                      name="email"
-                      type="email"
-                      required
-                      placeholder="Email"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
-                    />
-                    <input
-                      name="phone"
-                      type="tel"
-                      placeholder="Phone"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
-                    />
-                  </div>
-                  <input
-                    name="dates_needed"
-                    required
-                    placeholder="Date(s) needed"
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
-                  />
-                  <textarea
-                    name="details"
-                    rows={2}
-                    placeholder="Details"
-                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-full bg-[#8b6b2e] px-5 py-3 text-sm font-black text-white transition hover:bg-[#745822]"
+                  <form
+                    action={submitHallReservationRequest}
+                    className="mt-4 grid gap-3"
                   >
-                    Submit Request
-                  </button>
-                </form>
+                    <input
+                      name="full_name"
+                      required
+                      placeholder="Name"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                    />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        name="email"
+                        type="email"
+                        required
+                        placeholder="Email"
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                      />
+                      <input
+                        name="phone"
+                        type="tel"
+                        placeholder="Phone"
+                        className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                      />
+                    </div>
+                    <input
+                      name="dates_needed"
+                      required
+                      placeholder="Date(s) needed"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                    />
+                    <textarea
+                      name="details"
+                      rows={3}
+                      placeholder="Details"
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-sm text-slate-900"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-full bg-[#8b6b2e] px-5 py-3 text-sm font-black text-white transition hover:bg-[#745822]"
+                    >
+                      Submit Request
+                    </button>
+                  </form>
+                </div>
               </details>
             </div>
           </div>
