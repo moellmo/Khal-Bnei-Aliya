@@ -140,8 +140,8 @@ export default async function KiddushPage({ searchParams }: PageProps) {
           </Link>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
-          <aside className="rounded-[2rem] bg-[#1d2940] p-7 text-white shadow-sm sm:p-8">
+        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-start">
+          <aside className="rounded-[2rem] bg-[#1d2940] p-7 text-white shadow-sm sm:p-8 lg:sticky lg:top-8">
             <img
               src="/kba-logo.png"
               alt="Khal Bnei Aliya"
@@ -173,6 +173,21 @@ export default async function KiddushPage({ searchParams }: PageProps) {
               <p className="mt-2 text-sm leading-6 text-slate-200">
                 Include your name and Kiddush date in the memo.
               </p>
+            </div>
+
+            <div className="mt-5 rounded-2xl border border-white/15 bg-white/[0.06] p-5">
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#f0d99a]">
+                What happens next
+              </p>
+
+              <div className="mt-4 grid gap-3 text-sm leading-6 text-slate-200">
+                <p>
+                  Choose a Shabbos, set quantities, and submit payment.
+                </p>
+                <p>
+                  Special requests are reviewed separately and billed if needed.
+                </p>
+              </div>
             </div>
           </aside>
 
