@@ -256,15 +256,15 @@ export default async function Home({ searchParams }: HomePageProps) {
             <img
               src={logoUrl}
               alt="Khal Bnei Aliya logo"
-              className="h-12 w-auto shrink-0 rounded-lg bg-white p-1.5 shadow-sm sm:h-20 sm:rounded-xl sm:p-2 lg:h-16"
+              className="h-12 w-auto shrink-0 rounded-lg bg-white p-1.5 shadow-sm sm:h-20 sm:rounded-xl sm:p-2 lg:h-20"
             />
 
             <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em]">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#8b6b2e] sm:text-xs sm:tracking-[0.35em] lg:text-sm">
                 Khal Bnei Aliya
               </p>
 
-              <h1 className="mt-0.5 whitespace-nowrap text-base font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl lg:text-2xl">
+              <h1 className="mt-0.5 text-base font-black tracking-tight sm:mt-1 sm:text-2xl md:text-3xl lg:text-4xl">
                 קהל בני עליה
               </h1>
             </div>
