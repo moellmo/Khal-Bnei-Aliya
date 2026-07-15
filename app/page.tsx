@@ -371,7 +371,7 @@ export default async function Home({ searchParams }: HomePageProps) {
 
         <section className="grid grid-cols-1 gap-8 py-8 lg:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] lg:py-10">
           {/* WELCOME */}
-          <div className="self-start rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10">
+          <div className="flex flex-col rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)] sm:p-8 md:p-10">
             <p className="text-sm font-bold uppercase tracking-[0.28em] text-[#8b6b2e]">
               Welcome
             </p>
@@ -386,17 +386,50 @@ export default async function Home({ searchParams }: HomePageProps) {
               building a strong community together.
             </p>
 
-            <div className="mt-6 hidden rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5 sm:block">
-              <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
-                Mara D&apos;Asra
-              </p>
-              <p className="mt-2 text-xl font-black">
-                Rav Avigdor Gutnicki -{" "}
-                <span dir="rtl">מרא דאתרא</span>
-              </p>
+            <div className="mt-6 hidden min-h-[240px] flex-col justify-end rounded-2xl bg-[#1d2940] p-6 text-white shadow-sm sm:flex lg:flex-1">
+              <div>
+                <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#d9bf7a]">
+                  Mara D&apos;Asra
+                </p>
+                <p className="mt-3 text-2xl font-black leading-tight">
+                  Rav Avigdor Gutnicki - מרא דאתרא
+                </p>
+              </div>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                {showYamimNoraimButton && (
+                  <Link
+                    href="/yamim-noraim"
+                    className="rounded-full bg-white px-5 py-3 text-center font-bold text-[#1d2940] transition hover:bg-[#f2eadc] sm:px-6"
+                  >
+                    Yamim Noraim Seats
+                  </Link>
+                )}
+
+                <Link
+                  href="/membership"
+                  className="rounded-full bg-[#8b6b2e] px-5 py-3 text-center font-bold text-white transition hover:bg-[#745822] sm:px-6"
+                >
+                  Apply for Membership
+                </Link>
+
+                <Link
+                  href="/donate"
+                  className="rounded-full border border-white/35 bg-white/10 px-5 py-3 text-center font-bold text-white transition hover:bg-white/20 sm:px-6"
+                >
+                  Donate
+                </Link>
+
+                <Link
+                  href="/kiddush"
+                  className="rounded-full border border-white/35 bg-white/10 px-5 py-3 text-center font-bold text-white transition hover:bg-white/20 sm:px-6"
+                >
+                  Sponsor Kiddush
+                </Link>
+              </div>
             </div>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3 sm:hidden">
               {showYamimNoraimButton && (
                 <Link
                   href="/yamim-noraim"
@@ -516,13 +549,12 @@ export default async function Home({ searchParams }: HomePageProps) {
         </section>
 
         <section className="pb-8 sm:hidden">
-          <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-[0_10px_30px_rgba(0,0,0,0.04)]">
-            <p className="text-sm font-bold uppercase tracking-[0.2em] text-[#8b6b2e]">
+          <div className="rounded-[2rem] bg-[#1d2940] p-6 text-white shadow-[0_10px_30px_rgba(0,0,0,0.08)]">
+            <p className="text-sm font-bold uppercase tracking-[0.22em] text-[#d9bf7a]">
               Mara D&apos;Asra
             </p>
-            <p className="mt-2 text-xl font-black">
-              Rav Avigdor Gutnicki -{" "}
-              <span dir="rtl">מרא דאתרא</span>
+            <p className="mt-3 text-xl font-black leading-tight">
+              Rav Avigdor Gutnicki - מרא דאתרא
             </p>
           </div>
         </section>
