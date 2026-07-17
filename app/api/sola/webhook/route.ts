@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
+import { markKiddushReservationPaidAndNotify } from "@/lib/kiddush/reservations";
 import { sendPaymentFailureEmail } from "@/lib/payments/sendPaymentFailureEmail";
 
 export const dynamic = "force-dynamic";
@@ -922,6 +923,12 @@ export async function POST(request: NextRequest) {
     const invoice = getField(payload, [
       "xInvoice",
     ]);
+    const providerDescription = getField(payload, [
+      "xDescription",
+      "xMemo",
+      "xNote",
+      "xComments",
+    ]);
 
     const paymentEmail = getField(payload, [
       "xEmail",
@@ -1145,6 +1152,12 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+    await markKiddushReservationPaidAndNotify({
+      note: [providerDescription, invoice].filter(Boolean).join(" "),
+      reference: refNum,
+      chargeId: charge?.id || null,
+    });
 
     let receiptGenerated = false;
 let receiptErrorMessage: string | null = null;

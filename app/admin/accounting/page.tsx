@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { QuickChargeMemberPicker } from "../QuickChargeMemberPicker";
+import HebrewKeyboardField from "./HebrewKeyboardField";
 import {
   addExpense,
   addZellePayment,
@@ -1214,7 +1215,7 @@ export default async function AccountingPage({
                   </label>
                 </div>
 
-                <input
+                <HebrewKeyboardField
                   name="note"
                   placeholder="Optional note"
                   className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
@@ -1949,7 +1950,7 @@ export default async function AccountingPage({
 
             <label className="mt-4 block space-y-2">
               <span className="font-semibold">Note</span>
-              <textarea
+              <HebrewKeyboardField
                 name="note"
                 rows={3}
                 className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
@@ -2064,7 +2065,7 @@ export default async function AccountingPage({
                           </span>
                         ) : null}
                       </span>
-                      <input
+                      <HebrewKeyboardField
                         name="note"
                         defaultValue={expense.note || ""}
                         className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"

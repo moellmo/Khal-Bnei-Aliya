@@ -27,9 +27,12 @@ type KiddushReservationItem = {
 };
 
 export function reservationIdFromPaymentNote(note: string) {
-  const match = note.match(
-    /Reservation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-  );
+  const uuidPattern =
+    "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+  const match =
+    note.match(new RegExp(`Kiddush\\s+reservation\\s+(${uuidPattern})`, "i")) ||
+    note.match(new RegExp(`Reservation\\s+(${uuidPattern})`, "i")) ||
+    note.match(new RegExp(`(${uuidPattern})`, "i"));
 
   return match?.[1] || null;
 }

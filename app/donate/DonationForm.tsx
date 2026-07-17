@@ -635,6 +635,7 @@ export default function DonationForm({
             <option>Matana</option>
             <option>Aliyah Pledge</option>
             <option>Yamim Noraim Seats</option>
+            <option>Kiddush Reservation</option>
             <option>Building Fund</option>
             <option>Other</option>
           </select>

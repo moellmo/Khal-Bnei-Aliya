@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendZelleReviewEmail } from "@/lib/payments/sendZelleReviewEmail";
 import { sendKiddushReservationNotification } from "@/lib/kiddush/email";
+import { formatKiddushShabbosLong } from "@/lib/kiddush/shabbos";
 
 type KiddushItem = {
   id: string;
@@ -102,21 +103,6 @@ async function findOrCreateSponsor({
   }
 
   return sponsor;
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
 
 export async function submitKiddushReservation(formData: FormData) {
@@ -261,7 +247,7 @@ export async function submitKiddushReservation(formData: FormData) {
 
   if (paymentMethod === "card" && totalAmount > 0) {
     const note = [
-      `Kiddush for ${formatDate(shabbosDate)}`,
+      `Kiddush for ${formatKiddushShabbosLong(shabbosDate)}`,
       `Reservation ${savedReservation.id}`,
     ].join(" - ");
 
@@ -287,7 +273,9 @@ export async function submitKiddushReservation(formData: FormData) {
       email: sponsorEmail,
       phone: sponsorPhone,
     });
-    const description = `Kiddush reservation for ${formatDate(shabbosDate)}`;
+    const description = `Kiddush reservation for ${formatKiddushShabbosLong(
+      shabbosDate
+    )}`;
 
     const { data: charge, error: chargeError } = await supabaseAdmin
       .from("member_charges")

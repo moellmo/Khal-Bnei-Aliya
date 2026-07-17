@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatKiddushShabbosLabel } from "@/lib/kiddush/shabbos";
 import KiddushReservationForm from "./KiddushReservationForm";
 
 export const dynamic = "force-dynamic";
@@ -39,16 +40,6 @@ function uniqueItemsByName(items: KiddushItem[]) {
     seen.add(key);
     return true;
   });
-}
-
-function formatShabbosLabel(dateValue: string) {
-  const date = new Date(`${dateValue}T12:00:00`);
-
-  return `Shabbos, ${new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date)}`;
 }
 
 function getUpcomingShabbosDates(count = 14) {
@@ -108,7 +99,7 @@ async function getPageData() {
     itemsError: itemsResult.error?.message || null,
     shabbosOptions: shabbosDates.map((date) => ({
       date,
-      label: formatShabbosLabel(date),
+      label: formatKiddushShabbosLabel(date),
       reserved: reservedDates.has(date),
     })),
   };

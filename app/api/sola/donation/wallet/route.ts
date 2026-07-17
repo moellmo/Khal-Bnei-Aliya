@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { createAndSendReceipt } from "@/lib/payments/createReceipt";
-import { markKiddushReservationPaidAndNotify } from "@/lib/kiddush/reservations";
+import {
+  markKiddushReservationPaidAndNotify,
+  reservationIdFromPaymentNote,
+} from "@/lib/kiddush/reservations";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,14 +59,6 @@ function sanitizeGatewayResponse(response: GatewayResponse) {
   return sanitized;
 }
 
-function reservationIdFromNote(note: string) {
-  const match = note.match(
-    /Reservation\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
-  );
-
-  return match?.[1] || null;
-}
-
 async function markReservationPaidFromDonation({
   purpose,
   note,
@@ -75,7 +70,7 @@ async function markReservationPaidFromDonation({
 }) {
   if (purpose !== "Yamim Noraim Seats") return;
 
-  const reservationId = reservationIdFromNote(note);
+  const reservationId = reservationIdFromPaymentNote(note);
   if (!reservationId) return;
 
   const { error } = await supabaseAdmin

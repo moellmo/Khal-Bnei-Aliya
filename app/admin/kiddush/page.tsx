@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatKiddushShabbosLong } from "@/lib/kiddush/shabbos";
 import {
   addKiddushItem,
   markKiddushPaid,
@@ -66,6 +67,7 @@ type Reservation = {
   additional_charge_id: string | null;
   created_at: string;
   amount_paid: number;
+  effective_payment_status: string;
 };
 
 function formatMoney(amount: number | null | undefined) {
@@ -85,6 +87,10 @@ function formatDate(value: string | null | undefined) {
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function formatShabbos(value: string | null | undefined) {
+  return value ? formatKiddushShabbosLong(value) : "—";
 }
 
 function itemSummary(items: unknown) {
@@ -141,6 +147,7 @@ async function getPageData(showAll: boolean) {
     .map((id) => String(id || "").trim())
     .filter(Boolean);
   const paidByChargeId = new Map<string, number>();
+  const paidByReservationId = new Map<string, number>();
 
   if (chargeIds.length > 0) {
     const { data: payments } = await supabaseAdmin
@@ -158,20 +165,51 @@ async function getPageData(showAll: boolean) {
     }
   }
 
+  const { data: reservationPayments } = await supabaseAdmin
+    .from("payments")
+    .select("amount, note")
+    .eq("status", "paid")
+    .ilike("note", "%Reservation%");
+
+  for (const payment of reservationPayments || []) {
+    const note = String(payment.note || "");
+    const reservation = reservations.find((row) => note.includes(row.id));
+
+    if (reservation) {
+      paidByReservationId.set(
+        reservation.id,
+        (paidByReservationId.get(reservation.id) || 0) +
+          Number(payment.amount || 0)
+      );
+    }
+  }
+
   return {
     settings: settingsResult.data as Settings | null,
     settingsError: settingsResult.error?.message || null,
     items: (itemsResult.data || []) as KiddushItem[],
     itemsError: itemsResult.error?.message || null,
     reservations: reservations.map((reservation) => {
-      const paymentSum = [
+      const linkedChargeIds = [
         reservation.charge_id,
         reservation.additional_charge_id,
-      ].reduce(
+      ];
+      const paymentSum = linkedChargeIds.reduce(
         (sum, chargeId) =>
           sum + (paidByChargeId.get(String(chargeId || "")) || 0),
         0
+      ) + (linkedChargeIds.some(Boolean)
+        ? 0
+        : paidByReservationId.get(reservation.id) || 0);
+
+      const finalTotal = Number(
+        reservation.final_total_amount ?? reservation.total_amount ?? 0
       );
+      const effectiveStatus =
+        reservation.payment_status === "paid" ||
+        (finalTotal > 0 && paymentSum >= finalTotal)
+          ? "paid"
+          : reservation.payment_status;
 
       return {
         ...reservation,
@@ -179,6 +217,7 @@ async function getPageData(showAll: boolean) {
           paymentSum > 0 || reservation.payment_status !== "paid"
             ? paymentSum
             : Number(reservation.total_amount || 0),
+        effective_payment_status: effectiveStatus,
       };
     }),
     reservationsError: reservationsResult.error?.message || null,
@@ -198,11 +237,11 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
   } = await getPageData(showAllReservations);
 
   const paidTotal = reservations
-    .filter((reservation) => reservation.payment_status === "paid")
+    .filter((reservation) => reservation.effective_payment_status === "paid")
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
 
   const pendingTotal = reservations
-    .filter((reservation) => reservation.payment_status !== "paid")
+    .filter((reservation) => reservation.effective_payment_status !== "paid")
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
 
   return (
@@ -555,7 +594,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8b6b2e]">
-                      {formatDate(reservation.shabbos_date)}
+                      {formatShabbos(reservation.shabbos_date)}
                     </p>
                     <h3 className="mt-1 text-lg font-black">
                       {reservation.sponsor_name}
@@ -626,7 +665,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   ) : null}
                   <div>
                     <p className="font-bold capitalize text-slate-900">
-                      {reservation.payment_status.replaceAll("_", " ")}
+                      {reservation.effective_payment_status.replaceAll("_", " ")}
                     </p>
                     <p className="text-xs text-slate-500">
                       {reservation.payment_method || "No method"}
@@ -634,7 +673,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         ? ` | ${reservation.payment_reference}`
                         : ""}
                     </p>
-                    {reservation.payment_status !== "paid" ? (
+                    {reservation.effective_payment_status !== "paid" ? (
                       <form
                         action={markKiddushPaid.bind(null, reservation.id)}
                         className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
@@ -701,7 +740,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                 {reservations.map((reservation) => (
                   <tr key={reservation.id} className="bg-[#fbf8f2] align-top">
                     <td className="rounded-l-2xl px-3 py-3 font-bold">
-                      {formatDate(reservation.shabbos_date)}
+                      {formatShabbos(reservation.shabbos_date)}
                     </td>
                     <td className="px-3 py-3">
                       <p className="font-bold">{reservation.sponsor_name}</p>
@@ -789,7 +828,10 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                     </td>
                     <td className="px-3 py-3">
                       <p className="font-bold capitalize">
-                        {reservation.payment_status.replaceAll("_", " ")}
+                        {reservation.effective_payment_status.replaceAll(
+                          "_",
+                          " "
+                        )}
                       </p>
                       <p className="text-xs text-slate-500">
                         {reservation.payment_method || "—"}
@@ -799,7 +841,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           {reservation.payment_reference}
                         </p>
                       ) : null}
-                      {reservation.payment_status !== "paid" ? (
+                      {reservation.effective_payment_status !== "paid" ? (
                         <form
                           action={markKiddushPaid.bind(null, reservation.id)}
                           className="mt-2 flex gap-2"

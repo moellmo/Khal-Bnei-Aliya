@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { formatKiddushShabbosLong } from "./shabbos";
 
 type KiddushReservationEmailOptions = {
   reservationId: string;
@@ -43,21 +44,6 @@ function formatMoney(amount: number) {
     style: "currency",
     currency: "USD",
   }).format(Number(amount || 0));
-}
-
-function formatDate(value: string) {
-  const date = new Date(`${value}T12:00:00`);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  }).format(date);
 }
 
 function getEmailConfig() {
@@ -124,7 +110,8 @@ export async function sendKiddushReservationNotification(
   }
 
   const resend = new Resend(apiKey);
-  const subject = `Kiddush reserved for ${formatDate(options.shabbosDate)}`;
+  const shabbosLabel = formatKiddushShabbosLong(options.shabbosDate);
+  const subject = `Kiddush reserved for ${shabbosLabel}`;
 
   const html = `
     <div style="font-family:Arial,sans-serif;background:#f7f3ea;padding:32px;color:#0f172a;">
@@ -134,7 +121,7 @@ export async function sendKiddushReservationNotification(
           <h1 style="margin:10px 0 0;font-size:28px;line-height:1.2;">Kiddush Reservation</h1>
         </div>
         <div style="padding:28px;line-height:1.6;">
-          <p><strong>Shabbos:</strong> ${escapeHtml(formatDate(options.shabbosDate))}</p>
+          <p><strong>Shabbos date:</strong> ${escapeHtml(shabbosLabel)}</p>
           <p><strong>Sponsor:</strong> ${escapeHtml(options.sponsorName)}</p>
           <p><strong>Email:</strong> ${escapeHtml(options.sponsorEmail)}</p>
           <p><strong>Phone:</strong> ${escapeHtml(options.sponsorPhone || "Not provided")}</p>
