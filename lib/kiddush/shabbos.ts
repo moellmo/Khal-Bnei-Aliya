@@ -19,10 +19,9 @@ export function formatKiddushShabbosLong(dateValue: string) {
     return dateValue;
   }
 
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "long",
+  return `Shabbos, ${new Intl.DateTimeFormat("en-US", {
     month: "long",
     day: "numeric",
     year: "numeric",
-  }).format(date);
+  }).format(date)}`;
 }
