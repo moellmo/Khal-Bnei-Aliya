@@ -646,6 +646,9 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         ? ` | ${reservation.sponsor_phone}`
                         : ""}
                     </p>
+                    <span className="mt-3 inline-flex rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-black text-white">
+                      View Full Info / Bill Add-ons
+                    </span>
                   </div>
                   <p className="rounded-full bg-white px-3 py-1 text-sm font-black">
                     {formatMoney(
