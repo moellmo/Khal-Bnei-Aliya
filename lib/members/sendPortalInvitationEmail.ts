@@ -81,7 +81,7 @@ export async function sendPortalInvitationEmail({
     };
   }
 
-  const inviteUrl = `${siteOrigin}/auth/confirm?token_hash=${encodeURIComponent(
+  const inviteUrl = `${siteOrigin}/member/accept-invite?token_hash=${encodeURIComponent(
     tokenHash
   )}&type=${encodeURIComponent(type)}&next=${encodeURIComponent(
     "/member/set-password"

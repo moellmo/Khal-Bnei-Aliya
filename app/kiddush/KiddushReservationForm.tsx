@@ -208,12 +208,9 @@ export default function KiddushReservationForm({
             <p className="mt-1 text-xs font-bold text-slate-200">
               Special requests charged separately
             </p>
-            <p className="mt-1 text-xs font-semibold text-slate-300">
-              Includes {formatMoney(baseFeeAmount)} base Kiddush charge
-            </p>
             {minimumAdjustment > 0 ? (
               <p className="mt-1 text-xs font-semibold text-slate-300">
-                Kiddush minimum applied
+                Minimum total: {formatMoney(minimumTotalAmount)}
               </p>
             ) : null}
           </div>
