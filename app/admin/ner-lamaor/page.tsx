@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 
 export default function NerLamaorPage() {
   return (
-    <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
-      <section className="mx-auto max-w-7xl px-5 py-8 sm:px-6">
+    <main className="ner-lamaor-print-root min-h-screen bg-[#f7f3ea] text-slate-900">
+      <section className="mx-auto max-w-7xl px-5 py-8 sm:px-6 print:max-w-none print:p-0">
         <div className="print:hidden">
           <Link
             href="/admin"

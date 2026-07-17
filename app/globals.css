@@ -32,6 +32,11 @@ body {
 }
 
 @media print {
+  @page ner-lamaor-sign {
+    size: letter landscape;
+    margin: 0;
+  }
+
   body {
     background: #ffffff;
   }
@@ -39,5 +44,15 @@ body {
   main {
     min-height: auto !important;
     background: #ffffff !important;
+  }
+
+  .ner-lamaor-print-root {
+    page: ner-lamaor-sign;
+  }
+
+  .ner-lamaor-print-sign {
+    width: 11in;
+    height: 8.5in;
+    max-width: 11in !important;
   }
 }

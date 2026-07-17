@@ -69,7 +69,7 @@ export default function NerLamaorEditor() {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="grid gap-6 print:block lg:grid-cols-[360px_minmax(0,1fr)]">
       <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm print:hidden">
         <h2 className="text-xl font-black">Edit Monthly Sign</h2>
 
@@ -185,8 +185,8 @@ export default function NerLamaorEditor() {
         </button>
       </div>
 
-      <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-5 shadow-sm print:border-0 print:p-0 print:shadow-none">
-        <div className="relative mx-auto aspect-[11/8.5] max-w-[1100px] overflow-hidden bg-white print:max-w-none">
+      <div className="rounded-[2rem] border border-[#e3d9c7] bg-white p-5 shadow-sm print:rounded-none print:border-0 print:p-0 print:shadow-none">
+        <div className="ner-lamaor-print-sign relative mx-auto aspect-[11/8.5] max-w-[1100px] overflow-hidden bg-white print:max-w-none">
           {templateUrl ? (
             <img
               src={templateUrl}
