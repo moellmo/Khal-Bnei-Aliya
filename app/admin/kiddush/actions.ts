@@ -252,8 +252,6 @@ export async function updateKiddushFinalTotal(
 ) {
   await requireAdmin();
 
-  const finalTotal = Math.max(0, getNumber(formData, "final_total_amount"));
-
   const { data: reservation, error: reservationError } = await supabaseAdmin
     .from("kiddush_reservations")
     .select(
@@ -322,11 +320,12 @@ export async function updateKiddushFinalTotal(
     paidAmount = Number(reservation.total_amount || 0);
   }
 
+  const originalTotal = Number(reservation.total_amount || 0);
+  const finalTotal = formData.has("add_on_amount")
+    ? originalTotal + Math.max(0, getNumber(formData, "add_on_amount"))
+    : Math.max(0, getNumber(formData, "final_total_amount"));
   const remainingAmount = Math.max(0, finalTotal - paidAmount);
-  const specialRequestAmount = Math.max(
-    0,
-    finalTotal - Number(reservation.total_amount || 0)
-  );
+  const specialRequestAmount = Math.max(0, finalTotal - originalTotal);
   let additionalChargeId = reservation.additional_charge_id || null;
 
   if (remainingAmount > 0) {

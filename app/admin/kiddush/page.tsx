@@ -157,6 +157,10 @@ function balanceDue(reservation: Reservation) {
   return Math.max(0, finalTotal(reservation) - reservation.amount_paid);
 }
 
+function addOnAmount(reservation: Reservation) {
+  return Math.max(0, finalTotal(reservation) - Number(reservation.total_amount || 0));
+}
+
 async function getPageData(showAll: boolean) {
   const today = new Date().toISOString().slice(0, 10);
   const [settingsResult, itemsResult, reservationsResult] = await Promise.all([
@@ -735,15 +739,23 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                     action={updateKiddushFinalTotal.bind(null, reservation.id)}
                     className="grid gap-3 rounded-xl bg-white p-3"
                   >
-                    <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="grid gap-2 sm:grid-cols-4">
+                      <div className="rounded-xl bg-[#fbf8f2] p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Original Kiddush Total
+                        </p>
+                        <p className="mt-1 text-lg font-black">
+                          {formatMoney(reservation.total_amount)}
+                        </p>
+                      </div>
                       <label className="grid gap-1 text-sm font-bold text-slate-700">
-                        Actual final total with add-ons
+                        Add-ons / extra amount to bill
                         <input
-                          name="final_total_amount"
+                          name="add_on_amount"
                           type="number"
                           min="0"
                           step="0.01"
-                          defaultValue={finalTotal(reservation).toFixed(2)}
+                          defaultValue={addOnAmount(reservation).toFixed(2)}
                           className="rounded-lg border border-[#d8cdb7] px-3 py-2"
                         />
                       </label>
@@ -765,8 +777,8 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </div>
                     </div>
                     <p className="text-xs font-semibold text-slate-500">
-                      The emailed payment link is created only for the unpaid
-                      difference after subtracting what was already paid.
+                      Enter only the extra/add-on amount. The emailed payment
+                      link is created only for the remaining balance.
                     </p>
                     <button className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
                       Send Payment Link for Balance Due Only
@@ -892,17 +904,29 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           className="mt-2 grid gap-3"
                         >
                           <div className="grid gap-2">
-                            <label className="grid gap-1 text-xs font-bold text-slate-600">
-                              Actual final total with add-ons
-                              <input
-                                name="final_total_amount"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                defaultValue={finalTotal(reservation).toFixed(2)}
-                                className="w-40 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
-                              />
-                            </label>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-lg bg-[#fbf8f2] p-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                  Original Kiddush Total
+                                </p>
+                                <p className="font-black">
+                                  {formatMoney(reservation.total_amount)}
+                                </p>
+                              </div>
+                              <label className="grid gap-1 text-xs font-bold text-slate-600">
+                                Add-ons / extra amount to bill
+                                <input
+                                  name="add_on_amount"
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  defaultValue={addOnAmount(
+                                    reservation
+                                  ).toFixed(2)}
+                                  className="w-40 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
+                                />
+                              </label>
+                            </div>
                             <div className="grid gap-2 sm:grid-cols-2">
                               <div className="rounded-lg bg-[#fbf8f2] p-2">
                                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
@@ -923,7 +947,8 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                             </div>
                           </div>
                           <p className="text-[11px] font-semibold text-slate-500">
-                            Payment link sends only the unpaid balance.
+                            Enter only the add-on amount. Payment link sends
+                            only the unpaid balance.
                           </p>
                           <button className="rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-bold text-white">
                             Send Payment Link for Balance Due Only
