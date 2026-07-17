@@ -149,6 +149,14 @@ function shortText(value: string | null | undefined, maxLength = 70) {
   return `${text.slice(0, maxLength).trim()}...`;
 }
 
+function finalTotal(reservation: Reservation) {
+  return Number(reservation.final_total_amount ?? reservation.total_amount ?? 0);
+}
+
+function balanceDue(reservation: Reservation) {
+  return Math.max(0, finalTotal(reservation) - reservation.amount_paid);
+}
+
 async function getPageData(showAll: boolean) {
   const today = new Date().toISOString().slice(0, 10);
   const [settingsResult, itemsResult, reservationsResult] = await Promise.all([
@@ -651,9 +659,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                     </span>
                   </div>
                   <p className="rounded-full bg-white px-3 py-1 text-sm font-black">
-                    {formatMoney(
-                      reservation.final_total_amount ?? reservation.total_amount
-                    )}
+                    {formatMoney(finalTotal(reservation))}
                   </p>
                 </summary>
 
@@ -676,15 +682,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         Remains
                       </p>
                       <p className="font-black">
-                        {formatMoney(
-                          Math.max(
-                            0,
-                            Number(
-                              reservation.final_total_amount ??
-                                reservation.total_amount
-                            ) - reservation.amount_paid
-                          )
-                        )}
+                        {formatMoney(balanceDue(reservation))}
                       </p>
                     </div>
                   </div>
@@ -735,24 +733,43 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   </div>
                   <form
                     action={updateKiddushFinalTotal.bind(null, reservation.id)}
-                    className="grid gap-2 rounded-xl bg-white p-3 sm:grid-cols-[1fr_auto]"
+                    className="grid gap-3 rounded-xl bg-white p-3"
                   >
-                    <label className="grid gap-1 text-sm font-bold text-slate-700">
-                      Actual final total with add-ons
-                      <input
-                        name="final_total_amount"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        defaultValue={Number(
-                          reservation.final_total_amount ??
-                            reservation.total_amount
-                        ).toFixed(2)}
-                        className="rounded-lg border border-[#d8cdb7] px-3 py-2"
-                      />
-                    </label>
-                    <button className="self-end rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
-                      Send Payment Link for Difference
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <label className="grid gap-1 text-sm font-bold text-slate-700">
+                        Actual final total with add-ons
+                        <input
+                          name="final_total_amount"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          defaultValue={finalTotal(reservation).toFixed(2)}
+                          className="rounded-lg border border-[#d8cdb7] px-3 py-2"
+                        />
+                      </label>
+                      <div className="rounded-xl bg-[#fbf8f2] p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                          Already Paid
+                        </p>
+                        <p className="mt-1 text-lg font-black">
+                          {formatMoney(reservation.amount_paid)}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-[#fff7df] p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
+                          Balance Due
+                        </p>
+                        <p className="mt-1 text-lg font-black">
+                          {formatMoney(balanceDue(reservation))}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-500">
+                      The emailed payment link is created only for the unpaid
+                      difference after subtracting what was already paid.
+                    </p>
+                    <button className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
+                      Send Payment Link for Balance Due Only
                     </button>
                   </form>
                 </div>
@@ -823,22 +840,11 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </p>
                       <p className="text-xs text-slate-500">
                         Final:{" "}
-                        {formatMoney(
-                          reservation.final_total_amount ??
-                            reservation.total_amount
-                        )}
+                        {formatMoney(finalTotal(reservation))}
                       </p>
                       <p className="text-xs text-slate-500">
                         Remains:{" "}
-                        {formatMoney(
-                          Math.max(
-                            0,
-                            Number(
-                              reservation.final_total_amount ??
-                                reservation.total_amount
-                            ) - reservation.amount_paid
-                          )
-                        )}
+                        {formatMoney(balanceDue(reservation))}
                       </p>
                       <details className="mt-2 rounded-xl bg-white p-2">
                         <summary className="cursor-pointer text-xs font-black text-[#1d2940]">
@@ -883,24 +889,44 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                             null,
                             reservation.id
                           )}
-                          className="mt-2 grid gap-2"
+                          className="mt-2 grid gap-3"
                         >
-                          <label className="grid gap-1 text-xs font-bold text-slate-600">
-                            Actual final total
-                            <input
-                              name="final_total_amount"
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              defaultValue={Number(
-                                reservation.final_total_amount ??
-                                  reservation.total_amount
-                              ).toFixed(2)}
-                              className="w-36 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
-                            />
-                          </label>
+                          <div className="grid gap-2">
+                            <label className="grid gap-1 text-xs font-bold text-slate-600">
+                              Actual final total with add-ons
+                              <input
+                                name="final_total_amount"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                defaultValue={finalTotal(reservation).toFixed(2)}
+                                className="w-40 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
+                              />
+                            </label>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              <div className="rounded-lg bg-[#fbf8f2] p-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                  Already Paid
+                                </p>
+                                <p className="font-black">
+                                  {formatMoney(reservation.amount_paid)}
+                                </p>
+                              </div>
+                              <div className="rounded-lg bg-[#fff7df] p-2">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
+                                  Balance Due
+                                </p>
+                                <p className="font-black">
+                                  {formatMoney(balanceDue(reservation))}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-[11px] font-semibold text-slate-500">
+                            Payment link sends only the unpaid balance.
+                          </p>
                           <button className="rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-bold text-white">
-                            Send Payment Link for Difference
+                            Send Payment Link for Balance Due Only
                           </button>
                         </form>
                       </details>
