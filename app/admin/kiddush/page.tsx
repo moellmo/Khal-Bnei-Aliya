@@ -102,10 +102,51 @@ function itemSummary(items: unknown) {
     .map((item) => {
       if (!item || typeof item !== "object") return null;
       const row = item as Record<string, unknown>;
-      return `${row.quantity || 0} x ${row.name || "Item"}`;
+      return `${row.name || "Item"} - Qty ${row.quantity || 0}`;
     })
     .filter(Boolean)
     .join(", ");
+}
+
+function itemCount(items: unknown) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return 0;
+  }
+
+  return items.reduce((sum, item) => {
+    if (!item || typeof item !== "object") return sum;
+    const row = item as Record<string, unknown>;
+    return sum + Number(row.quantity || 0);
+  }, 0);
+}
+
+function itemList(items: unknown) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  return items
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      return {
+        name: String(row.name || "Item"),
+        quantity: Number(row.quantity || 0),
+      };
+    })
+    .filter((item): item is { name: string; quantity: number } =>
+      Boolean(item)
+    );
+}
+
+function shortText(value: string | null | undefined, maxLength = 70) {
+  const text = String(value || "").trim();
+
+  if (text.length <= maxLength) {
+    return text || "—";
+  }
+
+  return `${text.slice(0, maxLength).trim()}...`;
 }
 
 async function getPageData(showAll: boolean) {
@@ -573,9 +614,9 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                   ? "/admin/kiddush#reservations"
                   : "/admin/kiddush?view=all#reservations"
               }
-              className="self-start rounded-full border border-[#cbbd9d] bg-white px-4 py-2 text-sm font-bold text-slate-900 transition hover:bg-[#f2eadc] sm:self-center"
+              className="self-start rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#2b3a59] sm:self-center"
             >
-              {showAllReservations ? "Show Upcoming" : "View All"}
+              {showAllReservations ? "Show Upcoming" : "View All Reservations"}
             </Link>
           </div>
 
@@ -587,11 +628,11 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
 
           <div className="mt-5 grid gap-4 lg:hidden">
             {reservations.map((reservation) => (
-              <article
+              <details
                 key={`${reservation.id}-card`}
                 className="rounded-2xl bg-[#fbf8f2] p-4"
               >
-                <div className="flex items-start justify-between gap-3">
+                <summary className="flex cursor-pointer list-none items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8b6b2e]">
                       {formatShabbos(reservation.shabbos_date)}
@@ -611,7 +652,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       reservation.final_total_amount ?? reservation.total_amount
                     )}
                   </p>
-                </div>
+                </summary>
 
                 <div className="mt-4 grid gap-3 text-sm text-slate-700">
                   <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-3 text-center">
@@ -689,35 +730,30 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </form>
                     ) : null}
                   </div>
-                  {reservation.special_requests ? (
-                    <form
-                      action={updateKiddushFinalTotal.bind(
-                        null,
-                        reservation.id
-                      )}
-                      className="grid gap-2 rounded-xl bg-white p-3 sm:grid-cols-[1fr_auto]"
-                    >
-                      <label className="grid gap-1 text-sm font-bold text-slate-700">
-                        Final total after special requests
-                        <input
-                          name="final_total_amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          defaultValue={Number(
-                            reservation.final_total_amount ??
-                              reservation.total_amount
-                          ).toFixed(2)}
-                          className="rounded-lg border border-[#d8cdb7] px-3 py-2"
-                        />
-                      </label>
-                      <button className="self-end rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
-                        Bill Remaining
-                      </button>
-                    </form>
-                  ) : null}
+                  <form
+                    action={updateKiddushFinalTotal.bind(null, reservation.id)}
+                    className="grid gap-2 rounded-xl bg-white p-3 sm:grid-cols-[1fr_auto]"
+                  >
+                    <label className="grid gap-1 text-sm font-bold text-slate-700">
+                      Actual final total with add-ons
+                      <input
+                        name="final_total_amount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        defaultValue={Number(
+                          reservation.final_total_amount ??
+                            reservation.total_amount
+                        ).toFixed(2)}
+                        className="rounded-lg border border-[#d8cdb7] px-3 py-2"
+                      />
+                    </label>
+                    <button className="self-end rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
+                      Send Payment Link for Difference
+                    </button>
+                  </form>
                 </div>
-              </article>
+              </details>
             ))}
           </div>
 
@@ -752,15 +788,16 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </p>
                     </td>
                     <td className="max-w-[220px] px-3 py-3 text-slate-600">
-                      {reservation.sponsorship_text}
+                      {shortText(reservation.sponsorship_text)}
                     </td>
                     <td className="max-w-[220px] px-3 py-3 text-slate-600">
-                      {itemSummary(reservation.items)}
+                      {itemList(reservation.items).length} item types /{" "}
+                      {itemCount(reservation.items)} total
                     </td>
                     <td className="max-w-[220px] px-3 py-3 text-slate-600">
                       {reservation.special_requests ? (
                         <>
-                          <p>{reservation.special_requests}</p>
+                          <p>{shortText(reservation.special_requests, 45)}</p>
                           <p className="mt-1 text-xs font-bold text-[#8b6b2e]">
                             Charged separately
                           </p>
@@ -800,7 +837,44 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           )
                         )}
                       </p>
-                      {reservation.special_requests ? (
+                      <details className="mt-2 rounded-xl bg-white p-2">
+                        <summary className="cursor-pointer text-xs font-black text-[#1d2940]">
+                          Full reservation info / bill add-ons
+                        </summary>
+                        <div className="mt-3 grid gap-3 rounded-lg bg-[#fbf8f2] p-3 text-xs text-slate-700">
+                          <div>
+                            <p className="font-black text-slate-900">
+                              Sponsorship Text
+                            </p>
+                            <p className="mt-1">{reservation.sponsorship_text}</p>
+                          </div>
+
+                          <div>
+                            <p className="font-black text-slate-900">
+                              Items Ordered
+                            </p>
+                            {itemList(reservation.items).length > 0 ? (
+                              <ul className="mt-1 grid gap-1">
+                                {itemList(reservation.items).map((item) => (
+                                  <li key={`${reservation.id}-${item.name}`}>
+                                    {item.name}: Qty {item.quantity}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-1">No standard items.</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <p className="font-black text-slate-900">
+                              Add-ons / Special Requests
+                            </p>
+                            <p className="mt-1">
+                              {reservation.special_requests || "None"}
+                            </p>
+                          </div>
+                        </div>
                         <form
                           action={updateKiddushFinalTotal.bind(
                             null,
@@ -808,23 +882,25 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           )}
                           className="mt-2 grid gap-2"
                         >
-                          <input
-                            name="final_total_amount"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            defaultValue={Number(
-                              reservation.final_total_amount ??
-                                reservation.total_amount
-                            ).toFixed(2)}
-                            className="w-32 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
-                            aria-label="Final total after special requests"
-                          />
-                          <button className="rounded-full bg-[#1d2940] px-3 py-1 text-xs font-bold text-white">
-                            Bill Remaining
+                          <label className="grid gap-1 text-xs font-bold text-slate-600">
+                            Actual final total
+                            <input
+                              name="final_total_amount"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              defaultValue={Number(
+                                reservation.final_total_amount ??
+                                  reservation.total_amount
+                              ).toFixed(2)}
+                              className="w-36 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
+                            />
+                          </label>
+                          <button className="rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-bold text-white">
+                            Send Payment Link for Difference
                           </button>
                         </form>
-                      ) : null}
+                      </details>
                     </td>
                     <td className="px-3 py-3">
                       <p className="font-bold capitalize">

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { formatKiddushShabbosLabel } from "@/lib/kiddush/shabbos";
 import { sendPaymentRequestEmail } from "@/lib/payments/sendPaymentRequestEmail";
 
 function getString(formData: FormData, key: string) {
@@ -295,6 +296,28 @@ export async function updateKiddushFinalTotal(
     );
   }
 
+  if (paidAmount <= 0) {
+    const { data: reservationPayments, error: reservationPaymentsError } =
+      await supabaseAdmin
+        .from("payments")
+        .select("amount, note")
+        .eq("status", "paid")
+        .ilike("note", `%${reservation.id}%`);
+
+    if (reservationPaymentsError) {
+      redirect(
+        `/admin/kiddush?error=${encodeURIComponent(
+          reservationPaymentsError.message
+        )}#reservations`
+      );
+    }
+
+    paidAmount = (reservationPayments || []).reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
+  }
+
   if (paidAmount <= 0 && reservation.payment_status === "paid") {
     paidAmount = Number(reservation.total_amount || 0);
   }
@@ -312,38 +335,55 @@ export async function updateKiddushFinalTotal(
       email: reservation.sponsor_email,
       phone: reservation.sponsor_phone || "",
     });
-    const shabbos = new Date(`${reservation.shabbos_date}T12:00:00`);
-    const shabbosLabel = Number.isNaN(shabbos.getTime())
-      ? String(reservation.shabbos_date)
-      : shabbos.toLocaleDateString("en-US", {
-          month: "long",
-          day: "numeric",
-          year: "numeric",
-        });
-    const description = `Kiddush special request balance for Shabbos, ${shabbosLabel}`;
+    const description = `Kiddush add-on balance for ${formatKiddushShabbosLabel(
+      reservation.shabbos_date
+    )}`;
+    let chargeIdForEmail = additionalChargeId;
 
-    const { data: charge, error: chargeError } = await supabaseAdmin
-      .from("member_charges")
-      .insert({
-        member_id: sponsor.id,
-        charge_type: "Kiddush Reservation",
-        description,
-        amount: remainingAmount,
-        status: "unpaid",
-        due_date: new Date().toISOString().slice(0, 10),
-      })
-      .select("id")
-      .single();
+    if (additionalChargeId) {
+      const { error: chargeUpdateError } = await supabaseAdmin
+        .from("member_charges")
+        .update({
+          amount: remainingAmount,
+          description,
+          status: "unpaid",
+          due_date: new Date().toISOString().slice(0, 10),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", additionalChargeId);
 
-    if (chargeError || !charge) {
-      redirect(
-        `/admin/kiddush?error=${encodeURIComponent(
-          chargeError?.message || "Unable to create balance charge."
-        )}#reservations`
-      );
+      if (chargeUpdateError) {
+        redirect(
+          `/admin/kiddush?error=${encodeURIComponent(
+            chargeUpdateError.message
+          )}#reservations`
+        );
+      }
+    } else {
+      const { data: charge, error: chargeError } = await supabaseAdmin
+        .from("member_charges")
+        .insert({
+          member_id: sponsor.id,
+          charge_type: "Kiddush Reservation",
+          description,
+          amount: remainingAmount,
+          status: "unpaid",
+          due_date: new Date().toISOString().slice(0, 10),
+        })
+        .select("id")
+        .single();
+
+      if (chargeError || !charge) {
+        redirect(
+          `/admin/kiddush?error=${encodeURIComponent(
+            chargeError?.message || "Unable to create balance charge."
+          )}#reservations`
+        );
+      }
+
+      additionalChargeId = charge.id;
+      chargeIdForEmail = charge.id;
     }
-
-    additionalChargeId = charge.id;
 
     await sendPaymentRequestEmail({
       recipient: reservation.sponsor_email,
@@ -351,7 +391,7 @@ export async function updateKiddushFinalTotal(
       amount: remainingAmount,
       chargeType: "Kiddush Reservation",
       description,
-      chargeId: charge.id,
+      chargeId: chargeIdForEmail,
       isOpenAmount: false,
     });
   }

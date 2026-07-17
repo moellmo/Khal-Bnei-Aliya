@@ -62,11 +62,12 @@ function itemsHtml(items: KiddushReservationEmailOptions["items"]) {
   }
 
   return `
+    <h2 style="margin:24px 0 8px;font-size:18px;color:#1d2940;">Items Ordered</h2>
     <table style="width:100%;border-collapse:collapse;margin-top:16px;">
       <thead>
         <tr>
           <th style="text-align:left;border-bottom:1px solid #e3d9c7;padding:8px;">Item</th>
-          <th style="text-align:right;border-bottom:1px solid #e3d9c7;padding:8px;">Qty</th>
+          <th style="text-align:right;border-bottom:1px solid #e3d9c7;padding:8px;">Quantity</th>
           <th style="text-align:right;border-bottom:1px solid #e3d9c7;padding:8px;">Total</th>
         </tr>
       </thead>
@@ -76,12 +77,12 @@ function itemsHtml(items: KiddushReservationEmailOptions["items"]) {
             (item) => `
               <tr>
                 <td style="padding:8px;border-bottom:1px solid #f1eadf;">
-                  ${escapeHtml(item.name)}
+                  <strong>${escapeHtml(item.name)}</strong>
                   <div style="color:#64748b;font-size:12px;">${escapeHtml(
                     formatMoney(item.unitPrice)
                   )} each</div>
                 </td>
-                <td style="padding:8px;border-bottom:1px solid #f1eadf;text-align:right;">${item.quantity}</td>
+                <td style="padding:8px;border-bottom:1px solid #f1eadf;text-align:right;font-weight:700;">${item.quantity}</td>
                 <td style="padding:8px;border-bottom:1px solid #f1eadf;text-align:right;font-weight:700;">${escapeHtml(
                   formatMoney(item.lineTotal)
                 )}</td>
