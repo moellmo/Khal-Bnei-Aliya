@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
+import HebrewKeyboardField from "../HebrewKeyboardField";
 
 const defaultTemplateUrl = "/admin-assets/ner-lamaor-blank-template.png";
 
@@ -90,19 +91,19 @@ export default function NerLamaorEditor() {
 
         <label className="mt-5 block space-y-2">
           <span className="font-semibold">Hebrew Month</span>
-          <input
-            dir="rtl"
+          <HebrewKeyboardField
             value={month}
-            onChange={(event) => setMonth(event.currentTarget.value)}
+            onChange={setMonth}
+            aria-label="Hebrew month"
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-right text-lg"
           />
         </label>
 
         <label className="mt-4 block space-y-2">
           <span className="font-semibold">Name</span>
-          <input
+          <HebrewKeyboardField
             value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
+            onChange={setName}
             placeholder="Sponsor name"
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
           />
@@ -119,9 +120,9 @@ export default function NerLamaorEditor() {
 
         <label className="mt-4 block space-y-2">
           <span className="font-semibold">Honor Line</span>
-          <textarea
+          <HebrewKeyboardField
             value={honorLine}
-            onChange={(event) => setHonorLine(event.currentTarget.value)}
+            onChange={setHonorLine}
             rows={3}
             placeholder="Dedication line"
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"

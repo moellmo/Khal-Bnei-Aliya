@@ -4,12 +4,15 @@ import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 type HebrewKeyboardFieldProps = {
-  name: string;
+  name?: string;
   defaultValue?: string;
+  value?: string;
   placeholder?: string;
   className?: string;
   rows?: number;
+  disabled?: boolean;
   "aria-label"?: string;
+  onChange?: (value: string) => void;
 };
 
 const hebrewKeys = [
@@ -47,15 +50,27 @@ const hebrewKeys = [
 export default function HebrewKeyboardField({
   name,
   defaultValue = "",
+  value: controlledValue,
   placeholder,
   className,
   rows,
+  disabled,
   "aria-label": ariaLabel,
+  onChange,
 }: HebrewKeyboardFieldProps) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(defaultValue);
+  const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const value = controlledValue ?? uncontrolledValue;
+
+  function updateValue(nextValue: string) {
+    if (controlledValue === undefined) {
+      setUncontrolledValue(nextValue);
+    }
+
+    onChange?.(nextValue);
+  }
 
   function insertText(text: string) {
     const field = rows ? textareaRef.current : inputRef.current;
@@ -63,7 +78,7 @@ export default function HebrewKeyboardField({
     const end = field?.selectionEnd ?? value.length;
     const nextValue = `${value.slice(0, start)}${text}${value.slice(end)}`;
 
-    setValue(nextValue);
+    updateValue(nextValue);
 
     window.requestAnimationFrame(() => {
       field?.focus();
@@ -74,7 +89,7 @@ export default function HebrewKeyboardField({
   function handleChange(
     event: ChangeEvent<HTMLInputElement> | ChangeEvent<HTMLTextAreaElement>
   ) {
-    setValue(event.currentTarget.value);
+    updateValue(event.currentTarget.value);
   }
 
   return (
@@ -89,6 +104,7 @@ export default function HebrewKeyboardField({
           className={className}
           aria-label={ariaLabel}
           rows={rows}
+          disabled={disabled}
           onChange={handleChange}
         />
       ) : (
@@ -100,14 +116,16 @@ export default function HebrewKeyboardField({
           dir="auto"
           className={className}
           aria-label={ariaLabel}
+          disabled={disabled}
           onChange={handleChange}
         />
       )}
 
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
-        className="mt-2 rounded-full border border-[#cbbd9d] bg-white px-3 py-1.5 text-xs font-black text-[#1d2940] hover:bg-[#fbf8f2]"
+        className="mt-2 rounded-full border border-[#cbbd9d] bg-white px-3 py-1.5 text-xs font-black text-[#1d2940] hover:bg-[#fbf8f2] disabled:cursor-not-allowed disabled:opacity-40"
       >
         Hebrew Keyboard
       </button>

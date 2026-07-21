@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { getDepositBatchRows } from "@/lib/accounting/statements";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import HebrewKeyboardField from "../HebrewKeyboardField";
 import { QuickChargeMemberPicker } from "../QuickChargeMemberPicker";
-import HebrewKeyboardField from "./HebrewKeyboardField";
 import {
   addExpense,
   addZellePayment,
@@ -10,6 +11,7 @@ import {
   deleteExpense,
   generateRecurringExpenses,
   importAccountingCsv,
+  recordBulkSplitPayment,
   recordManualPayment,
   saveBankSnapshot,
   saveRecurringExpenseTemplate,
@@ -59,6 +61,8 @@ type PageProps = {
     year?: string;
     view?: string;
   status?: string;
+    depositEnd?: string;
+    depositStart?: string;
     accountingError?: string;
     expenseAdded?: string;
     zelleAdded?: string;
@@ -155,6 +159,7 @@ type Payment = {
 type OpenChargeOption = {
   id: string;
   amount: number;
+  paid_amount: number | null;
   charge_type: string | null;
   description: string | null;
   due_date: string | null;
@@ -240,6 +245,20 @@ function dateRange(month: number | null, year: number) {
   return { start, end };
 }
 
+function getMonthDateRange(month: number, year: number) {
+  const start = `${year}-${String(month).padStart(2, "0")}-01`;
+  const end =
+    month < 12
+      ? `${year}-${String(month + 1).padStart(2, "0")}-01`
+      : `${year + 1}-01-01`;
+
+  return { start, end };
+}
+
+function isDateString(value: string | null | undefined) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value || "");
+}
+
 function getOpenChargeMember(charge: OpenChargeOption) {
   return Array.isArray(charge.members) ? charge.members[0] : charge.members;
 }
@@ -249,10 +268,14 @@ function getOpenChargeLabel(charge: OpenChargeOption) {
   const memberName = [member?.last_name, member?.first_name]
     .filter(Boolean)
     .join(", ");
+  const balance = Math.max(
+    0,
+    Number(charge.amount || 0) - Number(charge.paid_amount || 0)
+  );
 
   return [
     memberName || "Unknown member",
-    formatMoney(charge.amount),
+    formatMoney(balance || charge.amount),
     charge.charge_type || "Charge",
     charge.description || "",
   ]
@@ -526,7 +549,7 @@ async function getOpenChargeOptions(): Promise<OpenChargeOption[]> {
   const { data, error } = await supabaseAdmin
     .from("member_charges")
     .select(
-      "id, amount, charge_type, description, due_date, members(id, first_name, last_name, email)"
+      "id, amount, paid_amount, charge_type, description, due_date, members(id, first_name, last_name, email)"
     )
     .neq("status", "paid")
     .order("due_date", { ascending: true })
@@ -563,6 +586,13 @@ export default async function AccountingPage({
 
   const selectedStatus = query?.status || "all";
   const activeView = query?.view || "monthly";
+  const selectedMonthRange = getMonthDateRange(selectedMonth, selectedYear);
+  const depositStart = isDateString(query?.depositStart)
+    ? String(query?.depositStart)
+    : selectedMonthRange.start;
+  const depositEnd = isDateString(query?.depositEnd)
+    ? String(query?.depositEnd)
+    : selectedMonthRange.end;
   const selectedMonthStart = `${selectedYear}-${String(selectedMonth).padStart(
     2,
     "0"
@@ -580,6 +610,7 @@ export default async function AccountingPage({
     yearlyDuesCharges,
     openChargeOptions,
     bankSnapshotResult,
+    depositBatches,
   ] = await Promise.all([
     getAccountingRows(selectedMonth, selectedYear),
     getExpenses(selectedMonth, selectedYear),
@@ -592,6 +623,13 @@ export default async function AccountingPage({
     getYearlyDuesCharges(selectedYear),
     getOpenChargeOptions(),
     getLatestBankSnapshot(),
+    getDepositBatchRows({
+      startDate: depositStart,
+      endDate: depositEnd,
+    }).catch((error) => {
+      console.error("Unable to load deposit batches:", error);
+      return [];
+    }),
   ]);
   const bankActivitySinceSnapshot = await getCashActivitySince(
     bankSnapshotResult.row?.snapshot_date
@@ -953,6 +991,7 @@ export default async function AccountingPage({
                 ["billing", "Billing"],
                 ["expenses", "Expenses"],
                 ["payments", "Payments"],
+                ["deposits", "Deposits"],
                 ["yearly", "Yearly"],
                 ["uploads", "Uploads"],
                 ["receipts", "Receipts"],
@@ -978,6 +1017,7 @@ export default async function AccountingPage({
               ["billing", "Billing"],
               ["expenses", "Expenses"],
               ["payments", "Payments"],
+              ["deposits", "Deposits"],
               ["yearly", "Yearly"],
               ["uploads", "Uploads"],
               ["receipts", "Receipts"],
@@ -1001,6 +1041,7 @@ export default async function AccountingPage({
           activeView === "billing" ||
           activeView === "expenses" ||
           activeView === "payments" ||
+          activeView === "deposits" ||
           activeView === "yearly" ||
           activeView === "cashflow") && (
         <div
@@ -1320,6 +1361,121 @@ export default async function AccountingPage({
                 </p>
               </div>
 
+            </div>
+
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <form
+                action="/api/accounting/statements/yearly-tax"
+                method="GET"
+                target="_blank"
+                className="rounded-2xl bg-[#fbf8f2] p-5"
+              >
+                <h3 className="text-lg font-black">Yearly Tax Statements</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Download contribution statements for one member or everyone
+                  with recorded paid payments in the selected year.
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Year
+                    </span>
+                    <input
+                      name="year"
+                      type="number"
+                      min="2020"
+                      defaultValue={selectedYear}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="min-w-0 space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Member
+                    </span>
+                    <select
+                      name="memberId"
+                      defaultValue="all"
+                      className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    >
+                      <option value="all">All members with payments</option>
+                      {zelleMemberOptions.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {[member.last_name, member.first_name]
+                            .filter(Boolean)
+                            .join(", ") || member.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="mt-4 rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                >
+                  Download Tax Statement PDF
+                </button>
+              </form>
+
+              <form
+                action="/api/accounting/statements/member-account"
+                method="GET"
+                target="_blank"
+                className="rounded-2xl bg-[#fbf8f2] p-5"
+              >
+                <h3 className="text-lg font-black">Member Account Statement</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Download a ledger-style statement with charges, payments, and
+                  running balance for the selected member.
+                </p>
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
+                  <label className="space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Year
+                    </span>
+                    <input
+                      name="year"
+                      type="number"
+                      min="2020"
+                      defaultValue={selectedYear}
+                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    />
+                  </label>
+
+                  <label className="min-w-0 space-y-1">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                      Member
+                    </span>
+                    <select
+                      name="memberId"
+                      required
+                      defaultValue=""
+                      className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                    >
+                      <option value="" disabled>
+                        Select member
+                      </option>
+                      {zelleMemberOptions.map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {[member.last_name, member.first_name]
+                            .filter(Boolean)
+                            .join(", ") || member.email}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="mt-4 rounded-full bg-[#8b6b2e] px-5 py-2.5 text-sm font-bold text-white"
+                >
+                  Download Account Statement PDF
+                </button>
+              </form>
             </div>
 
             <div className="mt-8">
@@ -2467,6 +2623,155 @@ export default async function AccountingPage({
         )}
 
         {activeView === "payments" && (
+          <form
+            action={recordBulkSplitPayment}
+            className="mt-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
+          >
+            <input type="hidden" name="month" value={selectedMonth} />
+            <input type="hidden" name="year" value={selectedYear} />
+
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  Split One Payment Across Invoices
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Enter one check, cash, Zelle, or other payment, then apply
+                  exact amounts to the invoices it covers.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                {openChargeOptions.length} open invoices
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-5">
+              <label className="min-w-0 space-y-2">
+                <span className="font-semibold">Payment Method</span>
+                <select
+                  name="payment_method"
+                  defaultValue="Check"
+                  className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                >
+                  <option value="Check">Check</option>
+                  <option value="Cash">Cash</option>
+                  <option value="Zelle">Zelle</option>
+                  <option value="Other">Other</option>
+                </select>
+              </label>
+
+              <label className="min-w-0 space-y-2">
+                <span className="font-semibold">Total Payment</span>
+                <input
+                  name="total_payment"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="min-w-0 space-y-2">
+                <span className="font-semibold">Paid Date</span>
+                <input
+                  name="paid_date"
+                  type="date"
+                  required
+                  defaultValue={new Date().toISOString().slice(0, 10)}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+
+              <label className="min-w-0 space-y-2 md:col-span-2">
+                <span className="font-semibold">Receipt Email</span>
+                <input
+                  name="payer_email"
+                  type="email"
+                  placeholder="Optional"
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+            </div>
+
+            <label className="mt-4 block min-w-0 space-y-2">
+              <span className="font-semibold">Payment Note</span>
+              <textarea
+                name="payment_note"
+                rows={2}
+                placeholder="Check number, payer name, memo..."
+                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+              />
+            </label>
+
+            <div className="mt-5 overflow-hidden rounded-2xl border border-[#e3d9c7]">
+              <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-3 bg-[#fbf8f2] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                <span>Invoice</span>
+                <span>Apply Amount</span>
+              </div>
+
+              <div className="max-h-[420px] overflow-y-auto">
+                {openChargeOptions.map((charge) => {
+                  const balance = Math.max(
+                    0,
+                    Number(charge.amount || 0) - Number(charge.paid_amount || 0)
+                  );
+
+                  return (
+                    <div
+                      key={charge.id}
+                      className="grid grid-cols-[minmax(0,1fr)_150px] gap-3 border-t border-[#e3d9c7] px-4 py-3"
+                    >
+                      <input
+                        type="hidden"
+                        name="split_charge_id"
+                        value={charge.id}
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate font-bold">
+                          {getOpenChargeLabel(charge)}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-slate-500">
+                          Due {formatDate(charge.due_date)} · Balance{" "}
+                          {formatMoney(balance)}
+                        </p>
+                      </div>
+                      <input
+                        name="split_amount"
+                        type="number"
+                        min="0"
+                        max={balance || undefined}
+                        step="0.01"
+                        placeholder="0.00"
+                        className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
+              <input
+                name="send_receipt"
+                type="checkbox"
+                defaultChecked
+                className="h-4 w-4"
+              />
+              Send receipt emails for each invoice split when an email is
+              available
+            </label>
+
+            <button
+              type="submit"
+              className="mt-5 rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
+            >
+              Record Split Payment
+            </button>
+          </form>
+        )}
+
+        {activeView === "payments" && (
           <div className="mt-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
@@ -2547,6 +2852,158 @@ export default async function AccountingPage({
                 </Link>
               </div>
             )}
+          </div>
+        )}
+
+        {activeView === "deposits" && (
+          <div className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">
+                  Deposit Batch Reconciliation
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Payments grouped by deposit date and method, ready to compare
+                  against the bank statement.
+                </p>
+              </div>
+              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
+                {formatMoney(
+                  depositBatches.reduce(
+                    (sum, batch) => sum + Number(batch.amount || 0),
+                    0
+                  )
+                )}
+              </span>
+            </div>
+
+            <form method="GET" className="mt-5 rounded-2xl bg-[#fbf8f2] p-4">
+              <input type="hidden" name="view" value="deposits" />
+              <input type="hidden" name="month" value={selectedMonth} />
+              <input type="hidden" name="year" value={selectedYear} />
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto]">
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    Start Date
+                  </span>
+                  <input
+                    name="depositStart"
+                    type="date"
+                    defaultValue={depositStart}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                  />
+                </label>
+
+                <label className="space-y-1">
+                  <span className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                    End Date
+                  </span>
+                  <input
+                    name="depositEnd"
+                    type="date"
+                    defaultValue={depositEnd}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-3 py-2"
+                  />
+                </label>
+
+                <button
+                  type="submit"
+                  className="self-end rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white"
+                >
+                  Update
+                </button>
+
+                <a
+                  href={`/api/accounting/deposits/export?start=${depositStart}&end=${depositEnd}`}
+                  className="self-end rounded-full border border-[#cbbd9d] bg-white px-5 py-2.5 text-center text-sm font-bold text-[#1d2940]"
+                >
+                  Export CSV
+                </a>
+              </div>
+            </form>
+
+            <div className="mt-5 space-y-4">
+              {depositBatches.map((batch) => (
+                <details
+                  key={`${batch.depositDate}-${batch.method}`}
+                  className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-4"
+                  open
+                >
+                  <summary className="cursor-pointer list-none">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-black">
+                          {formatDate(batch.depositDate)} deposit:{" "}
+                          {batch.method}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-slate-500">
+                          {batch.count} payments in this batch
+                        </p>
+                      </div>
+                      <p className="text-xl font-black text-[#1d2940]">
+                        {formatMoney(batch.amount)}
+                      </p>
+                    </div>
+                  </summary>
+
+                  <div className="mt-4 overflow-x-auto rounded-2xl border border-[#e3d9c7] bg-white">
+                    <table className="min-w-[760px] w-full text-left text-sm">
+                      <thead className="bg-white text-xs uppercase tracking-[0.14em] text-slate-500">
+                        <tr>
+                          <th className="px-4 py-3">Member</th>
+                          <th className="px-4 py-3">Description</th>
+                          <th className="px-4 py-3">Receipt</th>
+                          <th className="px-4 py-3 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#eee5d8]">
+                        {batch.payments.map((payment) => {
+                          const charge = getPaymentCharge(payment);
+
+                          return (
+                            <tr key={payment.id}>
+                              <td className="px-4 py-3 font-bold">
+                                {getPaymentPayerName(payment)}
+                              </td>
+                              <td className="px-4 py-3 text-slate-600">
+                                {charge?.description ||
+                                  charge?.charge_type ||
+                                  payment.note ||
+                                  "Payment"}
+                              </td>
+                              <td className="px-4 py-3">
+                                {payment.receipt_number ? (
+                                  <a
+                                    href={`/api/receipts/${payment.id}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="font-bold text-[#8b6b2e]"
+                                  >
+                                    {payment.receipt_number}
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-right font-black">
+                                {formatMoney(payment.amount)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ))}
+
+              {depositBatches.length === 0 ? (
+                <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center text-slate-500">
+                  No paid payments found for this deposit range.
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
 

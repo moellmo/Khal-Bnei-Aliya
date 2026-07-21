@@ -25,6 +25,10 @@ function cents(amount: number | string | null | undefined) {
   return Math.round(Number(amount || 0) * 100);
 }
 
+function getPaymentProvider(paymentMethod: string) {
+  return paymentMethod.toLowerCase() === "card" ? "sola" : "manual";
+}
+
 function normalizeName(value: string | null | undefined) {
   return String(value || "")
     .toLowerCase()
@@ -959,7 +963,7 @@ export async function recordManualPayment(formData: FormData) {
 
   const { data: charge, error: chargeError } = await supabaseAdmin
     .from("member_charges")
-    .select("id, member_id, amount, status, charge_type, description")
+    .select("id, member_id, amount, status, paid_amount, charge_type, description")
     .eq("id", chargeId)
     .maybeSingle();
 
@@ -980,8 +984,9 @@ export async function recordManualPayment(formData: FormData) {
   }
 
   const paidAt = `${paidDate}T12:00:00.000Z`;
-  const paymentProvider =
-    paymentMethod.toLowerCase() === "card" ? "sola" : "manual";
+  const paymentProvider = getPaymentProvider(paymentMethod);
+  const totalPaidAmount = Number(charge.paid_amount || 0) + paidAmount;
+  const isFullyPaid = cents(totalPaidAmount) >= cents(charge.amount);
 
   const { data: payment, error: paymentError } = await supabaseAdmin
     .from("payments")
@@ -1010,11 +1015,11 @@ export async function recordManualPayment(formData: FormData) {
   const { error: chargeUpdateError } = await supabaseAdmin
     .from("member_charges")
     .update({
-      status: "paid",
-      paid_at: paidAt,
+      status: isFullyPaid ? "paid" : charge.status || "unpaid",
+      paid_at: isFullyPaid ? paidAt : null,
       payment_method: paymentMethod,
       payment_provider: paymentProvider,
-      paid_amount: paidAmount,
+      paid_amount: totalPaidAmount,
       payment_note: paymentNote,
     })
     .eq("id", charge.id);
@@ -1042,6 +1047,194 @@ export async function recordManualPayment(formData: FormData) {
   revalidatePath("/admin/accounting");
   revalidatePath(`/admin/members/${charge.member_id}`);
   revalidatePath(`/admin/members/${charge.member_id}/payments`);
+  revalidatePath("/member/dashboard");
+
+  redirect(`${redirectUrl}&paymentAdded=1`);
+}
+
+export async function recordBulkSplitPayment(formData: FormData) {
+  const paymentMethod = getString(formData, "payment_method") || "Check";
+  const paidDate =
+    getString(formData, "paid_date") ||
+    new Date().toISOString().slice(0, 10);
+  const payerEmail = getString(formData, "payer_email") || null;
+  const totalPayment = getNumber(formData, "total_payment");
+  const paymentNote = getString(formData, "payment_note") || null;
+  const sendReceipt = formData.get("send_receipt") === "on";
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+  const chargeIds = formData.getAll("split_charge_id").map(String);
+  const splitAmounts = formData
+    .getAll("split_amount")
+    .map((value) => Number(value || 0));
+
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  const splitRows = chargeIds
+    .map((chargeId, index) => ({
+      chargeId: chargeId.trim(),
+      amount: Number.isFinite(splitAmounts[index]) ? splitAmounts[index] : 0,
+    }))
+    .filter((row) => row.chargeId && row.amount > 0);
+
+  const splitTotal = splitRows.reduce((sum, row) => sum + row.amount, 0);
+
+  if (!paidDate || totalPayment <= 0 || splitRows.length === 0) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Enter the payment total, date, and at least one invoice split."
+      )}`
+    );
+  }
+
+  if (cents(splitTotal) !== cents(totalPayment)) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "The invoice splits must add up to the payment total."
+      )}`
+    );
+  }
+
+  const duplicateCharge = splitRows.find(
+    (row, index) =>
+      splitRows.findIndex((candidate) => candidate.chargeId === row.chargeId) !==
+      index
+  );
+
+  if (duplicateCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Each invoice can only appear once in a split payment."
+      )}`
+    );
+  }
+
+  const { data: charges, error: chargeError } = await supabaseAdmin
+    .from("member_charges")
+    .select("id, member_id, amount, status, paid_amount")
+    .in(
+      "id",
+      splitRows.map((row) => row.chargeId)
+    );
+
+  if (chargeError) {
+    redirect(`${redirectUrl}&accountingError=${encodeURIComponent(chargeError.message)}`);
+  }
+
+  const chargeMap = new Map((charges || []).map((charge) => [charge.id, charge]));
+  const missingCharge = splitRows.find((row) => !chargeMap.has(row.chargeId));
+
+  if (missingCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "One of the selected invoices could not be found."
+      )}`
+    );
+  }
+
+  const paidCharge = splitRows.find(
+    (row) => chargeMap.get(row.chargeId)?.status === "paid"
+  );
+
+  if (paidCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "One of the selected invoices is already paid."
+      )}`
+    );
+  }
+
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const paymentProvider = getPaymentProvider(paymentMethod);
+  const receiptPaymentIds: string[] = [];
+  const memberIds = new Set<string>();
+  const sharedNote = [
+    `Split ${paymentMethod} payment for ${splitRows.length} invoices totaling $${totalPayment.toFixed(
+      2
+    )}.`,
+    paymentNote,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  for (const row of splitRows) {
+    const charge = chargeMap.get(row.chargeId);
+
+    if (!charge) {
+      continue;
+    }
+
+    const totalPaidAmount = Number(charge.paid_amount || 0) + row.amount;
+    const isFullyPaid = cents(totalPaidAmount) >= cents(charge.amount);
+
+    const { data: payment, error: paymentError } = await supabaseAdmin
+      .from("payments")
+      .insert({
+        member_id: charge.member_id,
+        charge_id: charge.id,
+        amount: row.amount,
+        payment_method: paymentMethod,
+        payment_provider: paymentProvider,
+        payer_email: payerEmail,
+        status: "paid",
+        note: sharedNote,
+        paid_at: paidAt,
+      })
+      .select("id")
+      .single();
+
+    if (paymentError || !payment) {
+      redirect(
+        `${redirectUrl}&accountingError=${encodeURIComponent(
+          paymentError?.message || "Unable to save one of the split payments."
+        )}`
+      );
+    }
+
+    const { error: updateError } = await supabaseAdmin
+      .from("member_charges")
+      .update({
+        status: isFullyPaid ? "paid" : charge.status || "unpaid",
+        paid_at: isFullyPaid ? paidAt : null,
+        payment_method: paymentMethod,
+        payment_provider: paymentProvider,
+        paid_amount: totalPaidAmount,
+        payment_note: sharedNote,
+      })
+      .eq("id", charge.id);
+
+    if (updateError) {
+      redirect(
+        `${redirectUrl}&accountingError=${encodeURIComponent(
+          `Payment saved, but one invoice was not updated: ${updateError.message}`
+        )}`
+      );
+    }
+
+    receiptPaymentIds.push(payment.id);
+    memberIds.add(charge.member_id);
+  }
+
+  if (sendReceipt) {
+    for (const paymentId of receiptPaymentIds) {
+      try {
+        await createAndSendReceipt({ paymentId });
+      } catch (receiptError) {
+        console.error("ACCOUNTING_SPLIT_PAYMENT_RECEIPT_ERROR", {
+          paymentId,
+          error: receiptError,
+        });
+      }
+    }
+  }
+
+  revalidatePath("/admin/accounting");
+  for (const memberId of memberIds) {
+    revalidatePath(`/admin/members/${memberId}`);
+    revalidatePath(`/admin/members/${memberId}/payments`);
+  }
   revalidatePath("/member/dashboard");
 
   redirect(`${redirectUrl}&paymentAdded=1`);
