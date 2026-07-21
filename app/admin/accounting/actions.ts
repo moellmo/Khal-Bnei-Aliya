@@ -1052,6 +1052,410 @@ export async function recordManualPayment(formData: FormData) {
   redirect(`${redirectUrl}&paymentAdded=1`);
 }
 
+export async function createManualPaidChargePayment(formData: FormData) {
+  const memberId = getString(formData, "member_id");
+  const chargeType = getString(formData, "charge_type") || "Manual Charge";
+  const description = getString(formData, "description") || chargeType;
+  const paymentMethod = getString(formData, "payment_method") || "Check";
+  const paidAmount = getNumber(formData, "paid_amount");
+  const paidDate =
+    getString(formData, "paid_date") ||
+    new Date().toISOString().slice(0, 10);
+  const payerEmail = getString(formData, "payer_email") || null;
+  const paymentNote = getString(formData, "payment_note") || null;
+  const sendReceipt = formData.get("send_receipt") === "on";
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  if (!memberId || paidAmount <= 0 || !paidDate) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Choose a member and enter the payment amount/date."
+      )}`
+    );
+  }
+
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const paymentProvider = getPaymentProvider(paymentMethod);
+
+  const { data: charge, error: chargeError } = await supabaseAdmin
+    .from("member_charges")
+    .insert({
+      member_id: memberId,
+      charge_type: chargeType,
+      description,
+      amount: paidAmount,
+      status: "paid",
+      due_date: paidDate,
+      paid_at: paidAt,
+      payment_method: paymentMethod,
+      payment_provider: paymentProvider,
+      paid_amount: paidAmount,
+      payment_note: paymentNote,
+    })
+    .select("id, member_id")
+    .single();
+
+  if (chargeError || !charge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        chargeError?.message || "Unable to create the paid charge."
+      )}`
+    );
+  }
+
+  const { data: payment, error: paymentError } = await supabaseAdmin
+    .from("payments")
+    .insert({
+      member_id: memberId,
+      charge_id: charge.id,
+      amount: paidAmount,
+      payment_method: paymentMethod,
+      payment_provider: paymentProvider,
+      payer_email: payerEmail,
+      status: "paid",
+      note: paymentNote,
+      paid_at: paidAt,
+    })
+    .select("id")
+    .single();
+
+  if (paymentError || !payment) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        paymentError?.message ||
+          "Charge was created, but the payment could not be saved."
+      )}`
+    );
+  }
+
+  if (sendReceipt) {
+    try {
+      await createAndSendReceipt({ paymentId: payment.id });
+    } catch (receiptError) {
+      console.error("ACCOUNTING_NEW_CHARGE_RECEIPT_ERROR", {
+        paymentId: payment.id,
+        chargeId: charge.id,
+        error: receiptError,
+      });
+    }
+  }
+
+  revalidatePath("/admin/accounting");
+  revalidatePath(`/admin/members/${memberId}`);
+  revalidatePath(`/admin/members/${memberId}/payments`);
+  revalidatePath("/member/dashboard");
+
+  redirect(`${redirectUrl}&paymentAdded=1`);
+}
+
+export async function recordManualPaymentAllocations(formData: FormData) {
+  const paymentMethod = getString(formData, "payment_method") || "Check";
+  const paidDate =
+    getString(formData, "paid_date") ||
+    new Date().toISOString().slice(0, 10);
+  const payerEmail = getString(formData, "payer_email") || null;
+  const totalPayment = getNumber(formData, "total_payment");
+  const paymentNote = getString(formData, "payment_note") || null;
+  const sendReceipt = formData.get("send_receipt") === "on";
+  const month = getString(formData, "month");
+  const year = getString(formData, "year");
+  const allocationTypes = formData.getAll("allocation_type").map(String);
+  const existingChargeIds = formData
+    .getAll("allocation_charge_id")
+    .map(String);
+  const newMemberIds = formData.getAll("allocation_member_id").map(String);
+  const newChargeTypes = formData
+    .getAll("allocation_charge_type")
+    .map(String);
+  const newDescriptions = formData
+    .getAll("allocation_description")
+    .map(String);
+  const allocationAmounts = formData
+    .getAll("allocation_amount")
+    .map((value) => Number(value || 0));
+
+  const redirectUrl = `/admin/accounting?view=payments&month=${encodeURIComponent(
+    month
+  )}&year=${encodeURIComponent(year)}`;
+
+  const allocationRows = allocationTypes
+    .map((allocationType, index) => ({
+      allocationType: allocationType === "new" ? "new" : "existing",
+      chargeId: String(existingChargeIds[index] || "").trim(),
+      memberId: String(newMemberIds[index] || "").trim(),
+      chargeType: String(newChargeTypes[index] || "").trim() || "Manual Charge",
+      description: String(newDescriptions[index] || "").trim(),
+      amount: Number.isFinite(allocationAmounts[index])
+        ? allocationAmounts[index]
+        : 0,
+    }))
+    .filter((row) => row.amount > 0);
+
+  const allocationTotal = allocationRows.reduce(
+    (sum, row) => sum + row.amount,
+    0
+  );
+
+  if (!paidDate || totalPayment <= 0 || allocationRows.length === 0) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Enter the payment total, date, and at least one allocation."
+      )}`
+    );
+  }
+
+  if (cents(allocationTotal) !== cents(totalPayment)) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "The allocations must add up to the payment total."
+      )}`
+    );
+  }
+
+  const invalidExistingRow = allocationRows.find(
+    (row) => row.allocationType === "existing" && !row.chargeId
+  );
+
+  if (invalidExistingRow) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Each invoice allocation must choose an open invoice."
+      )}`
+    );
+  }
+
+  const invalidNewRow = allocationRows.find(
+    (row) => row.allocationType === "new" && !row.memberId
+  );
+
+  if (invalidNewRow) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Each new-charge allocation must choose a member."
+      )}`
+    );
+  }
+
+  const existingRows = allocationRows.filter(
+    (row) => row.allocationType === "existing"
+  );
+  const duplicateCharge = existingRows.find(
+    (row, index) =>
+      existingRows.findIndex((candidate) => candidate.chargeId === row.chargeId) !==
+      index
+  );
+
+  if (duplicateCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "Each open invoice can only appear once in a payment."
+      )}`
+    );
+  }
+
+  const chargeMap = new Map<
+    string,
+    {
+      id: string;
+      member_id: string;
+      amount: number;
+      status: string | null;
+      paid_amount: number | null;
+    }
+  >();
+
+  if (existingRows.length > 0) {
+    const { data: charges, error: chargeError } = await supabaseAdmin
+      .from("member_charges")
+      .select("id, member_id, amount, status, paid_amount")
+      .in(
+        "id",
+        existingRows.map((row) => row.chargeId)
+      );
+
+    if (chargeError) {
+      redirect(
+        `${redirectUrl}&accountingError=${encodeURIComponent(
+          chargeError.message
+        )}`
+      );
+    }
+
+    (charges || []).forEach((charge) => {
+      chargeMap.set(charge.id, charge);
+    });
+  }
+
+  const missingCharge = existingRows.find(
+    (row) => !chargeMap.has(row.chargeId)
+  );
+
+  if (missingCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "One of the selected invoices could not be found."
+      )}`
+    );
+  }
+
+  const paidCharge = existingRows.find(
+    (row) => chargeMap.get(row.chargeId)?.status === "paid"
+  );
+
+  if (paidCharge) {
+    redirect(
+      `${redirectUrl}&accountingError=${encodeURIComponent(
+        "One of the selected invoices is already paid."
+      )}`
+    );
+  }
+
+  const paidAt = `${paidDate}T12:00:00.000Z`;
+  const paymentProvider = getPaymentProvider(paymentMethod);
+  const receiptPaymentIds: string[] = [];
+  const memberIds = new Set<string>();
+  const sharedNote = [
+    allocationRows.length > 1
+      ? `Allocated ${paymentMethod} payment across ${allocationRows.length} items totaling $${totalPayment.toFixed(
+          2
+        )}.`
+      : null,
+    paymentNote,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  for (const row of allocationRows) {
+    let charge:
+      | {
+          id: string;
+          member_id: string;
+          amount: number;
+          status: string | null;
+          paid_amount: number | null;
+        }
+      | null = null;
+
+    if (row.allocationType === "new") {
+      const { data: newCharge, error: newChargeError } = await supabaseAdmin
+        .from("member_charges")
+        .insert({
+          member_id: row.memberId,
+          charge_type: row.chargeType,
+          description: row.description || row.chargeType,
+          amount: row.amount,
+          status: "paid",
+          due_date: paidDate,
+          paid_at: paidAt,
+          payment_method: paymentMethod,
+          payment_provider: paymentProvider,
+          paid_amount: row.amount,
+          payment_note: sharedNote || paymentNote,
+        })
+        .select("id, member_id, amount, status, paid_amount")
+        .single();
+
+      if (newChargeError || !newCharge) {
+        redirect(
+          `${redirectUrl}&accountingError=${encodeURIComponent(
+            newChargeError?.message || "Unable to create one of the charges."
+          )}`
+        );
+      }
+
+      charge = newCharge;
+    } else {
+      charge = chargeMap.get(row.chargeId) || null;
+    }
+
+    if (!charge) {
+      continue;
+    }
+
+    const totalPaidAmount =
+      row.allocationType === "new"
+        ? row.amount
+        : Number(charge.paid_amount || 0) + row.amount;
+    const isFullyPaid = cents(totalPaidAmount) >= cents(charge.amount);
+
+    const { data: payment, error: paymentError } = await supabaseAdmin
+      .from("payments")
+      .insert({
+        member_id: charge.member_id,
+        charge_id: charge.id,
+        amount: row.amount,
+        payment_method: paymentMethod,
+        payment_provider: paymentProvider,
+        payer_email: payerEmail,
+        status: "paid",
+        note: sharedNote || paymentNote,
+        paid_at: paidAt,
+      })
+      .select("id")
+      .single();
+
+    if (paymentError || !payment) {
+      redirect(
+        `${redirectUrl}&accountingError=${encodeURIComponent(
+          paymentError?.message || "Unable to save one of the payments."
+        )}`
+      );
+    }
+
+    if (row.allocationType === "existing") {
+      const { error: updateError } = await supabaseAdmin
+        .from("member_charges")
+        .update({
+          status: isFullyPaid ? "paid" : charge.status || "unpaid",
+          paid_at: isFullyPaid ? paidAt : null,
+          payment_method: paymentMethod,
+          payment_provider: paymentProvider,
+          paid_amount: totalPaidAmount,
+          payment_note: sharedNote || paymentNote,
+        })
+        .eq("id", charge.id);
+
+      if (updateError) {
+        redirect(
+          `${redirectUrl}&accountingError=${encodeURIComponent(
+            `Payment saved, but one invoice was not updated: ${updateError.message}`
+          )}`
+        );
+      }
+    }
+
+    receiptPaymentIds.push(payment.id);
+    memberIds.add(charge.member_id);
+  }
+
+  if (sendReceipt) {
+    for (const paymentId of receiptPaymentIds) {
+      try {
+        await createAndSendReceipt({ paymentId });
+      } catch (receiptError) {
+        console.error("ACCOUNTING_ALLOCATED_PAYMENT_RECEIPT_ERROR", {
+          paymentId,
+          error: receiptError,
+        });
+      }
+    }
+  }
+
+  revalidatePath("/admin/accounting");
+  for (const memberId of memberIds) {
+    revalidatePath(`/admin/members/${memberId}`);
+    revalidatePath(`/admin/members/${memberId}/payments`);
+  }
+  revalidatePath("/member/dashboard");
+
+  redirect(`${redirectUrl}&paymentAdded=1`);
+}
+
 export async function recordBulkSplitPayment(formData: FormData) {
   const paymentMethod = getString(formData, "payment_method") || "Check";
   const paidDate =

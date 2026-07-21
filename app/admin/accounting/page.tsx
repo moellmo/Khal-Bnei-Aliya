@@ -3,6 +3,7 @@ import { getDepositBatchRows } from "@/lib/accounting/statements";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import HebrewKeyboardField from "../HebrewKeyboardField";
 import { QuickChargeMemberPicker } from "../QuickChargeMemberPicker";
+import ManualPaymentForm from "./ManualPaymentForm";
 import {
   addExpense,
   addZellePayment,
@@ -11,8 +12,6 @@ import {
   deleteExpense,
   generateRecurringExpenses,
   importAccountingCsv,
-  recordBulkSplitPayment,
-  recordManualPayment,
   saveBankSnapshot,
   saveRecurringExpenseTemplate,
   updateExpense,
@@ -721,6 +720,19 @@ export default async function AccountingPage({
         `${b.last_name || ""} ${b.first_name || ""}`
       )
     );
+  const manualPaymentOpenCharges = openChargeOptions.map((charge) => {
+    const balance = Math.max(
+      0,
+      Number(charge.amount || 0) - Number(charge.paid_amount || 0)
+    );
+
+    return {
+      id: charge.id,
+      label: getOpenChargeLabel(charge),
+      balance,
+      dueDate: formatDate(charge.due_date),
+    };
+  });
 
   const onlinePaymentTotal = paymentsResult.rows
     .filter((payment) => {
@@ -2511,264 +2523,14 @@ export default async function AccountingPage({
             </button>
           </form>
 
-          <form
-            action={recordManualPayment}
-            className="min-w-0 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
-          >
-            <input type="hidden" name="month" value={selectedMonth} />
-            <input type="hidden" name="year" value={selectedYear} />
-
-            <h2 className="text-2xl font-bold">Record Check / Cash / Other</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Use this when money came in outside the online card flow. It
-              marks the selected charge paid and creates the payment record.
-            </p>
-
-            <label className="mt-5 block min-w-0 space-y-2">
-              <span className="font-semibold">Open Charge</span>
-              <select
-                name="charge_id"
-                required
-                defaultValue=""
-                className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-              >
-                <option value="" disabled>
-                  Select open charge
-                </option>
-                {openChargeOptions.map((charge) => (
-                  <option key={charge.id} value={charge.id}>
-                    {getOpenChargeLabel(charge)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Payment Method</span>
-                <select
-                  name="payment_method"
-                  defaultValue="Check"
-                  className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                >
-                  <option value="Check">Check</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Zelle">Zelle</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Amount Paid</span>
-                <input
-                  name="paid_amount"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Paid Date</span>
-                <input
-                  name="paid_date"
-                  type="date"
-                  required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Receipt Email</span>
-                <input
-                  name="payer_email"
-                  type="email"
-                  placeholder="Optional"
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-            </div>
-
-            <label className="mt-4 block min-w-0 space-y-2">
-              <span className="font-semibold">Note</span>
-              <textarea
-                name="payment_note"
-                rows={3}
-                placeholder="Check number, payer name, memo..."
-                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-              />
-            </label>
-
-            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
-              <input
-                name="send_receipt"
-                type="checkbox"
-                defaultChecked
-                className="h-4 w-4"
-              />
-              Send receipt email if an email is available
-            </label>
-
-            <button
-              type="submit"
-              className="mt-5 rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
-            >
-              Mark Charge Paid
-            </button>
-          </form>
+          <ManualPaymentForm
+            month={selectedMonth}
+            year={selectedYear}
+            openCharges={manualPaymentOpenCharges}
+            members={zelleMemberOptions}
+            today={new Date().toISOString().slice(0, 10)}
+          />
         </div>
-        )}
-
-        {activeView === "payments" && (
-          <form
-            action={recordBulkSplitPayment}
-            className="mt-6 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm"
-          >
-            <input type="hidden" name="month" value={selectedMonth} />
-            <input type="hidden" name="year" value={selectedYear} />
-
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-bold">
-                  Split One Payment Across Invoices
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Enter one check, cash, Zelle, or other payment, then apply
-                  exact amounts to the invoices it covers.
-                </p>
-              </div>
-              <span className="rounded-full bg-[#fbf8f2] px-4 py-2 text-sm font-bold text-slate-700">
-                {openChargeOptions.length} open invoices
-              </span>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-5">
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Payment Method</span>
-                <select
-                  name="payment_method"
-                  defaultValue="Check"
-                  className="w-full min-w-0 rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
-                >
-                  <option value="Check">Check</option>
-                  <option value="Cash">Cash</option>
-                  <option value="Zelle">Zelle</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Total Payment</span>
-                <input
-                  name="total_payment"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  required
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-
-              <label className="min-w-0 space-y-2">
-                <span className="font-semibold">Paid Date</span>
-                <input
-                  name="paid_date"
-                  type="date"
-                  required
-                  defaultValue={new Date().toISOString().slice(0, 10)}
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-
-              <label className="min-w-0 space-y-2 md:col-span-2">
-                <span className="font-semibold">Receipt Email</span>
-                <input
-                  name="payer_email"
-                  type="email"
-                  placeholder="Optional"
-                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-                />
-              </label>
-            </div>
-
-            <label className="mt-4 block min-w-0 space-y-2">
-              <span className="font-semibold">Payment Note</span>
-              <textarea
-                name="payment_note"
-                rows={2}
-                placeholder="Check number, payer name, memo..."
-                className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-              />
-            </label>
-
-            <div className="mt-5 overflow-hidden rounded-2xl border border-[#e3d9c7]">
-              <div className="grid grid-cols-[minmax(0,1fr)_150px] gap-3 bg-[#fbf8f2] px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-500">
-                <span>Invoice</span>
-                <span>Apply Amount</span>
-              </div>
-
-              <div className="max-h-[420px] overflow-y-auto">
-                {openChargeOptions.map((charge) => {
-                  const balance = Math.max(
-                    0,
-                    Number(charge.amount || 0) - Number(charge.paid_amount || 0)
-                  );
-
-                  return (
-                    <div
-                      key={charge.id}
-                      className="grid grid-cols-[minmax(0,1fr)_150px] gap-3 border-t border-[#e3d9c7] px-4 py-3"
-                    >
-                      <input
-                        type="hidden"
-                        name="split_charge_id"
-                        value={charge.id}
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate font-bold">
-                          {getOpenChargeLabel(charge)}
-                        </p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">
-                          Due {formatDate(charge.due_date)} · Balance{" "}
-                          {formatMoney(balance)}
-                        </p>
-                      </div>
-                      <input
-                        name="split_amount"
-                        type="number"
-                        min="0"
-                        max={balance || undefined}
-                        step="0.01"
-                        placeholder="0.00"
-                        className="w-full rounded-xl border border-[#d8cdb7] px-3 py-2"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <label className="mt-4 flex items-center gap-2 rounded-2xl bg-[#fbf8f2] p-3 text-sm font-bold text-slate-700">
-              <input
-                name="send_receipt"
-                type="checkbox"
-                defaultChecked
-                className="h-4 w-4"
-              />
-              Send receipt emails for each invoice split when an email is
-              available
-            </label>
-
-            <button
-              type="submit"
-              className="mt-5 rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
-            >
-              Record Split Payment
-            </button>
-          </form>
         )}
 
         {activeView === "payments" && (
