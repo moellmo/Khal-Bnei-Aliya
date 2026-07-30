@@ -151,11 +151,17 @@ function shortText(value: string | null | undefined, maxLength = 70) {
 }
 
 function finalTotal(reservation: Reservation) {
+  if (isCancelled(reservation)) {
+    return 0;
+  }
+
   return Number(reservation.final_total_amount ?? reservation.total_amount ?? 0);
 }
 
 function isCancelled(reservation: Reservation) {
-  return reservation.effective_payment_status === "cancelled";
+  return ["cancelled", "canceled"].includes(
+    String(reservation.effective_payment_status || "").toLowerCase()
+  );
 }
 
 function balanceDue(reservation: Reservation) {
@@ -273,7 +279,11 @@ async function getPageData(showAll: boolean) {
       );
       let effectiveStatus = reservation.payment_status;
 
-      if (reservation.payment_status === "cancelled") {
+      if (
+        ["cancelled", "canceled"].includes(
+          String(reservation.payment_status || "").toLowerCase()
+        )
+      ) {
         effectiveStatus = "cancelled";
       } else if (
         reservation.payment_status === "paid" ||
@@ -314,7 +324,9 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
   const pendingTotal = reservations
     .filter(
       (reservation) =>
-        !["paid", "cancelled"].includes(reservation.effective_payment_status)
+        !["paid", "cancelled", "canceled"].includes(
+          reservation.effective_payment_status
+        )
     )
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
 
@@ -740,9 +752,8 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         ? ` | ${reservation.payment_reference}`
                         : ""}
                     </p>
-                    {!["paid", "cancelled"].includes(
-                      reservation.effective_payment_status
-                    ) ? (
+                    {reservation.effective_payment_status !== "paid" &&
+                    !isCancelled(reservation) ? (
                       <form
                         action={markKiddushPaid.bind(null, reservation.id)}
                         className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
@@ -757,7 +768,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         </button>
                       </form>
                     ) : null}
-                    {reservation.effective_payment_status !== "cancelled" ? (
+                    {!isCancelled(reservation) ? (
                       <form
                         action={cancelKiddushReservation.bind(
                           null,
@@ -1030,9 +1041,8 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           {reservation.payment_reference}
                         </p>
                       ) : null}
-                      {!["paid", "cancelled"].includes(
-                        reservation.effective_payment_status
-                      ) ? (
+                      {reservation.effective_payment_status !== "paid" &&
+                      !isCancelled(reservation) ? (
                         <form
                           action={markKiddushPaid.bind(null, reservation.id)}
                           className="mt-2 flex gap-2"
@@ -1047,7 +1057,7 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       ) : null}
-                      {reservation.effective_payment_status !== "cancelled" ? (
+                      {!isCancelled(reservation) ? (
                         <form
                           action={cancelKiddushReservation.bind(
                             null,

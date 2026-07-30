@@ -307,6 +307,9 @@ export async function cancelKiddushReservation(
     .from("kiddush_reservations")
     .update({
       payment_status: "cancelled",
+      final_total_amount: 0,
+      special_request_amount: 0,
+      additional_amount: 0,
       notes: noteLines.join("\n"),
       updated_at: new Date().toISOString(),
     })
