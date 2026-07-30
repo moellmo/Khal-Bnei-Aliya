@@ -154,11 +154,23 @@ function finalTotal(reservation: Reservation) {
   return Number(reservation.final_total_amount ?? reservation.total_amount ?? 0);
 }
 
+function isCancelled(reservation: Reservation) {
+  return reservation.effective_payment_status === "cancelled";
+}
+
 function balanceDue(reservation: Reservation) {
+  if (isCancelled(reservation)) {
+    return 0;
+  }
+
   return Math.max(0, finalTotal(reservation) - reservation.amount_paid);
 }
 
 function addOnAmount(reservation: Reservation) {
+  if (isCancelled(reservation)) {
+    return 0;
+  }
+
   return Math.max(0, finalTotal(reservation) - Number(reservation.total_amount || 0));
 }
 
@@ -768,55 +780,62 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                       </p>
                     )}
                   </div>
-                  <form
-                    action={updateKiddushFinalTotal.bind(null, reservation.id)}
-                    className="grid gap-3 rounded-xl bg-white p-3"
-                  >
-                    <div className="grid gap-2 sm:grid-cols-4">
-                      <div className="rounded-xl bg-[#fbf8f2] p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                          Original Kiddush Total
-                        </p>
-                        <p className="mt-1 text-lg font-black">
-                          {formatMoney(reservation.total_amount)}
-                        </p>
+                  {!isCancelled(reservation) ? (
+                    <form
+                      action={updateKiddushFinalTotal.bind(null, reservation.id)}
+                      className="grid gap-3 rounded-xl bg-white p-3"
+                    >
+                      <div className="grid gap-2 sm:grid-cols-4">
+                        <div className="rounded-xl bg-[#fbf8f2] p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                            Original Kiddush Total
+                          </p>
+                          <p className="mt-1 text-lg font-black">
+                            {formatMoney(reservation.total_amount)}
+                          </p>
+                        </div>
+                        <label className="grid gap-1 text-sm font-bold text-slate-700">
+                          Add-ons / extra amount to bill
+                          <input
+                            name="add_on_amount"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            defaultValue={addOnAmount(reservation).toFixed(2)}
+                            className="rounded-lg border border-[#d8cdb7] px-3 py-2"
+                          />
+                        </label>
+                        <div className="rounded-xl bg-[#fbf8f2] p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                            Already Paid
+                          </p>
+                          <p className="mt-1 text-lg font-black">
+                            {formatMoney(reservation.amount_paid)}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-[#fff7df] p-3">
+                          <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
+                            Balance Due
+                          </p>
+                          <p className="mt-1 text-lg font-black">
+                            {formatMoney(balanceDue(reservation))}
+                          </p>
+                        </div>
                       </div>
-                      <label className="grid gap-1 text-sm font-bold text-slate-700">
-                        Add-ons / extra amount to bill
-                        <input
-                          name="add_on_amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          defaultValue={addOnAmount(reservation).toFixed(2)}
-                          className="rounded-lg border border-[#d8cdb7] px-3 py-2"
-                        />
-                      </label>
-                      <div className="rounded-xl bg-[#fbf8f2] p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                          Already Paid
-                        </p>
-                        <p className="mt-1 text-lg font-black">
-                          {formatMoney(reservation.amount_paid)}
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-[#fff7df] p-3">
-                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
-                          Balance Due
-                        </p>
-                        <p className="mt-1 text-lg font-black">
-                          {formatMoney(balanceDue(reservation))}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-500">
-                      Enter only the extra/add-on amount. The emailed payment
-                      link is created only for the remaining balance.
+                      <p className="text-xs font-semibold text-slate-500">
+                        Enter only the extra/add-on amount. The emailed payment
+                        link is created only for the remaining balance.
+                      </p>
+                      <button className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
+                        Send Payment Link for Balance Due Only
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="rounded-xl bg-red-50 p-3 text-xs font-bold text-red-800">
+                      Cancelled reservations have no balance due and cannot be
+                      billed for add-ons.
                     </p>
-                    <button className="rounded-full bg-[#1d2940] px-4 py-2 text-sm font-bold text-white">
-                      Send Payment Link for Balance Due Only
-                    </button>
-                  </form>
+                  )}
                 </div>
               </details>
             ))}
@@ -929,64 +948,71 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                             </p>
                           </div>
                         </div>
-                        <form
-                          action={updateKiddushFinalTotal.bind(
-                            null,
-                            reservation.id
-                          )}
-                          className="mt-2 grid gap-3"
-                        >
-                          <div className="grid gap-2">
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <div className="rounded-lg bg-[#fbf8f2] p-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                                  Original Kiddush Total
-                                </p>
-                                <p className="font-black">
-                                  {formatMoney(reservation.total_amount)}
-                                </p>
+                        {!isCancelled(reservation) ? (
+                          <form
+                            action={updateKiddushFinalTotal.bind(
+                              null,
+                              reservation.id
+                            )}
+                            className="mt-2 grid gap-3"
+                          >
+                            <div className="grid gap-2">
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg bg-[#fbf8f2] p-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                    Original Kiddush Total
+                                  </p>
+                                  <p className="font-black">
+                                    {formatMoney(reservation.total_amount)}
+                                  </p>
+                                </div>
+                                <label className="grid gap-1 text-xs font-bold text-slate-600">
+                                  Add-ons / extra amount to bill
+                                  <input
+                                    name="add_on_amount"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    defaultValue={addOnAmount(
+                                      reservation
+                                    ).toFixed(2)}
+                                    className="w-40 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
+                                  />
+                                </label>
                               </div>
-                              <label className="grid gap-1 text-xs font-bold text-slate-600">
-                                Add-ons / extra amount to bill
-                                <input
-                                  name="add_on_amount"
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  defaultValue={addOnAmount(
-                                    reservation
-                                  ).toFixed(2)}
-                                  className="w-40 rounded-lg border border-[#d8cdb7] bg-white px-2 py-1 text-xs"
-                                />
-                              </label>
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg bg-[#fbf8f2] p-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+                                    Already Paid
+                                  </p>
+                                  <p className="font-black">
+                                    {formatMoney(reservation.amount_paid)}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg bg-[#fff7df] p-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
+                                    Balance Due
+                                  </p>
+                                  <p className="font-black">
+                                    {formatMoney(balanceDue(reservation))}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <div className="rounded-lg bg-[#fbf8f2] p-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
-                                  Already Paid
-                                </p>
-                                <p className="font-black">
-                                  {formatMoney(reservation.amount_paid)}
-                                </p>
-                              </div>
-                              <div className="rounded-lg bg-[#fff7df] p-2">
-                                <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#8b6b2e]">
-                                  Balance Due
-                                </p>
-                                <p className="font-black">
-                                  {formatMoney(balanceDue(reservation))}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                          <p className="text-[11px] font-semibold text-slate-500">
-                            Enter only the add-on amount. Payment link sends
-                            only the unpaid balance.
+                            <p className="text-[11px] font-semibold text-slate-500">
+                              Enter only the add-on amount. Payment link sends
+                              only the unpaid balance.
+                            </p>
+                            <button className="rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-bold text-white">
+                              Send Payment Link for Balance Due Only
+                            </button>
+                          </form>
+                        ) : (
+                          <p className="mt-2 rounded-lg bg-red-50 p-2 text-xs font-bold text-red-800">
+                            Cancelled reservations have no balance due and
+                            cannot be billed for add-ons.
                           </p>
-                          <button className="rounded-full bg-[#1d2940] px-3 py-1.5 text-xs font-bold text-white">
-                            Send Payment Link for Balance Due Only
-                          </button>
-                        </form>
+                        )}
                       </details>
                     </td>
                     <td className="px-3 py-3">
