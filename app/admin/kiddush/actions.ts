@@ -284,7 +284,6 @@ export async function cancelKiddushReservation(
       .update({
         status: "cancelled",
         payment_note: "Cancelled with Kiddush reservation.",
-        updated_at: new Date().toISOString(),
       })
       .in("id", chargeIds)
       .neq("status", "paid");
@@ -426,7 +425,6 @@ export async function updateKiddushFinalTotal(
           description,
           status: "unpaid",
           due_date: new Date().toISOString().slice(0, 10),
-          updated_at: new Date().toISOString(),
         })
         .eq("id", additionalChargeId);
 
