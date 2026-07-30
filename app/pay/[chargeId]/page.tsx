@@ -105,6 +105,9 @@ export default async function PublicPaymentPage({
   const isOpenAmount = isOpenAmountCharge(charge);
   const name = memberName(charge) || "Guest";
   const isPaid = charge.status === "paid";
+  const isClosed = ["paid", "cancelled", "void"].includes(
+    String(charge.status || "")
+  );
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] px-5 py-8 text-slate-900">
@@ -165,10 +168,12 @@ export default async function PublicPaymentPage({
               </div>
             </div>
 
-            {isPaid ? (
+            {isClosed ? (
               <div className="mt-6 rounded-2xl bg-green-50 p-6 text-center">
                 <p className="text-lg font-bold text-green-800">
-                  This payment request is already paid.
+                  {isPaid
+                    ? "This payment request is already paid."
+                    : "This payment request is no longer open."}
                 </p>
               </div>
             ) : (

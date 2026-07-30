@@ -246,6 +246,21 @@ export async function submitKiddushReservation(formData: FormData) {
   const notificationEmail = String(settings.notification_email || "").trim();
 
   if (paymentMethod === "card" && totalAmount > 0) {
+    await sendKiddushReservationNotification({
+      reservationId: savedReservation.id,
+      shabbosDate,
+      sponsorName,
+      sponsorEmail,
+      sponsorPhone,
+      sponsorshipText,
+      items: selectedItems,
+      specialRequests,
+      totalAmount,
+      paymentStatus,
+      paymentReference: null,
+      notifyEmail: notificationEmail,
+    });
+
     const note = [
       `Kiddush for ${formatKiddushShabbosLong(shabbosDate)}`,
       `Reservation ${savedReservation.id}`,

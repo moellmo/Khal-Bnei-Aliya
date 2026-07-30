@@ -246,6 +246,85 @@ export async function markKiddushPaid(
   redirect("/admin/kiddush?reservationUpdated=1#reservations");
 }
 
+export async function cancelKiddushReservation(
+  reservationId: string,
+  formData: FormData
+) {
+  await requireAdmin();
+
+  const cancellationNote = getString(formData, "cancellation_note") || null;
+
+  const { data: reservation, error: reservationError } = await supabaseAdmin
+    .from("kiddush_reservations")
+    .select(
+      "id, charge_id, additional_charge_id, notes, payment_status"
+    )
+    .eq("id", reservationId)
+    .maybeSingle();
+
+  if (reservationError || !reservation) {
+    redirect(
+      `/admin/kiddush?error=${encodeURIComponent(
+        reservationError?.message || "Reservation not found."
+      )}#reservations`
+    );
+  }
+
+  if (reservation.payment_status === "cancelled") {
+    redirect("/admin/kiddush?reservationUpdated=1#reservations");
+  }
+
+  const chargeIds = [reservation.charge_id, reservation.additional_charge_id]
+    .map((id) => String(id || "").trim())
+    .filter(Boolean);
+
+  if (chargeIds.length > 0) {
+    const { error: chargeUpdateError } = await supabaseAdmin
+      .from("member_charges")
+      .update({
+        status: "cancelled",
+        payment_note: "Cancelled with Kiddush reservation.",
+        updated_at: new Date().toISOString(),
+      })
+      .in("id", chargeIds)
+      .neq("status", "paid");
+
+    if (chargeUpdateError) {
+      redirect(
+        `/admin/kiddush?error=${encodeURIComponent(
+          chargeUpdateError.message
+        )}#reservations`
+      );
+    }
+  }
+
+  const noteLines = [
+    reservation.notes,
+    `Cancelled by admin on ${new Date().toISOString().slice(0, 10)}.`,
+    cancellationNote ? `Reason: ${cancellationNote}` : null,
+  ].filter(Boolean);
+
+  const { error: updateError } = await supabaseAdmin
+    .from("kiddush_reservations")
+    .update({
+      payment_status: "cancelled",
+      notes: noteLines.join("\n"),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", reservation.id);
+
+  if (updateError) {
+    redirect(
+      `/admin/kiddush?error=${encodeURIComponent(
+        updateError.message
+      )}#reservations`
+    );
+  }
+
+  refresh();
+  redirect("/admin/kiddush?reservationUpdated=1#reservations");
+}
+
 export async function updateKiddushFinalTotal(
   reservationId: string,
   formData: FormData

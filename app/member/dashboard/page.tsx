@@ -241,7 +241,7 @@ portal_role
       `
     )
     .eq("member_id", typedMember.id)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .order("due_date", {
       ascending: true,
       nullsFirst: false,

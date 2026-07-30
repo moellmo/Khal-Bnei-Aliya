@@ -114,7 +114,7 @@ async function findOpenChargeForZelle(row: ZelleImportRow, memberId: string) {
     .from("member_charges")
     .select("id, member_id, amount, status, charge_type, description")
     .eq("member_id", memberId)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .order("due_date", { ascending: true, nullsFirst: false })
     .limit(25);
 

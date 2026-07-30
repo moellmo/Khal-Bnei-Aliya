@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         "id, member_id, amount, description, due_date, members(first_name, last_name, email)"
       )
       .eq("charge_type", "Membership Dues")
-      .neq("status", "paid")
+      .not("status", "in", "(paid,cancelled,void)")
       .not("due_date", "is", null)
       .order("due_date", { ascending: true })
       .limit(500);

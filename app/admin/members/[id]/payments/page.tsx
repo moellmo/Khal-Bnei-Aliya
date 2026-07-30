@@ -150,7 +150,7 @@ async function getOpenCharges(memberId: string) {
     .from("member_charges")
     .select("id, charge_type, description, amount, status, due_date")
     .eq("member_id", memberId)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .order("due_date", { ascending: true, nullsFirst: false });
 
   if (error) {

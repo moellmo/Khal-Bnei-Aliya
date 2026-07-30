@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { formatKiddushShabbosLong } from "@/lib/kiddush/shabbos";
 import {
   addKiddushItem,
+  cancelKiddushReservation,
   markKiddushPaid,
   updateKiddushFinalTotal,
   updateKiddushItems,
@@ -258,11 +259,16 @@ async function getPageData(showAll: boolean) {
       const finalTotal = Number(
         reservation.final_total_amount ?? reservation.total_amount ?? 0
       );
-      const effectiveStatus =
+      let effectiveStatus = reservation.payment_status;
+
+      if (reservation.payment_status === "cancelled") {
+        effectiveStatus = "cancelled";
+      } else if (
         reservation.payment_status === "paid" ||
         (finalTotal > 0 && paymentSum >= finalTotal)
-          ? "paid"
-          : reservation.payment_status;
+      ) {
+        effectiveStatus = "paid";
+      }
 
       return {
         ...reservation,
@@ -294,7 +300,10 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
 
   const pendingTotal = reservations
-    .filter((reservation) => reservation.effective_payment_status !== "paid")
+    .filter(
+      (reservation) =>
+        !["paid", "cancelled"].includes(reservation.effective_payment_status)
+    )
     .reduce((sum, reservation) => sum + Number(reservation.total_amount || 0), 0);
 
   return (
@@ -719,7 +728,9 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         ? ` | ${reservation.payment_reference}`
                         : ""}
                     </p>
-                    {reservation.effective_payment_status !== "paid" ? (
+                    {!["paid", "cancelled"].includes(
+                      reservation.effective_payment_status
+                    ) ? (
                       <form
                         action={markKiddushPaid.bind(null, reservation.id)}
                         className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
@@ -734,6 +745,28 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                         </button>
                       </form>
                     ) : null}
+                    {reservation.effective_payment_status !== "cancelled" ? (
+                      <form
+                        action={cancelKiddushReservation.bind(
+                          null,
+                          reservation.id
+                        )}
+                        className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]"
+                      >
+                        <input
+                          name="cancellation_note"
+                          className="rounded-lg border border-[#d8cdb7] bg-white px-3 py-2 text-sm"
+                          placeholder="Optional cancel note"
+                        />
+                        <button className="rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white">
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-800">
+                        Cancelled - this Shabbos is open again.
+                      </p>
+                    )}
                   </div>
                   <form
                     action={updateKiddushFinalTotal.bind(null, reservation.id)}
@@ -971,7 +1004,9 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           {reservation.payment_reference}
                         </p>
                       ) : null}
-                      {reservation.effective_payment_status !== "paid" ? (
+                      {!["paid", "cancelled"].includes(
+                        reservation.effective_payment_status
+                      ) ? (
                         <form
                           action={markKiddushPaid.bind(null, reservation.id)}
                           className="mt-2 flex gap-2"
@@ -986,6 +1021,28 @@ export default async function AdminKiddushPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       ) : null}
+                      {reservation.effective_payment_status !== "cancelled" ? (
+                        <form
+                          action={cancelKiddushReservation.bind(
+                            null,
+                            reservation.id
+                          )}
+                          className="mt-2 grid gap-2"
+                        >
+                          <input
+                            name="cancellation_note"
+                            className="w-44 rounded-lg border border-[#d8cdb7] px-2 py-1 text-xs"
+                            placeholder="Optional cancel note"
+                          />
+                          <button className="w-fit rounded-full bg-red-700 px-3 py-1 text-xs font-bold text-white">
+                            Cancel Reservation
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="mt-2 rounded-lg bg-red-50 px-2 py-1 text-xs font-bold text-red-800">
+                          Cancelled - week reopened
+                        </p>
+                      )}
                     </td>
                     <td className="rounded-r-2xl px-3 py-3 text-slate-600">
                       {formatDate(reservation.created_at.slice(0, 10))}

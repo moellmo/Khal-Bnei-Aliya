@@ -596,7 +596,7 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", charge.id)
         .eq("member_id", member.id)
-        .neq("status", "paid");
+        .not("status", "in", "(paid,cancelled,void)");
 
     if (chargeUpdateError) {
       throw new Error(chargeUpdateError.message);

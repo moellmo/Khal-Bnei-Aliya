@@ -558,7 +558,7 @@ export async function syncRecurringPayments(formData: FormData) {
         .select("id, amount")
         .eq("member_id", memberId)
         .eq("charge_type", "Membership Dues")
-        .neq("status", "paid")
+        .not("status", "in", "(paid,cancelled,void)")
         .order("due_date", {
           ascending: true,
           nullsFirst: false,

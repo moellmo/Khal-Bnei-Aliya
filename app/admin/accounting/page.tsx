@@ -550,7 +550,7 @@ async function getOpenChargeOptions(): Promise<OpenChargeOption[]> {
     .select(
       "id, amount, paid_amount, charge_type, description, due_date, members(id, first_name, last_name, email)"
     )
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .order("due_date", { ascending: true })
     .limit(500);
 

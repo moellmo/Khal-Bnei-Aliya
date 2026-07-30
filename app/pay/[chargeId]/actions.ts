@@ -50,7 +50,7 @@ export async function submitPublicZellePaymentClaim(formData: FormData) {
       "id, member_id, amount, charge_type, description, status, members(first_name, last_name, email)"
     )
     .eq("id", chargeId)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .maybeSingle();
 
   if (chargeError) {

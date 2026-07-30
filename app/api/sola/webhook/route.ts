@@ -352,7 +352,7 @@ async function findMatchingUnpaidCharge({
       `
     )
     .eq("member_id", memberId)
-    .neq("status", "paid")
+    .not("status", "in", "(paid,cancelled,void)")
     .eq("charge_type", "Membership Dues")
     .order("due_date", {
       ascending: true,
