@@ -34,3 +34,18 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+### Donation security
+
+The public donation page supports Cloudflare Turnstile. It works with this
+Vercel-hosted site and does not require moving hosting or DNS to Cloudflare.
+Create a Turnstile widget for the production donation hostname, then add these
+environment variables in Vercel and local development:
+
+```bash
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-public-site-key
+TURNSTILE_SECRET_KEY=your-server-only-secret-key
+```
+
+Both values must be set for production protection to be active. The server
+validates every token for both card and Apple Pay/Google Pay donation requests.

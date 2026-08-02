@@ -5,6 +5,7 @@ import {
   markKiddushReservationPaidAndNotify,
   reservationIdFromPaymentNote,
 } from "@/lib/kiddush/reservations";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type DonationRequestBody = {
   expiration?: string;
   cardholderName?: string;
   billingZip?: string;
+  turnstileToken?: string;
 };
 
 type GatewayResponse = Record<string, unknown>;
@@ -197,6 +199,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as DonationRequestBody;
+
+    const turnstile = await verifyTurnstile(request, body.turnstileToken);
+    if (!turnstile.success) {
+      return NextResponse.json(
+        { error: "Please complete the security check and try again." },
+        { status: 403 }
+      );
+    }
 
     const donorName = String(body.donorName || "").trim();
     const email = String(body.email || "").trim().toLowerCase();

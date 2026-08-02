@@ -50,6 +50,9 @@ declare global {
     GPButtonSizeMode?: Record<string, string>;
     GPBillingAddressFormat?: Record<string, string>;
     gpRequest?: Record<string, unknown>;
+    turnstile?: {
+      reset: (container?: HTMLElement) => void;
+    };
   }
 }
 
@@ -164,6 +167,9 @@ export default function DonationForm({
       amount: String(formData.get("amount") || amount || ""),
       purpose: String(formData.get("purpose") || ""),
       note: String(formData.get("note") || ""),
+      turnstileToken: String(
+        formData.get("cf-turnstile-response") || ""
+      ),
     };
   }
 
@@ -209,6 +215,11 @@ export default function DonationForm({
         ...getDonationPayload(),
         walletType,
         payload,
+        turnstileToken: String(
+          new FormData(formRef.current || undefined).get(
+            "cf-turnstile-response"
+          ) || ""
+        ),
       }),
     });
 
@@ -216,6 +227,7 @@ export default function DonationForm({
     const result = text ? (JSON.parse(text) as DonationResult) : {};
 
     if (!response.ok) {
+      window.turnstile?.reset();
       throw new Error(
         result.error || "The wallet payment could not be charged."
       );
@@ -228,6 +240,7 @@ export default function DonationForm({
         : "Donation approved. The receipt was saved and email is still being prepared."
     );
     formRef.current?.reset();
+    window.turnstile?.reset();
     setAmount("18");
 
     return text;
@@ -511,12 +524,16 @@ export default function DonationForm({
         expiration: String(formData.get("expiration") || ""),
         cardholderName: String(formData.get("cardholderName") || ""),
         billingZip: String(formData.get("billingZip") || ""),
+        turnstileToken: String(
+          formData.get("cf-turnstile-response") || ""
+        ),
       }),
     });
 
     const result = (await response.json()) as DonationResult;
 
     if (!response.ok) {
+      window.turnstile?.reset();
       throw new Error(result.error || "The card could not be charged.");
     }
 
@@ -529,6 +546,7 @@ export default function DonationForm({
     window.clearIfield?.("card-number");
     window.clearIfield?.("cvv");
     form.reset();
+    window.turnstile?.reset();
     setAmount("18");
   }
 
@@ -582,6 +600,11 @@ export default function DonationForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
+      <Script
+        id="cloudflare-turnstile"
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+        strategy="afterInteractive"
+      />
       <Script
         id="sola-donation-ifields"
         src={`${IFIELDS_BASE}/ifields.min.js`}
@@ -687,6 +710,14 @@ export default function DonationForm({
           className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
         />
       </label>
+
+      {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? (
+        <div
+          className="cf-turnstile"
+          data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
+          data-theme="auto"
+        />
+      ) : null}
 
       <div className="rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">

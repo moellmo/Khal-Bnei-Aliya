@@ -5,6 +5,7 @@ import {
   markKiddushReservationPaidAndNotify,
   reservationIdFromPaymentNote,
 } from "@/lib/kiddush/reservations";
+import { verifyTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,7 @@ type WalletDonationBody = {
   amount?: string | number;
   purpose?: string;
   note?: string;
+  turnstileToken?: string;
 };
 
 const allowedPurposes = new Set([
@@ -315,6 +317,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = (await request.json()) as WalletDonationBody;
+
+    const turnstile = await verifyTurnstile(request, body.turnstileToken);
+    if (!turnstile.success) {
+      return NextResponse.json(
+        { error: "Please complete the security check and try again." },
+        { status: 403 }
+      );
+    }
     const normalizedWalletType =
       String(body.walletType || "").toLowerCase() === "googlepay"
         ? "GooglePay"
