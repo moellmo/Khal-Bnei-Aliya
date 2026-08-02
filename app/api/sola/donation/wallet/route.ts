@@ -351,9 +351,12 @@ export async function POST(request: NextRequest) {
         ""
     ).trim();
 
-    if (!donorName || !email || !phone) {
+    // Apple Pay and Google Pay provide the billing contact through the wallet
+    // payload. Phone numbers are not guaranteed to be present in every wallet
+    // profile, so do not block an otherwise valid wallet payment for that field.
+    if (!donorName || !email) {
       return NextResponse.json(
-        { error: "Name, email, and phone are required." },
+        { error: "Name and email are required for wallet payments." },
         { status: 400 }
       );
     }
