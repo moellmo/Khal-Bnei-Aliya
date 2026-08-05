@@ -6,6 +6,7 @@ import {
   reservationIdFromPaymentNote,
 } from "@/lib/kiddush/reservations";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { validateYamimNoraimPaymentAmount } from "@/lib/yamimNoraim/payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -224,6 +225,18 @@ export async function POST(request: NextRequest) {
       .slice(0, 4);
     const cardholderName = String(body.cardholderName || "").trim();
     const billingZip = String(body.billingZip || "").trim();
+
+    const reservationValidation = await validateYamimNoraimPaymentAmount({
+      purpose,
+      note,
+      amount,
+    });
+    if (!reservationValidation.valid) {
+      return NextResponse.json(
+        { error: reservationValidation.error },
+        { status: 400 }
+      );
+    }
 
     if (!donorName || !email || !phone) {
       return NextResponse.json(

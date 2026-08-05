@@ -2,6 +2,11 @@
 
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  calculateYamimNoraimPrice,
+  type YamimNoraimMembershipType,
+  type YamimNoraimPricingSettings,
+} from "@/lib/yamimNoraim/pricing";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -14,10 +19,14 @@ function getNumber(formData: FormData, key: string) {
 
 export async function submitYamimNoraimReservation(formData: FormData) {
   const fullName = getString(formData, "full_name");
-  const email = getString(formData, "email") || null;
-  const phone = getString(formData, "phone") || null;
+  const email = getString(formData, "email");
+  const phone = getString(formData, "phone");
   const memberName = getString(formData, "member_name") || null;
   const notes = getString(formData, "notes") || null;
+  const membershipType =
+    getString(formData, "membership_type") === "non_member"
+      ? "non_member"
+      : "member";
   const roshHashanaMenSeats = Math.max(
     0,
     Math.floor(getNumber(formData, "rosh_hashana_men_seats"))
@@ -43,6 +52,12 @@ export async function submitYamimNoraimReservation(formData: FormData) {
     );
   }
 
+  if (!email || !phone) {
+    redirect(
+      "/yamim-noraim?error=Please%20enter%20your%20email%20and%20phone%20number."
+    );
+  }
+
   if (menSeats + womenSeats <= 0) {
     redirect(
       "/yamim-noraim?error=Please%20reserve%20at%20least%20one%20seat."
@@ -52,7 +67,7 @@ export async function submitYamimNoraimReservation(formData: FormData) {
   const { data: settings, error: settingsError } = await supabaseAdmin
     .from("yamim_noraim_settings")
     .select(
-      "enabled, active_year, men_seat_price, women_seat_price"
+      "enabled, active_year, member_rosh_hashana_price, member_yom_kippur_price, member_both_price, nonmember_rosh_hashana_base_price, nonmember_yom_kippur_base_price, nonmember_both_base_price, nonmember_additional_seat_price"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -63,10 +78,21 @@ export async function submitYamimNoraimReservation(formData: FormData) {
     );
   }
 
-  const menSeatPrice = Number(settings.men_seat_price || 0);
-  const womenSeatPrice = Number(settings.women_seat_price || 0);
-  const totalAmount =
-    menSeats * menSeatPrice + womenSeats * womenSeatPrice;
+  const pricingSettings = settings as YamimNoraimPricingSettings & {
+    enabled: boolean;
+    active_year: number;
+  };
+  const pricing = calculateYamimNoraimPrice({
+    membershipType: membershipType as YamimNoraimMembershipType,
+    counts: {
+      roshHashanaMenSeats,
+      roshHashanaWomenSeats,
+      yomKippurMenSeats,
+      yomKippurWomenSeats,
+    },
+    settings: pricingSettings,
+  });
+  const totalAmount = pricing.totalAmount;
 
   const { data: reservation, error } = await supabaseAdmin
     .from("yamim_noraim_reservations")
@@ -76,15 +102,20 @@ export async function submitYamimNoraimReservation(formData: FormData) {
       email,
       phone,
       member_name: memberName,
+      membership_type: membershipType,
       rosh_hashana_men_seats: roshHashanaMenSeats,
       rosh_hashana_women_seats: roshHashanaWomenSeats,
       yom_kippur_men_seats: yomKippurMenSeats,
       yom_kippur_women_seats: yomKippurWomenSeats,
       men_seats: menSeats,
       women_seats: womenSeats,
-      men_seat_price: menSeatPrice,
-      women_seat_price: womenSeatPrice,
+      men_seat_price: 0,
+      women_seat_price: 0,
       total_amount: totalAmount,
+      pricing_option: pricing.option,
+      pricing_base_amount: pricing.baseAmount,
+      pricing_additional_amount: pricing.additionalAmount,
+      pricing_label: pricing.label,
       notes,
       payment_status: totalAmount > 0 ? "pending" : "no_payment_due",
     })
@@ -105,6 +136,7 @@ export async function submitYamimNoraimReservation(formData: FormData) {
 
   const note = [
     `Yamim Noraim ${settings.active_year} seats`,
+    pricing.label,
     `RH ${roshHashanaMenSeats} men/${roshHashanaWomenSeats} women`,
     `YK ${yomKippurMenSeats} men/${yomKippurWomenSeats} women`,
     `Reservation ${reservation.id}`,

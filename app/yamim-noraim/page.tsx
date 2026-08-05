@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  type YamimNoraimPricingSettings,
+} from "@/lib/yamimNoraim/pricing";
 import { submitYamimNoraimReservation } from "./actions";
+import YamimNoraimReservationForm from "./YamimNoraimReservationForm";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +15,9 @@ type PageProps = {
   }>;
 };
 
-type Settings = {
+type Settings = YamimNoraimPricingSettings & {
   enabled: boolean;
   active_year: number;
-  men_seat_price: number;
-  women_seat_price: number;
   headline: string | null;
   message: string | null;
 };
@@ -31,7 +33,7 @@ async function getSettings() {
   const { data, error } = await supabaseAdmin
     .from("yamim_noraim_settings")
     .select(
-      "enabled, active_year, men_seat_price, women_seat_price, headline, message"
+      "enabled, active_year, member_rosh_hashana_price, member_yom_kippur_price, member_both_price, nonmember_rosh_hashana_base_price, nonmember_yom_kippur_base_price, nonmember_both_base_price, nonmember_additional_seat_price, headline, message"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -48,8 +50,6 @@ export default async function YamimNoraimPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const settings = await getSettings();
   const enabled = Boolean(settings?.enabled);
-  const menPrice = Number(settings?.men_seat_price || 0);
-  const womenPrice = Number(settings?.women_seat_price || 0);
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -76,18 +76,21 @@ export default async function YamimNoraimPage({ searchParams }: PageProps) {
                 "Reserve men’s and women’s seats for the Yamim Noraim. After submitting, you can pay the total securely by card, Apple Pay, Google Pay, or Zelle."}
             </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-6 space-y-3">
               <div className="rounded-2xl bg-white/10 p-4">
-                <p className="text-sm text-slate-300">Men</p>
-                <p className="mt-1 text-2xl font-black">
-                  {formatMoney(menPrice)}
+                <p className="text-sm font-bold text-[#f0d99a]">Members</p>
+                <p className="mt-1 text-sm text-slate-200">
+                  Rosh Hashana {formatMoney(settings?.member_rosh_hashana_price)}
+                  {" · "}Yom Kippur {formatMoney(settings?.member_yom_kippur_price)}
+                  {" · "}Both {formatMoney(settings?.member_both_price)} per family
                 </p>
               </div>
 
               <div className="rounded-2xl bg-white/10 p-4">
-                <p className="text-sm text-slate-300">Women</p>
-                <p className="mt-1 text-2xl font-black">
-                  {formatMoney(womenPrice)}
+                <p className="text-sm font-bold text-[#f0d99a]">Non-members</p>
+                <p className="mt-1 text-sm text-slate-200">
+                  Base includes up to two seats per holiday. Additional seats are{" "}
+                  {formatMoney(settings?.nonmember_additional_seat_price)} each.
                 </p>
               </div>
             </div>
@@ -101,148 +104,18 @@ export default async function YamimNoraimPage({ searchParams }: PageProps) {
               </div>
             ) : !enabled ? (
               <div className="rounded-2xl bg-[#fbf8f2] p-8 text-center">
-                <h2 className="text-2xl font-black">
-                  Reservations are closed
-                </h2>
+                <h2 className="text-2xl font-black">Reservations are closed</h2>
                 <p className="mt-3 text-slate-600">
                   The seat reservation form is currently hidden for the year.
                 </p>
               </div>
             ) : (
-              <form action={submitYamimNoraimReservation} className="space-y-5">
-                <div>
-                  <h2 className="text-2xl font-black">Reserve Seats</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Submit once per family. The payment page will open with the
-                    total filled in.
-                  </p>
-                </div>
-
-                {params?.error ? (
-                  <p className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
-                    {params.error}
-                  </p>
-                ) : null}
-
-                {params?.reserved ? (
-                  <p className="rounded-xl bg-green-50 p-3 text-sm font-bold text-green-800">
-                    Reservation saved.
-                  </p>
-                ) : null}
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Full Name
-                    <input
-                      name="full_name"
-                      required
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
-                    />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Member Name
-                    <input
-                      name="member_name"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
-                      placeholder="If different"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Email
-                    <input
-                      name="email"
-                      type="email"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
-                    />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Phone
-                    <input
-                      name="phone"
-                      type="tel"
-                      className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <h3 className="text-lg font-black">Rosh Hashana</h3>
-                  </div>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Men’s Seats
-                    <input
-                      name="rosh_hashana_men_seats"
-                      type="number"
-                      min="0"
-                      defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Women’s Seats
-                    <input
-                      name="rosh_hashana_women_seats"
-                      type="number"
-                      min="0"
-                      defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 rounded-2xl bg-[#fbf8f2] p-4 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <h3 className="text-lg font-black">Yom Kippur</h3>
-                  </div>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Men’s Seats
-                    <input
-                      name="yom_kippur_men_seats"
-                      type="number"
-                      min="0"
-                      defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-
-                  <label className="space-y-2 text-sm font-bold text-slate-700">
-                    Women’s Seats
-                    <input
-                      name="yom_kippur_women_seats"
-                      type="number"
-                      min="0"
-                      defaultValue="0"
-                      className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3 text-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <label className="block space-y-2 text-sm font-bold text-slate-700">
-                  Notes
-                  <textarea
-                    name="notes"
-                    rows={4}
-                    placeholder="Special seating notes, family details, or anything the shul should know"
-                    className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3 text-slate-900"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  className="w-full rounded-full bg-[#1d2940] px-6 py-4 text-base font-black text-white"
-                >
-                  Continue to Payment
-                </button>
-              </form>
+              <YamimNoraimReservationForm
+                action={submitYamimNoraimReservation}
+                settings={settings}
+                error={params?.error}
+                reserved={params?.reserved}
+              />
             )}
           </div>
         </div>

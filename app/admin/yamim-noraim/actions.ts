@@ -57,8 +57,34 @@ export async function updateYamimNoraimSettings(formData: FormData) {
     2026,
     Math.floor(getNumber(formData, "active_year") || new Date().getFullYear())
   );
-  const menSeatPrice = Math.max(0, getNumber(formData, "men_seat_price"));
-  const womenSeatPrice = Math.max(0, getNumber(formData, "women_seat_price"));
+  const memberRoshHashanaPrice = Math.max(
+    0,
+    getNumber(formData, "member_rosh_hashana_price")
+  );
+  const memberYomKippurPrice = Math.max(
+    0,
+    getNumber(formData, "member_yom_kippur_price")
+  );
+  const memberBothPrice = Math.max(
+    0,
+    getNumber(formData, "member_both_price")
+  );
+  const nonmemberRoshHashanaBasePrice = Math.max(
+    0,
+    getNumber(formData, "nonmember_rosh_hashana_base_price")
+  );
+  const nonmemberYomKippurBasePrice = Math.max(
+    0,
+    getNumber(formData, "nonmember_yom_kippur_base_price")
+  );
+  const nonmemberBothBasePrice = Math.max(
+    0,
+    getNumber(formData, "nonmember_both_base_price")
+  );
+  const nonmemberAdditionalSeatPrice = Math.max(
+    0,
+    getNumber(formData, "nonmember_additional_seat_price")
+  );
 
   const { error } = await supabaseAdmin
     .from("yamim_noraim_settings")
@@ -66,8 +92,13 @@ export async function updateYamimNoraimSettings(formData: FormData) {
       id: "default",
       enabled: formData.get("enabled") === "on",
       active_year: activeYear,
-      men_seat_price: menSeatPrice,
-      women_seat_price: womenSeatPrice,
+      member_rosh_hashana_price: memberRoshHashanaPrice,
+      member_yom_kippur_price: memberYomKippurPrice,
+      member_both_price: memberBothPrice,
+      nonmember_rosh_hashana_base_price: nonmemberRoshHashanaBasePrice,
+      nonmember_yom_kippur_base_price: nonmemberYomKippurBasePrice,
+      nonmember_both_base_price: nonmemberBothBasePrice,
+      nonmember_additional_seat_price: nonmemberAdditionalSeatPrice,
       headline:
         getString(formData, "headline") || "Yamim Noraim Seat Reservations",
       message: getString(formData, "message") || null,

@@ -449,9 +449,9 @@ export default async function Home({ searchParams }: HomePageProps) {
               {showYamimNoraimButton && (
                 <Link
                   href="/yamim-noraim"
-                  className="rounded-full bg-[#1d2940] px-5 py-3 text-center font-bold text-white transition hover:bg-[#10192b] sm:px-6"
+                  className="rounded-2xl border-2 border-[#d9bf7a] bg-[#fffaf0] px-5 py-3 text-center font-black text-[#1d2940] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#f7ecd0] sm:px-6"
                 >
-                  Yamim Noraim Seats
+                  Yamim Noraim Seats · Reserve now
                 </Link>
               )}
 
@@ -481,9 +481,9 @@ export default async function Home({ searchParams }: HomePageProps) {
               {showYamimNoraimButton && (
                 <Link
                   href="/yamim-noraim"
-                  className="rounded-full bg-[#1d2940] px-5 py-3 text-center font-bold text-white transition hover:bg-[#10192b] sm:px-6"
+                  className="rounded-2xl border-2 border-[#d9bf7a] bg-[#fffaf0] px-5 py-3 text-center font-black text-[#1d2940] shadow-sm transition hover:-translate-y-0.5 hover:bg-[#f7ecd0] sm:px-6"
                 >
-                  Yamim Noraim Seats
+                  Yamim Noraim Seats · Reserve now
                 </Link>
               )}
 

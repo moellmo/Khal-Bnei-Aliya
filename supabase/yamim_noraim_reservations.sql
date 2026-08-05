@@ -9,6 +9,15 @@ create table if not exists public.yamim_noraim_settings (
   updated_at timestamptz not null default now()
 );
 
+alter table public.yamim_noraim_settings
+  add column if not exists member_rosh_hashana_price numeric(12, 2) not null default 75,
+  add column if not exists member_yom_kippur_price numeric(12, 2) not null default 50,
+  add column if not exists member_both_price numeric(12, 2) not null default 100,
+  add column if not exists nonmember_rosh_hashana_base_price numeric(12, 2) not null default 100,
+  add column if not exists nonmember_yom_kippur_base_price numeric(12, 2) not null default 100,
+  add column if not exists nonmember_both_base_price numeric(12, 2) not null default 175,
+  add column if not exists nonmember_additional_seat_price numeric(12, 2) not null default 50;
+
 insert into public.yamim_noraim_settings (id)
 values ('default')
 on conflict (id) do nothing;
@@ -36,7 +45,12 @@ alter table public.yamim_noraim_reservations
   add column if not exists rosh_hashana_men_seats integer not null default 0 check (rosh_hashana_men_seats >= 0),
   add column if not exists rosh_hashana_women_seats integer not null default 0 check (rosh_hashana_women_seats >= 0),
   add column if not exists yom_kippur_men_seats integer not null default 0 check (yom_kippur_men_seats >= 0),
-  add column if not exists yom_kippur_women_seats integer not null default 0 check (yom_kippur_women_seats >= 0);
+  add column if not exists yom_kippur_women_seats integer not null default 0 check (yom_kippur_women_seats >= 0),
+  add column if not exists membership_type text not null default 'member',
+  add column if not exists pricing_option text not null default 'rosh_hashana',
+  add column if not exists pricing_base_amount numeric(12, 2) not null default 0,
+  add column if not exists pricing_additional_amount numeric(12, 2) not null default 0,
+  add column if not exists pricing_label text;
 
 create index if not exists yamim_noraim_reservations_year_idx
   on public.yamim_noraim_reservations (reservation_year);

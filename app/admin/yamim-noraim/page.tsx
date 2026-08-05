@@ -22,8 +22,13 @@ type PageProps = {
 type Settings = {
   enabled: boolean;
   active_year: number;
-  men_seat_price: number;
-  women_seat_price: number;
+  member_rosh_hashana_price: number;
+  member_yom_kippur_price: number;
+  member_both_price: number;
+  nonmember_rosh_hashana_base_price: number;
+  nonmember_yom_kippur_base_price: number;
+  nonmember_both_base_price: number;
+  nonmember_additional_seat_price: number;
   headline: string | null;
   message: string | null;
 };
@@ -42,6 +47,11 @@ type Reservation = {
   yom_kippur_men_seats: number;
   yom_kippur_women_seats: number;
   total_amount: number;
+  membership_type: "member" | "non_member" | null;
+  pricing_option: string | null;
+  pricing_base_amount: number | null;
+  pricing_additional_amount: number | null;
+  pricing_label: string | null;
   notes: string | null;
   payment_status: string | null;
   payment_reference: string | null;
@@ -71,7 +81,7 @@ async function getSettings() {
   const { data, error } = await supabaseAdmin
     .from("yamim_noraim_settings")
     .select(
-      "enabled, active_year, men_seat_price, women_seat_price, headline, message"
+      "enabled, active_year, member_rosh_hashana_price, member_yom_kippur_price, member_both_price, nonmember_rosh_hashana_base_price, nonmember_yom_kippur_base_price, nonmember_both_base_price, nonmember_additional_seat_price, headline, message"
     )
     .eq("id", "default")
     .maybeSingle();
@@ -87,7 +97,7 @@ async function getReservations(year: number) {
   const { data, error } = await supabaseAdmin
     .from("yamim_noraim_reservations")
     .select(
-      "id, reservation_year, full_name, email, phone, member_name, men_seats, women_seats, rosh_hashana_men_seats, rosh_hashana_women_seats, yom_kippur_men_seats, yom_kippur_women_seats, total_amount, notes, payment_status, payment_reference, created_at"
+      "id, reservation_year, full_name, email, phone, member_name, membership_type, pricing_option, pricing_base_amount, pricing_additional_amount, pricing_label, men_seats, women_seats, rosh_hashana_men_seats, rosh_hashana_women_seats, yom_kippur_men_seats, yom_kippur_women_seats, total_amount, notes, payment_status, payment_reference, created_at"
     )
     .eq("reservation_year", year)
     .order("created_at", { ascending: false });
@@ -147,6 +157,18 @@ export default async function AdminYamimNoraimPage({
       sum + Number(reservation.yom_kippur_women_seats || 0),
     0
   );
+  const memberReservationCount = reservations.filter(
+    (reservation) => reservation.membership_type !== "non_member"
+  ).length;
+  const nonMemberReservationCount = reservations.filter(
+    (reservation) => reservation.membership_type === "non_member"
+  ).length;
+  const paidReservationCount = reservations.filter(
+    (reservation) => reservation.payment_status === "paid"
+  ).length;
+  const pendingReservationCount = reservations.filter(
+    (reservation) => reservation.payment_status !== "paid"
+  ).length;
 
   return (
     <main className="min-h-screen bg-[#f7f3ea] text-slate-900">
@@ -247,28 +269,96 @@ export default async function AdminYamimNoraimPage({
               </label>
 
               <label className="space-y-2">
-                <span className="font-semibold">Men Seat Price</span>
+                <span className="font-semibold">Member RH / family</span>
                 <input
-                  name="men_seat_price"
+                  name="member_rosh_hashana_price"
                   type="number"
                   min="0"
                   step="0.01"
-                  defaultValue={settings?.men_seat_price || 100}
+                  defaultValue={settings?.member_rosh_hashana_price || 75}
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
                 />
               </label>
 
               <label className="space-y-2">
-                <span className="font-semibold">Women Seat Price</span>
+                <span className="font-semibold">Member YK / family</span>
                 <input
-                  name="women_seat_price"
+                  name="member_yom_kippur_price"
                   type="number"
                   min="0"
                   step="0.01"
-                  defaultValue={settings?.women_seat_price || 100}
+                  defaultValue={settings?.member_yom_kippur_price || 50}
                   className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
                 />
               </label>
+
+              <label className="space-y-2">
+                <span className="font-semibold">Member both / family</span>
+                <input
+                  name="member_both_price"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={settings?.member_both_price || 100}
+                  className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
+                />
+              </label>
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-[#fbf8f2] p-4">
+              <h3 className="font-black">Non-member pricing</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Base price covers up to two seats for the selected holiday or package.
+              </p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label className="space-y-2">
+                  <span className="font-semibold">Non-member RH base</span>
+                  <input
+                    name="nonmember_rosh_hashana_base_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={settings?.nonmember_rosh_hashana_base_price || 100}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Non-member YK base</span>
+                  <input
+                    name="nonmember_yom_kippur_base_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={settings?.nonmember_yom_kippur_base_price || 100}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Non-member both base</span>
+                  <input
+                    name="nonmember_both_base_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={settings?.nonmember_both_base_price || 175}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="font-semibold">Additional seat</span>
+                  <input
+                    name="nonmember_additional_seat_price"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={settings?.nonmember_additional_seat_price || 50}
+                    className="w-full rounded-xl border border-[#d8cdb7] bg-white px-4 py-3"
+                  />
+                </label>
+              </div>
             </div>
 
             <label className="mt-4 block space-y-2">
@@ -352,6 +442,33 @@ export default async function AdminYamimNoraimPage({
                 <p className="mt-1 text-2xl font-black text-green-700">
                   {formatMoney(paidTotal)}
                 </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl border border-[#e3d9c7] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Members
+                </p>
+                <p className="mt-1 text-2xl font-black">{memberReservationCount}</p>
+              </div>
+              <div className="rounded-2xl border border-[#e3d9c7] p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Non-members
+                </p>
+                <p className="mt-1 text-2xl font-black">{nonMemberReservationCount}</p>
+              </div>
+              <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-green-700">
+                  Paid reservations
+                </p>
+                <p className="mt-1 text-2xl font-black text-green-800">{paidReservationCount}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
+                  Pending reservations
+                </p>
+                <p className="mt-1 text-2xl font-black text-amber-800">{pendingReservationCount}</p>
               </div>
             </div>
 
@@ -466,6 +583,7 @@ export default async function AdminYamimNoraimPage({
                 <tr>
                   <th className="px-3 py-2">Name</th>
                   <th className="px-3 py-2">Contact</th>
+                  <th className="px-3 py-2">Pricing</th>
                   <th className="px-3 py-2">Rosh Hashana</th>
                   <th className="px-3 py-2">Yom Kippur</th>
                   <th className="px-3 py-2">Total</th>
@@ -488,6 +606,16 @@ export default async function AdminYamimNoraimPage({
                     <td className="px-3 py-3 text-slate-600">
                       <p>{reservation.email || "—"}</p>
                       <p>{reservation.phone || "—"}</p>
+                    </td>
+                    <td className="px-3 py-3 text-slate-600">
+                      <p className="font-bold">
+                        {reservation.membership_type === "non_member"
+                          ? "Non-member"
+                          : "Member"}
+                      </p>
+                      <p className="text-xs">
+                        {reservation.pricing_label || reservation.pricing_option || "—"}
+                      </p>
                     </td>
                     <td className="px-3 py-3">
                       <p>Men: {reservation.rosh_hashana_men_seats}</p>

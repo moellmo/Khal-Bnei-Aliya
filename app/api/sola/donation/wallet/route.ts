@@ -6,6 +6,7 @@ import {
   reservationIdFromPaymentNote,
 } from "@/lib/kiddush/reservations";
 import { verifyTurnstile } from "@/lib/turnstile";
+import { validateYamimNoraimPaymentAmount } from "@/lib/yamimNoraim/payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -350,6 +351,18 @@ export async function POST(request: NextRequest) {
         billingContact.postalCodePrefix ||
         ""
     ).trim();
+
+    const reservationValidation = await validateYamimNoraimPaymentAmount({
+      purpose,
+      note,
+      amount,
+    });
+    if (!reservationValidation.valid) {
+      return NextResponse.json(
+        { error: reservationValidation.error },
+        { status: 400 }
+      );
+    }
 
     // Apple Pay and Google Pay provide the billing contact through the wallet
     // payload. Phone numbers are not guaranteed to be present in every wallet
