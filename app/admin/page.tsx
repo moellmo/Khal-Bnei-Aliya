@@ -67,6 +67,11 @@ const adminLinks = [
   href: "/admin/yamim-noraim",
 },
 {
+  label: "Yom Tov Assistance",
+  description: "Review confidential assistance requests by family ID and export the distribution spreadsheet.",
+  href: "/admin/yom-tov-assistance",
+},
+{
   label: "Kiddush Reservations",
   description:
     "Update Kiddush items, pricing, notifications, and reserved Shabbosim.",
