@@ -127,9 +127,6 @@ export default function YomTovAssistanceForm({
             >
               <div className="p-3 text-sm font-black">
                 {group.label}
-                <span className="mt-1 block text-xs font-normal text-slate-500">
-                  {group.points.toFixed(2)} point each
-                </span>
               </div>
               {assistanceHolidays.map((holiday) => {
                 const fieldName = numberFieldName(group.key, holiday.key);
@@ -154,13 +151,6 @@ export default function YomTovAssistanceForm({
             </div>
           ))}
         </div>
-      </div>
-
-      <div className="rounded-2xl border-2 border-[#d9bf7a] bg-[#fffaf0] p-5">
-        <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#8b6b2e]">
-          Calculated total points
-        </p>
-        <p className="mt-1 text-3xl font-black">{totals.totalPoints.toFixed(2)}</p>
       </div>
 
       <label className="block space-y-2 text-sm font-bold text-slate-700">
