@@ -95,6 +95,15 @@ export default async function LoginPage({
             </button>
           </form>
 
+          <div className="mt-5 text-center">
+            <Link
+              href="/forgot-password"
+              className="text-sm font-semibold text-[#8b6b2e] hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </div>
+
           <p className="mt-6 text-center text-sm leading-6 text-slate-500">
             Member portal access is available by invitation from the shul office.
           </p>

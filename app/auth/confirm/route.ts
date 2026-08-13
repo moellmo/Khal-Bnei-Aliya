@@ -7,8 +7,11 @@ export async function GET(request: NextRequest) {
 
   const tokenHash = requestUrl.searchParams.get("token_hash");
   const type = requestUrl.searchParams.get("type") as EmailOtpType | null;
+  const requestedNext = requestUrl.searchParams.get("next");
   const next =
-    requestUrl.searchParams.get("next") || "/member/set-password";
+    requestedNext === "/reset-password" || requestedNext === "/member/set-password"
+      ? requestedNext
+      : "/member/set-password";
 
   if (!tokenHash || !type) {
     return NextResponse.redirect(
