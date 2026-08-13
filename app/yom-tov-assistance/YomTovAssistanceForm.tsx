@@ -11,7 +11,6 @@ import {
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
   error?: string;
-  submitted?: string;
 };
 
 const initialCounts: AssistanceCounts = {
@@ -47,7 +46,6 @@ const countFieldKeys: Record<string, keyof AssistanceCounts> = {
 export default function YomTovAssistanceForm({
   action,
   error,
-  submitted,
 }: Props) {
   const [counts, setCounts] = useState(initialCounts);
   const totals = useMemo(() => calculateAssistanceTotals(counts), [counts]);
@@ -55,7 +53,7 @@ export default function YomTovAssistanceForm({
   function setCount(key: keyof AssistanceCounts, value: string) {
     setCounts((current) => ({
       ...current,
-      [key]: Math.max(0, Math.floor(Number(value) || 0)),
+      [key]: Math.min(50, Math.max(0, Math.floor(Number(value) || 0))),
     }));
   }
 
@@ -79,13 +77,6 @@ export default function YomTovAssistanceForm({
         </p>
       ) : null}
 
-      {submitted ? (
-        <div className="rounded-2xl bg-green-50 p-5 text-sm font-bold text-green-800">
-          Your request was submitted confidentially. Please save the family ID
-          shown on the confirmation page.
-        </div>
-      ) : null}
-
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="space-y-2 text-sm font-bold text-slate-700">
           Family Name
@@ -96,25 +87,9 @@ export default function YomTovAssistanceForm({
           />
         </label>
         <label className="space-y-2 text-sm font-bold text-slate-700">
-          Contact Name
+          Contact Name (optional)
           <input
             name="contact_name"
-            className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-          />
-        </label>
-        <label className="space-y-2 text-sm font-bold text-slate-700">
-          Email
-          <input
-            name="email"
-            type="email"
-            className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
-          />
-        </label>
-        <label className="space-y-2 text-sm font-bold text-slate-700">
-          Phone
-          <input
-            name="phone"
-            type="tel"
             className="w-full rounded-xl border border-[#d8cdb7] px-4 py-3"
           />
         </label>
@@ -166,6 +141,9 @@ export default function YomTovAssistanceForm({
                       name={fieldName}
                       type="number"
                       min="0"
+                      max="50"
+                      step="1"
+                      inputMode="numeric"
                       value={counts[key]}
                       onChange={(event) => setCount(key, event.target.value)}
                       className="w-full rounded-xl border border-[#d8cdb7] px-3 py-3 text-center"

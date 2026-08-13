@@ -9,14 +9,12 @@ function getString(formData: FormData, key: string) {
 }
 
 function getCount(formData: FormData, key: string) {
-  return Math.max(0, Math.floor(Number(formData.get(key) || 0) || 0));
+  return Math.min(50, Math.max(0, Math.floor(Number(formData.get(key) || 0) || 0)));
 }
 
 export async function submitYomTovAssistanceRequest(formData: FormData) {
   const familyName = getString(formData, "family_name");
   const contactName = getString(formData, "contact_name") || null;
-  const email = getString(formData, "email").toLowerCase() || null;
-  const phone = getString(formData, "phone") || null;
   const counts: AssistanceCounts = {
     adultsCount: 0,
     childrenUnder3Count: 0,
@@ -41,8 +39,8 @@ export async function submitYomTovAssistanceRequest(formData: FormData) {
     .insert({
       family_name: familyName,
       contact_name: contactName,
-      email,
-      phone,
+      email: null,
+      phone: null,
       adults_count: counts.adultsCount,
       children_under_3_count: counts.childrenUnder3Count,
       children_ages_3_8_rosh_hashanah: counts.childrenAges3To8RoshHashanah,
@@ -69,5 +67,5 @@ export async function submitYomTovAssistanceRequest(formData: FormData) {
     );
   }
 
-  redirect(`/yom-tov-assistance?submitted=${data.family_id_number}`);
+  redirect("/yom-tov-assistance?submitted=1");
 }

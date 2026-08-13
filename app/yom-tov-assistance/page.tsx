@@ -22,9 +22,7 @@ export default async function YomTovAssistancePage({ searchParams }: Props) {
             <div className="rounded-2xl bg-green-50 p-6 text-green-900">
               <p className="text-xs font-bold uppercase tracking-[0.2em]">Request received</p>
               <h1 className="mt-2 text-3xl font-black">Thank you</h1>
-              <p className="mt-3">Your confidential family ID number is:</p>
-              <p className="mt-2 text-4xl font-black">{params.submitted}</p>
-              <p className="mt-3 text-sm">Please keep this number for your records.</p>
+              <p className="mt-3">Your confidential request was received.</p>
             </div>
           ) : (
             <YomTovAssistanceForm
