@@ -111,8 +111,8 @@ export default function YomTovAssistanceForm({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-[#e3d9c7]">
-        <div className="min-w-[760px]">
-          <div className="grid grid-cols-[190px_repeat(3,minmax(150px,1fr))] bg-[#1d2940] text-xs font-bold uppercase tracking-[0.08em] text-white">
+        <div className="sm:min-w-[760px]">
+          <div className="hidden grid-cols-[190px_repeat(3,minmax(150px,1fr))] bg-[#1d2940] text-xs font-bold uppercase tracking-[0.08em] text-white sm:grid">
             <div className="p-3">Age group</div>
             {assistanceHolidays.map((holiday) => (
               <div key={holiday.key} className="p-3 text-center">
@@ -123,17 +123,20 @@ export default function YomTovAssistanceForm({
           {assistanceFieldGroups.map((group) => (
             <div
               key={group.key}
-              className="grid grid-cols-[190px_repeat(3,minmax(150px,1fr))] border-t border-[#e3d9c7] bg-white"
+              className="grid grid-cols-1 border-t border-[#e3d9c7] bg-white sm:grid-cols-[190px_repeat(3,minmax(150px,1fr))]"
             >
-              <div className="p-3 text-sm font-black">
+              <div className="border-b border-[#e3d9c7] p-3 text-sm font-black sm:border-b-0">
                 {group.label}
               </div>
               {assistanceHolidays.map((holiday) => {
                 const fieldName = numberFieldName(group.key, holiday.key);
                 const key = countFieldKeys[fieldName];
                 return (
-                  <label key={holiday.key} className="p-3">
+                  <label key={holiday.key} className="border-b border-[#eee7da] p-3 last:border-b-0 sm:border-b-0">
                     <span className="sr-only">{group.label}, {holiday.label}</span>
+                    <span className="mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-[#8b6b2e] sm:hidden">
+                      {holiday.label}
+                    </span>
                     <input
                       name={fieldName}
                       type="number"
