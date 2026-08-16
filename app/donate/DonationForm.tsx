@@ -367,7 +367,16 @@ export default function DonationForm({
     }
   }
 
-  function configureWallets() {
+  function configureWallets(attempt = 0) {
+    if (googlePayConfigured && !window.ckGooglePay) {
+      if (attempt < 20) {
+        window.setTimeout(() => configureWallets(attempt + 1), 250);
+      } else {
+        console.info("GOOGLE_PAY_LIBRARY_NOT_READY");
+      }
+      return;
+    }
+
     if (googlePayConfigured && window.ckGooglePay) {
       window.gpRequest = {
         merchantInfo: {
