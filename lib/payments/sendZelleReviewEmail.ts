@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { getEmailSender } from "@/lib/emailSender";
 
 type ZelleReviewEmailOptions = {
   memberName: string;
@@ -58,10 +59,11 @@ export async function sendZelleReviewEmail({
   chargeId,
 }: ZelleReviewEmailOptions) {
   const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail =
-    process.env.PAYMENT_ALERT_FROM_EMAIL ||
-    process.env.RECEIPT_FROM_EMAIL ||
-    process.env.MEMBERSHIP_FROM_EMAIL;
+  const fromEmail = getEmailSender(
+    "PAYMENT_ALERT_FROM_EMAIL",
+    "RECEIPT_FROM_EMAIL",
+    "MEMBERSHIP_FROM_EMAIL"
+  );
   const recipients = getAccountingRecipients();
 
   if (!apiKey || !fromEmail || recipients.length === 0) {
@@ -122,6 +124,7 @@ export async function sendZelleReviewEmail({
     console.error("ZELLE_REVIEW_EMAIL_ERROR", {
       chargeId,
       error: error.message,
+      fromEmail,
     });
   }
 }

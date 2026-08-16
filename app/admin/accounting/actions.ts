@@ -37,6 +37,24 @@ function normalizeName(value: string | null | undefined) {
     .trim();
 }
 
+function zelleFingerprint(row: {
+  payer_name: string;
+  payer_email?: string | null;
+  amount: number;
+  received_date: string | null;
+  purpose: string | null;
+  note: string | null;
+}) {
+  return [
+    normalizeName(row.payer_name),
+    String(row.payer_email || "").trim().toLowerCase(),
+    cents(row.amount),
+    row.received_date || "",
+    normalizeName(row.purpose),
+    normalizeName(row.note),
+  ].join("|");
+}
+
 type ZelleImportRow = {
   id: string;
   payer_name: string;
@@ -125,6 +143,37 @@ async function findOpenChargeForZelle(row: ZelleImportRow, memberId: string) {
   return (charges || []).find((charge) => cents(charge.amount) === cents(row.amount));
 }
 
+async function findExistingZellePayment(chargeId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("payments")
+    .select("id")
+    .eq("charge_id", chargeId)
+    .eq("payment_method", "Zelle")
+    .eq("status", "paid")
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+async function markZelleRowMatched(zelleId: string) {
+  const { error } = await supabaseAdmin
+    .from("zelle_payments")
+    .update({
+      status: "matched",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", zelleId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 async function finalizeZelleRow(
   row: ZelleImportRow,
   options: {
@@ -166,6 +215,13 @@ async function finalizeZelleRow(
     }
 
     if (data.status === "paid") {
+      const existingPayment = await findExistingZellePayment(data.id);
+
+      if (existingPayment) {
+        await markZelleRowMatched(row.id);
+        return { status: "matched" as const, memberId: data.member_id };
+      }
+
       throw new Error("The selected charge is already paid.");
     }
 
@@ -207,6 +263,13 @@ async function finalizeZelleRow(
     charge = data;
   }
 
+  const existingPayment = await findExistingZellePayment(charge.id);
+
+  if (existingPayment) {
+    await markZelleRowMatched(row.id);
+    return { status: "matched" as const, memberId: charge.member_id };
+  }
+
   const { data: payment, error: paymentError } = await supabaseAdmin
     .from("payments")
     .insert({
@@ -219,6 +282,7 @@ async function finalizeZelleRow(
       status: "paid",
       note: [
         `Matched Zelle payment from ${row.payer_name}.`,
+        `Zelle row ${row.id}.`,
         row.note,
       ]
         .filter(Boolean)
@@ -250,19 +314,7 @@ async function finalizeZelleRow(
     );
   }
 
-  const { error: zelleUpdateError } = await supabaseAdmin
-    .from("zelle_payments")
-    .update({
-      status: "matched",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", row.id);
-
-  if (zelleUpdateError) {
-    throw new Error(
-      `Payment saved, but Zelle row was not updated: ${zelleUpdateError.message}`
-    );
-  }
+  await markZelleRowMatched(row.id);
 
   if (options.sendReceipt) {
     try {
@@ -1769,9 +1821,58 @@ export async function importAccountingCsv(formData: FormData) {
       );
     }
 
+    const uniqueZelleRows = zelleRows.filter(
+      (row, index, allRows) =>
+        index ===
+        allRows.findIndex(
+          (candidate) =>
+            zelleFingerprint(candidate) === zelleFingerprint(row)
+        )
+    );
+    const duplicateCount = zelleRows.length - uniqueZelleRows.length;
+    const receivedDates = [
+      ...new Set(
+        uniqueZelleRows
+          .map((row) => row.received_date)
+          .filter((date): date is string => Boolean(date))
+      ),
+    ];
+    const { data: existingRows, error: existingRowsError } =
+      receivedDates.length
+        ? await supabaseAdmin
+            .from("zelle_payments")
+            .select(
+              "payer_name, payer_email, amount, received_date, purpose, note"
+            )
+            .in("received_date", receivedDates)
+        : { data: [], error: null };
+
+    if (existingRowsError) {
+      redirect(
+        `/admin/accounting?accountingError=${encodeURIComponent(
+          existingRowsError.message
+        )}`
+      );
+    }
+
+    const existingFingerprints = new Set(
+      (existingRows || []).map((row) => zelleFingerprint(row))
+    );
+    const newZelleRows = uniqueZelleRows.filter(
+      (row) => !existingFingerprints.has(zelleFingerprint(row))
+    );
+    const skippedDuplicateCount =
+      duplicateCount + uniqueZelleRows.length - newZelleRows.length;
+
+    if (newZelleRows.length === 0) {
+      redirect(
+        `/admin/accounting?view=payments&zelleAdded=1&created=0&skipped=${skippedDuplicateCount}#zelle-matching`
+      );
+    }
+
     const { data, error } = await supabaseAdmin
       .from("zelle_payments")
-      .insert(zelleRows)
+      .insert(newZelleRows)
       .select("id, payer_name, payer_email, amount, received_date, purpose, note, status");
 
     if (error) {
@@ -1783,7 +1884,7 @@ export async function importAccountingCsv(formData: FormData) {
     }
 
     let matchedCount = 0;
-    let reviewCount = 0;
+    let reviewCount = skippedDuplicateCount;
     const touchedMembers = new Set<string>();
 
     for (const row of (data || []) as ZelleImportRow[]) {

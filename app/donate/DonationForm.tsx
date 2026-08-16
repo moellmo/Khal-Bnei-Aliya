@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 
 const IFIELDS_VERSION = "2.9.2109.2701";
@@ -51,7 +51,8 @@ declare global {
     GPBillingAddressFormat?: Record<string, string>;
     gpRequest?: Record<string, unknown>;
     turnstile?: {
-      reset: (container?: HTMLElement) => void;
+      render: (container: HTMLElement, options: Record<string, unknown>) => string;
+      reset: (widgetId?: string) => void;
     };
   }
 }
@@ -137,6 +138,8 @@ export default function DonationForm({
   const cardTokenRef = useRef<HTMLInputElement>(null);
   const cvvTokenRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
 
   const [amount, setAmount] = useState(initialAmount || "18");
   const [scriptReady, setScriptReady] = useState(false);
@@ -149,12 +152,39 @@ export default function DonationForm({
   const [applePayLoadFailed, setApplePayLoadFailed] = useState(false);
   const [applePayFailureReason, setApplePayFailureReason] = useState("");
   const [googlePayReady, setGooglePayReady] = useState(false);
+  const [googlePayIframeReady, setGooglePayIframeReady] = useState(false);
   const [, setGooglePaySupported] = useState(false);
   const [walletConfig, setWalletConfig] =
     useState<WalletConfig>(initialWalletConfig);
   const applePayConfigured =
     walletConfig.applePayEnabled;
   const googlePayConfigured = walletConfig.googlePayEnabled;
+
+  function renderTurnstile() {
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+
+    if (
+      !siteKey ||
+      !window.turnstile?.render ||
+      !turnstileContainerRef.current ||
+      turnstileWidgetIdRef.current
+    ) {
+      return;
+    }
+
+    turnstileWidgetIdRef.current = window.turnstile.render(
+      turnstileContainerRef.current,
+      { sitekey: siteKey, theme: "auto" }
+    );
+  }
+
+  function resetTurnstile() {
+    const widgetId = turnstileWidgetIdRef.current;
+
+    if (widgetId) {
+      window.turnstile?.reset(widgetId);
+    }
+  }
 
   function getDonationPayload() {
     const form = formRef.current;
@@ -227,7 +257,7 @@ export default function DonationForm({
     const result = text ? (JSON.parse(text) as DonationResult) : {};
 
     if (!response.ok) {
-      window.turnstile?.reset();
+      resetTurnstile();
       throw new Error(
         result.error || "The wallet payment could not be charged."
       );
@@ -240,7 +270,7 @@ export default function DonationForm({
         : "Donation approved. The receipt was saved and email is still being prepared."
     );
     formRef.current?.reset();
-    window.turnstile?.reset();
+    resetTurnstile();
     setAmount("18");
 
     return text;
@@ -403,6 +433,29 @@ export default function DonationForm({
     }
   }
 
+  const enableGooglePayButton = useCallback(() => {
+    if (!googlePayReady || !googlePayIframeReady || !window.ckGooglePay) {
+      return;
+    }
+
+    try {
+      const googlePayResult = window.ckGooglePay.enableGooglePay({
+        amountField: "amount",
+        iframeField: "igp",
+      });
+
+      catchSolaWalletPromise(googlePayResult, (error) => {
+        console.info("GOOGLE_PAY_NOT_ENABLED_ASYNC", error);
+        setGooglePayReady(false);
+        setGooglePaySupported(false);
+      });
+    } catch (error) {
+      console.info("GOOGLE_PAY_NOT_ENABLED", error);
+      setGooglePayReady(false);
+      setGooglePaySupported(false);
+    }
+  }, [googlePayReady, googlePayIframeReady]);
+
   function configureIFields() {
     const key = process.env.NEXT_PUBLIC_SOLA_IFIELDS_KEY;
 
@@ -474,29 +527,8 @@ export default function DonationForm({
   }, [scriptReady, walletConfig]);
 
   useEffect(() => {
-    if (!googlePayReady || !window.ckGooglePay) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      try {
-        const googlePayResult = window.ckGooglePay?.enableGooglePay({
-          amountField: "amount",
-          iframeField: "igp",
-        });
-
-        catchSolaWalletPromise(googlePayResult, (error) => {
-          console.info("GOOGLE_PAY_NOT_ENABLED_ASYNC", error);
-          setGooglePayReady(false);
-          setGooglePaySupported(false);
-        });
-      } catch (error) {
-        console.info("GOOGLE_PAY_NOT_ENABLED", error);
-        setGooglePayReady(false);
-        setGooglePaySupported(false);
-      }
-    }, 0);
-  }, [googlePayReady]);
+    window.setTimeout(enableGooglePayButton, 250);
+  }, [enableGooglePayButton]);
 
   async function submitTokens(form: HTMLFormElement) {
     const formData = new FormData(form);
@@ -533,7 +565,7 @@ export default function DonationForm({
     const result = (await response.json()) as DonationResult;
 
     if (!response.ok) {
-      window.turnstile?.reset();
+      resetTurnstile();
       throw new Error(result.error || "The card could not be charged.");
     }
 
@@ -546,7 +578,7 @@ export default function DonationForm({
     window.clearIfield?.("card-number");
     window.clearIfield?.("cvv");
     form.reset();
-    window.turnstile?.reset();
+    resetTurnstile();
     setAmount("18");
   }
 
@@ -604,6 +636,7 @@ export default function DonationForm({
         id="cloudflare-turnstile"
         src="https://challenges.cloudflare.com/turnstile/v0/api.js"
         strategy="afterInteractive"
+        onLoad={renderTurnstile}
       />
       <Script
         id="sola-donation-ifields"
@@ -713,9 +746,8 @@ export default function DonationForm({
 
       {process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ? (
         <div
-          className="cf-turnstile"
-          data-sitekey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY}
-          data-theme="auto"
+          ref={turnstileContainerRef}
+          aria-label="Security verification"
         />
       ) : null}
 
@@ -770,6 +802,9 @@ export default function DonationForm({
                 data-ifields-oninit="gpRequest.initGP"
                 src={`${IFIELDS_BASE}/igp.htm`}
                 allow="payment *"
+                onLoad={() => {
+                  setGooglePayIframeReady(true);
+                }}
                 sandbox="allow-popups allow-modals allow-scripts allow-same-origin allow-forms allow-popups-to-escape-sandbox allow-top-navigation"
                 className="h-[44px] w-full border-0"
               />
