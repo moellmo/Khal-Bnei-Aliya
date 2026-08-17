@@ -81,9 +81,12 @@ export function calculateYamimNoraimPrice({
         : isMember
           ? settings.member_rosh_hashana_price
           : settings.nonmember_rosh_hashana_base_price;
+  // The non-member base includes two seats for each selected holiday. The
+  // combined RH/YK package therefore includes four seats total, not two.
+  const includedNonMemberSeats = option === "both" ? 4 : 2;
   const additionalAmount = isMember
     ? 0
-    : Math.max(0, totalSeatsForOption - 2) *
+    : Math.max(0, totalSeatsForOption - includedNonMemberSeats) *
       settings.nonmember_additional_seat_price;
   const totalAmount = money(baseAmount + additionalAmount);
   const membershipLabel = isMember ? "Member" : "Non-member";
