@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   promoteMemberToAdmin,
+  promoteMemberToKiddushAdmin,
   removeMemberAdminAccess,
+  removeMemberKiddushAdminAccess,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +27,9 @@ type Member = {
 type PageProps = {
   searchParams: Promise<{
     promoted?: string;
+    promotedKiddush?: string;
     removed?: string;
+    removedKiddush?: string;
     error?: string;
   }>;
 };
@@ -147,8 +151,13 @@ export default async function AdminUsersPage({
     (member) => member.portal_role === "admin"
   );
 
+  const kiddushAdmins = members.filter(
+    (member) => member.portal_role === "kiddush_admin"
+  );
+
   const regularMembers = members.filter(
-    (member) => member.portal_role !== "admin"
+    (member) =>
+      member.portal_role !== "admin" && member.portal_role !== "kiddush_admin"
   );
 
   return (
@@ -190,9 +199,21 @@ export default async function AdminUsersPage({
           </div>
         ) : null}
 
+        {params.promotedKiddush === "1" ? (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Kiddush-only access was granted.
+          </div>
+        ) : null}
+
         {params.removed === "1" ? (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Admin access was removed.
+          </div>
+        ) : null}
+
+        {params.removedKiddush === "1" ? (
+          <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
+            Kiddush-only access was removed.
           </div>
         ) : null}
 
@@ -284,6 +305,51 @@ export default async function AdminUsersPage({
         </section>
 
         <section className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold">Kiddush Administrators</h2>
+              <p className="mt-2 text-sm text-slate-500">
+                These users can access only the Kiddush management page.
+              </p>
+            </div>
+            <span className="rounded-full bg-[#f7f3ea] px-4 py-2 text-sm font-bold text-[#8b6b2e]">
+              {kiddushAdmins.length} Kiddush admins
+            </span>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {kiddushAdmins.map((member) => (
+              <div
+                key={member.id}
+                className="flex flex-col gap-4 rounded-2xl border border-[#e3d9c7] bg-[#fbf8f2] p-5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="text-lg font-bold">
+                    {member.first_name} {member.last_name}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {member.email || "No email"} · Portal: {portalLabel(member)}
+                  </p>
+                </div>
+                <form action={removeMemberKiddushAdminAccess.bind(null, member.id)}>
+                  <button
+                    type="submit"
+                    className="rounded-full border border-red-200 bg-white px-5 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50"
+                  >
+                    Remove Kiddush Access
+                  </button>
+                </form>
+              </div>
+            ))}
+            {kiddushAdmins.length === 0 ? (
+              <p className="rounded-2xl bg-[#fbf8f2] p-6 text-center text-slate-500">
+                No Kiddush-only administrators yet.
+              </p>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-[2rem] border border-[#e3d9c7] bg-white p-6 shadow-sm sm:p-8">
           <div>
             <h2 className="text-2xl font-bold">
               Promote a Member
@@ -320,19 +386,26 @@ export default async function AdminUsersPage({
                   </div>
 
                   {canPromote ? (
-                    <form
-                      action={promoteMemberToAdmin.bind(
-                        null,
-                        member.id
-                      )}
-                    >
-                      <button
-                        type="submit"
-                        className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#10192b]"
+                    <div className="flex flex-wrap gap-2">
+                      <form action={promoteMemberToAdmin.bind(null, member.id)}>
+                        <button
+                          type="submit"
+                          className="rounded-full bg-[#1d2940] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#10192b]"
+                        >
+                          Make Admin
+                        </button>
+                      </form>
+                      <form
+                        action={promoteMemberToKiddushAdmin.bind(null, member.id)}
                       >
-                        Make Admin
-                      </button>
-                    </form>
+                        <button
+                          type="submit"
+                          className="rounded-full border border-[#1d2940] bg-white px-5 py-2.5 text-sm font-bold text-[#1d2940] hover:bg-[#f7f3ea]"
+                        >
+                          Kiddush Only
+                        </button>
+                      </form>
+                    </div>
                   ) : (
                     <span className="rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-500">
                       Portal must be active

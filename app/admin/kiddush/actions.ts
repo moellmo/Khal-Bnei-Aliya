@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { formatKiddushShabbosLabel } from "@/lib/kiddush/shabbos";
 import { sendPaymentRequestEmail } from "@/lib/payments/sendPaymentRequestEmail";
+import { requirePortalAccess } from "@/lib/adminAccess";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -17,28 +17,7 @@ function getNumber(formData: FormData, key: string) {
 }
 
 async function requireAdmin() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/login");
-  }
-
-  const { data: member, error } = await supabaseAdmin
-    .from("members")
-    .select("portal_role, portal_status")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
-  if (
-    error ||
-    member?.portal_role !== "admin" ||
-    member.portal_status === "disabled"
-  ) {
-    redirect("/member/dashboard");
-  }
+  await requirePortalAccess(["admin", "kiddush_admin"]);
 }
 
 function splitName(fullName: string) {

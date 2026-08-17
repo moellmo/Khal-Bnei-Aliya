@@ -1,42 +1,23 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabaseServer";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-
-export const dynamic = "force-dynamic";
+import { requirePortalAccess } from "@/lib/adminAccess";
 
 export default async function AdminLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supabase = await createClient();
+  const requestHeaders = await headers();
+  const pathname = requestHeaders.get("x-kba-pathname") || "";
+  const isKiddushRoute =
+    pathname === "/admin/kiddush" || pathname.startsWith("/admin/kiddush/");
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  const { member } = await requirePortalAccess(
+    isKiddushRoute ? ["admin", "kiddush_admin"] : ["admin"]
+  );
 
-  if (authError || !user) {
-    redirect("/login");
-  }
-
-  const { data: member, error: memberError } = await supabaseAdmin
-    .from("members")
-    .select("id, portal_role, portal_status")
-    .eq("auth_user_id", user.id)
-    .maybeSingle();
-
-  if (memberError) {
-    console.error("ADMIN_ACCESS_CHECK_ERROR", memberError.message);
-    redirect("/member/dashboard");
-  }
-
-  const isActiveAdmin =
-    member?.portal_role === "admin" &&
-    member.portal_status !== "disabled";
-
-  if (!isActiveAdmin) {
-    redirect("/member/dashboard");
+  if (member.portal_role === "kiddush_admin" && !isKiddushRoute) {
+    redirect("/admin/kiddush");
   }
 
   return children;
