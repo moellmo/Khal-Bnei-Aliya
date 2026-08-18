@@ -3,7 +3,13 @@ const DEFAULT_EMAIL_SENDER =
 
 function cleanConfiguredValue(value: string) {
   const trimmed = value.trim();
-  return trimmed.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, "$1$2");
+  const unquoted = trimmed.replace(/^(?:"([\s\S]*)"|'([\s\S]*)')$/, "$1$2");
+
+  if (/^<[^<>]+>$/.test(unquoted)) {
+    return unquoted.slice(1, -1).trim();
+  }
+
+  return unquoted;
 }
 
 export function getEmailSender(...names: string[]) {
