@@ -147,6 +147,27 @@ export async function markReservationPaid(
   redirect(`/admin/yamim-noraim?year=${year}&tab=results&reservationUpdated=1`);
 }
 
+export async function deleteReservation(reservationId: string, year: number) {
+  await requireAdmin();
+
+  const { error } = await supabaseAdmin
+    .from("yamim_noraim_reservations")
+    .delete()
+    .eq("id", reservationId)
+    .eq("reservation_year", year);
+
+  if (error) {
+    redirect(
+      `/admin/yamim-noraim?year=${year}&tab=results&error=${encodeURIComponent(
+        error.message
+      )}`
+    );
+  }
+
+  refresh(year);
+  redirect(`/admin/yamim-noraim?year=${year}&tab=results&deleted=1`);
+}
+
 export async function clearReservationsForYear(formData: FormData) {
   await requireAdmin();
 

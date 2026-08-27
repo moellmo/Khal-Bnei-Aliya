@@ -2,9 +2,11 @@ import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   clearReservationsForYear,
+  deleteReservation,
   markReservationPaid,
   updateYamimNoraimSettings,
 } from "./actions";
+import DeleteReservationButton from "./DeleteReservationButton";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,7 @@ type PageProps = {
     error?: string;
     settingsSaved?: string;
     reservationUpdated?: string;
+    deleted?: string;
     cleared?: string;
   }>;
 };
@@ -208,7 +211,10 @@ export default async function AdminYamimNoraimPage({
           </div>
         )}
 
-        {(params?.settingsSaved || params?.reservationUpdated || params?.cleared) && (
+        {(params?.settingsSaved ||
+          params?.reservationUpdated ||
+          params?.cleared ||
+          params?.deleted) && (
           <div className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 font-semibold text-green-800">
             Saved.
           </div>
@@ -590,6 +596,7 @@ export default async function AdminYamimNoraimPage({
                   <th className="px-3 py-2">Payment</th>
                   <th className="px-3 py-2">Notes</th>
                   <th className="px-3 py-2">Submitted</th>
+                  <th className="px-3 py-2">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -660,8 +667,15 @@ export default async function AdminYamimNoraimPage({
                     <td className="max-w-xs px-3 py-3 text-slate-600">
                       {reservation.notes || "—"}
                     </td>
-                    <td className="rounded-r-2xl px-3 py-3 text-slate-600">
+                    <td className="px-3 py-3 text-slate-600">
                       {formatDate(reservation.created_at)}
+                    </td>
+                    <td className="rounded-r-2xl px-3 py-3">
+                      <DeleteReservationButton
+                        action={deleteReservation}
+                        reservationId={reservation.id}
+                        year={year}
+                      />
                     </td>
                   </tr>
                 ))}
