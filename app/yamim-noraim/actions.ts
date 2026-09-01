@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSiteOrigin } from "@/lib/siteUrl";
+import { sendYamimNoraimReservationConfirmation } from "@/lib/yamimNoraim/email";
 import {
   calculateYamimNoraimPrice,
   type YamimNoraimMembershipType,
@@ -130,27 +132,26 @@ export async function submitYamimNoraimReservation(formData: FormData) {
     );
   }
 
-  if (totalAmount <= 0) {
-    redirect("/yamim-noraim?reserved=1");
+  try {
+    await sendYamimNoraimReservationConfirmation({
+      reservationId: reservation.id,
+      year: settings.active_year,
+      fullName,
+      email,
+      pricingLabel: pricing.label,
+      roshHashanaMenSeats,
+      roshHashanaWomenSeats,
+      yomKippurMenSeats,
+      yomKippurWomenSeats,
+      totalAmount,
+      confirmationUrl: `${getSiteOrigin()}/yamim-noraim/confirmation?id=${encodeURIComponent(reservation.id)}`,
+    });
+  } catch (emailError) {
+    console.error("YAMIM_NORAIM_CONFIRMATION_EMAIL_SEND_FAILED", {
+      reservationId: reservation.id,
+      error: emailError instanceof Error ? emailError.message : String(emailError),
+    });
   }
 
-  const note = [
-    `Yamim Noraim ${settings.active_year} seats`,
-    pricing.label,
-    `RH ${roshHashanaMenSeats} men/${roshHashanaWomenSeats} women`,
-    `YK ${yomKippurMenSeats} men/${yomKippurWomenSeats} women`,
-    `Reservation ${reservation.id}`,
-  ].join(" - ");
-
-  redirect(
-    `/donate?amount=${encodeURIComponent(
-      totalAmount.toFixed(2)
-    )}&purpose=${encodeURIComponent(
-      "Yamim Noraim Seats"
-    )}&note=${encodeURIComponent(note)}&name=${encodeURIComponent(
-      fullName
-    )}&email=${encodeURIComponent(email || "")}&phone=${encodeURIComponent(
-      phone || ""
-    )}`
-  );
+  redirect(`/yamim-noraim/confirmation?id=${encodeURIComponent(reservation.id)}`);
 }

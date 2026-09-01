@@ -63,8 +63,8 @@ export default function YamimNoraimReservationForm({
       <div>
         <h2 className="text-2xl font-black">Reserve Seats</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Submit once per family. Your exact total will be calculated before
-          payment.
+          Submit once per family. Your reservation will be received first, then
+          you can choose card payment or Zelle.
         </p>
       </div>
 
@@ -269,7 +269,7 @@ export default function YamimNoraimReservationForm({
         type="submit"
         className="w-full rounded-full bg-[#1d2940] px-6 py-4 text-base font-black text-white transition hover:bg-[#10192b]"
       >
-        Continue to Payment · {formatMoney(pricing.totalAmount)}
+        Submit · {formatMoney(pricing.totalAmount)}
       </button>
     </form>
   );
