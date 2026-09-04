@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 import {
   calculateYamimNoraimPrice,
   type YamimNoraimMembershipType,
@@ -265,6 +266,7 @@ export default function YamimNoraimReservationForm({
         />
       </label>
 
+      <PublicFormProtection id="yamim-noraim-reservation" />
       <button
         type="submit"
         className="w-full rounded-full bg-[#1d2940] px-6 py-4 text-base font-black text-white transition hover:bg-[#10192b]"

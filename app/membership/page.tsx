@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { submitMembershipApplication } from "./actions";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 
 type PageProps = {
   searchParams: Promise<{
@@ -349,6 +350,7 @@ export default async function MembershipPage({
               </span>
             </label>
 
+            <PublicFormProtection id="membership-application" />
             <button
               type="submit"
               className="mt-6 w-full rounded-2xl bg-[#8b6b2e] px-6 py-4 text-lg font-bold text-white transition hover:bg-[#745822] sm:w-auto"

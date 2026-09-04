@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { Resend } from "resend";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { verifyPublicForm } from "@/lib/turnstile";
 
 type FamilyMemberInput = {
   first_name: string;
@@ -63,6 +64,11 @@ function escapeHtml(value: string) {
 export async function submitMembershipApplication(
   formData: FormData
 ) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    redirect("/membership?error=Please%20complete%20the%20security%20check%20and%20try%20again.");
+  }
+
   const firstName = getString(formData, "first_name");
   const lastName = getString(formData, "last_name");
   const email = getString(formData, "email").toLowerCase();

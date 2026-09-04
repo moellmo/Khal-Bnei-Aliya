@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendZelleReviewEmail } from "@/lib/payments/sendZelleReviewEmail";
+import { verifyPublicForm } from "@/lib/turnstile";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -21,6 +22,12 @@ function buildErrorRedirect(chargeId: string, message: string) {
 }
 
 export async function submitPublicZellePaymentClaim(formData: FormData) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    const chargeId = getString(formData, "charge_id");
+    redirect(buildErrorRedirect(chargeId, "Please complete the security check and try again."));
+  }
+
   const chargeId = getString(formData, "charge_id");
   const amount = getNumber(formData, "amount");
   const payerName = getString(formData, "payer_name");

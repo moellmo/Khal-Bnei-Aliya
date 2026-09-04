@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getSiteOrigin } from "@/lib/siteUrl";
 import { sendYamimNoraimReservationConfirmation } from "@/lib/yamimNoraim/email";
+import { verifyPublicForm } from "@/lib/turnstile";
 import {
   calculateYamimNoraimPrice,
   type YamimNoraimMembershipType,
@@ -20,6 +21,11 @@ function getNumber(formData: FormData, key: string) {
 }
 
 export async function submitYamimNoraimReservation(formData: FormData) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    redirect("/yamim-noraim?error=Please%20complete%20the%20security%20check%20and%20try%20again.");
+  }
+
   const fullName = getString(formData, "full_name");
   const email = getString(formData, "email");
   const phone = getString(formData, "phone");

@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { calculateAssistanceTotals, type AssistanceCounts } from "@/lib/yomTovAssistance";
+import { verifyPublicForm } from "@/lib/turnstile";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
@@ -13,6 +14,11 @@ function getCount(formData: FormData, key: string) {
 }
 
 export async function submitYomTovAssistanceRequest(formData: FormData) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    redirect("/yom-tov-assistance?error=Please%20complete%20the%20security%20check%20and%20try%20again.");
+  }
+
   const familyName = getString(formData, "family_name");
   const contactName = getString(formData, "contact_name") || null;
   const counts: AssistanceCounts = {

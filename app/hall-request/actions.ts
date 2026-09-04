@@ -4,12 +4,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendHallReservationRequestEmails } from "@/lib/kiddush/email";
+import { verifyPublicForm } from "@/lib/turnstile";
 
 function getString(formData: FormData, key: string) {
   return String(formData.get(key) || "").trim();
 }
 
 export async function submitHallReservationRequest(formData: FormData) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    redirect(`/?hallError=${encodeURIComponent("Please complete the security check and try again.")}#hall-request`);
+  }
+
   const fullName = getString(formData, "full_name");
   const email = getString(formData, "email").toLowerCase();
   const phone = getString(formData, "phone");

@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendZelleReviewEmail } from "@/lib/payments/sendZelleReviewEmail";
 import { sendKiddushReservationNotification } from "@/lib/kiddush/email";
 import { formatKiddushShabbosLong } from "@/lib/kiddush/shabbos";
+import { verifyPublicForm } from "@/lib/turnstile";
 
 type KiddushItem = {
   id: string;
@@ -106,6 +107,11 @@ async function findOrCreateSponsor({
 }
 
 export async function submitKiddushReservation(formData: FormData) {
+  const spamCheck = await verifyPublicForm(formData);
+  if (!spamCheck.success) {
+    errorRedirect("Please complete the security check and try again.");
+  }
+
   const shabbosDate = getString(formData, "shabbos_date");
   const sponsorName = getString(formData, "sponsor_name");
   const sponsorEmail = getString(formData, "sponsor_email").toLowerCase();

@@ -7,6 +7,7 @@ import {
   calculateAssistanceTotals,
   type AssistanceCounts,
 } from "@/lib/yomTovAssistance";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
@@ -166,6 +167,7 @@ export default function YomTovAssistanceForm({
         />
       </label>
 
+      <PublicFormProtection id="yom-tov-assistance" />
       <button
         type="submit"
         className="w-full rounded-full bg-[#1d2940] px-6 py-4 font-black text-white"

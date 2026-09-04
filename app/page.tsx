@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabaseServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { signOut } from "./member/actions";
 import { submitHallReservationRequest } from "./hall-request/actions";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 
 export const dynamic = "force-dynamic";
 
@@ -319,6 +320,7 @@ export default async function Home({ searchParams }: HomePageProps) {
                     </>
                   )}
                   <form action={signOut}>
+                    <PublicFormProtection id="hall-reservation-request" />
                     <button
                       type="submit"
                       className="w-full rounded-xl px-3 py-2 text-left text-red-700 hover:bg-red-50"

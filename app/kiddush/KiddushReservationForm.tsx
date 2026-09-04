@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { submitKiddushReservation } from "./actions";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 
 type KiddushItem = {
   id: string;
@@ -266,6 +267,7 @@ export default function KiddushReservationForm({
         </div>
       </div>
 
+      <PublicFormProtection id="kiddush-reservation" />
       <button
         type="submit"
         className="w-full rounded-full bg-[#8b6b2e] px-6 py-4 text-base font-black text-white transition hover:bg-[#745822]"

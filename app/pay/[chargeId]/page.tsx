@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { submitPublicZellePaymentClaim } from "./actions";
+import PublicFormProtection from "@/app/components/PublicFormProtection";
 
 export const dynamic = "force-dynamic";
 
@@ -247,13 +248,14 @@ export default async function PublicPaymentPage({
                     />
                   </label>
 
-                  <button
+                    <PublicFormProtection id="zelle-payment-claim" />
+                    <button
                     type="submit"
                     className="rounded-full bg-[#1d2940] px-6 py-3 font-bold text-white"
                   >
                     I Paid by Zelle
-                  </button>
-                </form>
+                    </button>
+                  </form>
               </div>
             )}
           </div>

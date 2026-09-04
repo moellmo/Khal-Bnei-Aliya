@@ -16,6 +16,13 @@ export async function verifyTurnstile(
   request: NextRequest,
   token: unknown
 ) {
+  return verifyTurnstileToken(token, getClientIp(request));
+}
+
+export async function verifyTurnstileToken(
+  token: unknown,
+  clientIp?: string
+) {
   const secret = process.env.TURNSTILE_SECRET_KEY?.trim();
 
   // Keep local development usable until production keys are configured.
@@ -33,7 +40,6 @@ export async function verifyTurnstile(
   formData.append("secret", secret);
   formData.append("response", token);
 
-  const clientIp = getClientIp(request);
   if (clientIp) {
     formData.append("remoteip", clientIp);
   }
@@ -66,4 +72,16 @@ export async function verifyTurnstile(
     console.error("TURNSTILE_VALIDATION_ERROR", error);
     return { enabled: true, success: false };
   }
+}
+
+export function hasSpamHoneypot(formData: FormData) {
+  return Boolean(String(formData.get("website") || "").trim());
+}
+
+export async function verifyPublicForm(formData: FormData) {
+  if (hasSpamHoneypot(formData)) {
+    return { enabled: true, success: false };
+  }
+
+  return verifyTurnstileToken(formData.get("cf-turnstile-response"));
 }

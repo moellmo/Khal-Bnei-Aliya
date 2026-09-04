@@ -49,3 +49,5 @@ TURNSTILE_SECRET_KEY=your-server-only-secret-key
 
 Both values must be set for production protection to be active. The server
 validates every token for both card and Apple Pay/Google Pay donation requests.
+The same protection is also used on public Kiddush, Yamim Noraim, membership,
+hall request, Yom Tov assistance, and Zelle claim forms.
